@@ -28,6 +28,8 @@ public class UwuConstants
         public const uint Garuda = 8722;
         public const uint SuparnaChirada = 8723;
         public const uint RazorPlume = 8724;
+        public const uint SatinPlume = 8725;
+        public const uint SpinyPlume = 8726;
         public const uint Titan = 8727;
         public const uint BombBoulder = 8728;
         public const uint GraniteGaol = 8729;
@@ -45,6 +47,8 @@ public class UwuConstants
         public const uint Suparna = 1645;
         public const uint Chirada = 1646;
         public const uint RazorPlume = 1647;
+        public const uint SatinPlume = 1648;
+        public const uint SpinyPlume = 2091;
         public const uint Titan = 1801;
         public const uint GraniteGaol = 1804;
         public const uint UltimaWeapon = 2137;
@@ -52,7 +56,12 @@ public class UwuConstants
 
     public class ActionId
     {
+        public const uint MistralSongBoss = 11074;
         public const uint Featherlance = 11075;
+        public const uint Cyclone = 11077;
+        public const uint Gigastorm = 11078;
+        public const uint SuperCyclone = 11079;
+        public const uint Friction = 11080;
         public const uint GreatWhirlwind = 11073;
         public const uint Mesohigh = 11081;
         public const uint MistralSongSuparnaChirada = 11083;
@@ -60,7 +69,12 @@ public class UwuConstants
         public const uint FeatherRain = 11085;
         public const uint WickedWheelAwaken = 11086;
         public const uint WickedTornado = 11087;
+        public const uint Downburst = 11088;
+        public const uint EyeOfTheStorm = 11090;
+        public const uint Slipstream = 11091;
         public const uint MistralShriek = 11092;
+        public const uint AerialBlast = 11093;
+        public const uint SuperCycloneAwaken = 11189;
         public const uint EruptionIfrit = 11097;
         public const uint EruptionPuddle = 11098;
         public const uint FlamingCrush = 11101;
@@ -105,6 +119,7 @@ public class UwuConstants
         public const ushort WarpStart = 7737;
         public const ushort WarpStart2 = 7738;
         public const ushort WarpEnd = 7747;
+        public const ushort SistersArrive = 7748;
     }
 
     public class StatusId
@@ -113,6 +128,7 @@ public class UwuConstants
         public const ushort InfernalFetters = 377;
         public const ushort ThermalLow = 1525;
         public const ushort AccursedFlame = 1527;
+        public const ushort AetheriallyCharged = 1528;
         public const ushort Woken = 1529;
     }
 
@@ -120,6 +136,7 @@ public class UwuConstants
     {
         public const ushort Mesohigh = 4;
         public const ushort InfernalFetters = 9;
+        public const ushort SpinyFixate = 17;
     }
 
     public class LockonId
