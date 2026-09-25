@@ -23,6 +23,18 @@ public class UwuConstants
         new(WaymarkSlot.Four, new Vector3(-13, 0, -13)),
     ];
 
+    public static IReadOnlyList<Waymark> StandardWaymarks =>
+    [
+        new(WaymarkSlot.A, new Vector3(0, 0, -6.7f)),
+        new(WaymarkSlot.B, new Vector3(6.699f, 0, 0)),
+        new(WaymarkSlot.C, new Vector3(0, 0, 6.699f)),
+        new(WaymarkSlot.D, new Vector3(-6.7f, 0, 0)),
+        new(WaymarkSlot.One, new Vector3(7.3f, 0, 7.3f)),
+        new(WaymarkSlot.Two, new Vector3(0, 0, -19)),
+        new(WaymarkSlot.Three, new Vector3(0, 0, 0)),
+        new(WaymarkSlot.Four, new Vector3(-13, 0, -13)),
+    ];
+
     public class BNpcBaseId
     {
         public const uint Garuda = 8722;

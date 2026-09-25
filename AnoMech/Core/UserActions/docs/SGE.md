@@ -14,8 +14,8 @@ _✅ works · ⚠️ partial · ❌ not simulated · ➖ nothing to simulate (pu
 | Phlegma | 24289 | ➖ | |
 | Eukrasia | 24290 | ✅ | Grants Eukrasia status (2606) and sets the gauge byte (SageStateHandler); every Eukrasian spell clears both. |
 | Eukrasian Diagnosis | 24291 | ✅ | Consumes Eukrasia (in clear list). |
-| Eukrasian Prognosis | 24292 | ✅ | At cap resolves to 37034 (in clear list). |
-| Eukrasian Dosis | 24293 | ✅ | At cap resolves to 24314 (in clear list). |
+| Eukrasian Prognosis | 24292 | ✅ | Consumes Eukrasia (in clear list); at cap resolves to 37034. |
+| Eukrasian Dosis | 24293 | ✅ | Consumes Eukrasia (in clear list) — the level-synced version, e.g. UWU at 70; at cap resolves to 24314. |
 | Soteria | 24294 | ➖ | |
 | Icarus | 24295 | ➖ | |
 | Druochole | 24296 | ✅ | −1 Addersgall. |
@@ -30,7 +30,7 @@ _✅ works · ⚠️ partial · ❌ not simulated · ➖ nothing to simulate (pu
 | Haima | 24305 | ➖ | |
 | Dosis II | 24306 | ➖ | |
 | Phlegma II | 24307 | ➖ | |
-| Eukrasian Dosis II | 24308 | ✅ | At cap resolves to 24314 (in clear list). |
+| Eukrasian Dosis II | 24308 | ✅ | Consumes Eukrasia (in clear list); at cap resolves to 24314. |
 | Rhizomata | 24309 | ✅ | +1 Addersgall. |
 | Holos | 24310 | ➖ | |
 | Panhaima | 24311 | ➖ | |

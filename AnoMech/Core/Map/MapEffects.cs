@@ -1,6 +1,7 @@
 using System;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
+using FFXIVClientStructs.FFXIV.Client.Game.InstanceContent;
 
 namespace AnoMech.Core.Map;
 
@@ -45,6 +46,14 @@ internal sealed unsafe class MapEffects : IDisposable
         if (!Loaded) return;
         var module = *(nint*)((nint)EventFramework.Instance() + 344);
         if (module == 0) return;
+        // An index past the zone's MapEffect table (or a zone without one, like UWU) dereferences
+        // garbage natively and takes the game down.
+        var effects = ((ContentDirector*)module)->MapEffects;
+        if (effects == null || index >= effects->ItemCount)
+        {
+            Plugin.Log.Warning($"[MapEffect] index 0x{index:X} ignored: zone has {(effects == null ? 0 : effects->ItemCount)} map effects");
+            return;
+        }
         hook.Original(module, index, (ushort)(packetFlags >> 16), (ushort)(packetFlags & 0xFF));
     }
 

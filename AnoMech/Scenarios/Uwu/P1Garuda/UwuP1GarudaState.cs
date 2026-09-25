@@ -11,9 +11,9 @@ namespace AnoMech.Scenarios.Uwu.P1Garuda;
 // it: the Satin Plumes take 4 of 12 fixed spots each wave, the Spiny Plume always spawns at
 // (-10, 0), the sisters hide at (-/+6, 0) before Feather Rain, sing from two distinct random
 // cardinals at 19.5y and always tether from Suparna west / Chirada east, and Mistral Song, Friction
-// and Mistral Song (sisters) mark random players. Friction and the songs are drawn from non-tanks here:
-// Friction's point is to spread Thermal Low through the stack, and the songs are the tanks' to
-// intercept.
+// and Mistral Song (sisters) mark random players. The opening Mistral Song is drawn from the healers,
+// the strat's assumption; Friction and the sisters' songs from non-tanks: Friction's point is to
+// spread Thermal Low through the stack, and the songs are the tanks' to intercept.
 public sealed class UwuP1GarudaState
 {
     public static readonly Vector3 SpinyPlumeSpawn = new(-10f, 0f, 0f);
@@ -31,6 +31,8 @@ public sealed class UwuP1GarudaState
         new(16f, 0f, 4f), new(12f, 0f, 12f), new(4f, 0f, 16f), new(-4f, 0f, 16f),
         new(-12f, 0f, 12f), new(-16f, 0f, 4f), new(-16f, 0f, -4f), new(-12f, 0f, -12f),
     ];
+
+    private static readonly PartyRole[] Healers = [PartyRole.RegenHealer, PartyRole.ShieldHealer];
 
     private static readonly PartyRole[] NonTanks =
     [
@@ -57,7 +59,7 @@ public sealed class UwuP1GarudaState
         var cardinals = new[] { 0f, 90f, 180f, 270f }.OrderBy(_ => rng.Next()).Take(2).ToArray();
         SuparnaSongSpot = AtBearing(cardinals[0], SongSpotRadius);
         ChiradaSongSpot = AtBearing(cardinals[1], SongSpotRadius);
-        MistralSongTarget = NonTanks[rng.Next(NonTanks.Length)];
+        MistralSongTarget = Healers[rng.Next(Healers.Length)];
         SistersSongTargets = NonTanks.OrderBy(_ => rng.Next()).Take(2).ToList();
         FrictionTargets = [NonTanks[rng.Next(NonTanks.Length)], NonTanks[rng.Next(NonTanks.Length)]];
         SatinPlumesFirst = SatinPlumeSpots.OrderBy(_ => rng.Next()).Take(4).ToList();
