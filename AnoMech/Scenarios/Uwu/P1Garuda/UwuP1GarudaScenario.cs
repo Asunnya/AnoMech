@@ -32,6 +32,8 @@ public sealed class UwuP1GarudaScenario : IScenario
 
     private const float MistralSongHalfWidth = 2.5f;
     private const float MistralSongLength = 40f;
+    private static readonly MistralSongDamage GarudaSongDamage = new(Intercept: 0.59f, Behind: 0.60f);
+    private static readonly MistralSongDamage SistersSongDamage = new(Intercept: 0.48f, Behind: 0.28f);
     private const float SlipstreamHalfAngle = MathF.PI / 4f;
     private const float SlipstreamLength = 11.7f;
     private const float GreatWhirlwindRadius = 8f;
@@ -112,7 +114,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(5.20f, () => Lockon(Get(state.MistralSongTarget), LockonId.MistralSong));
         world.Events.Add(5.29f, () => CastSelf(garuda, ActionId.Slipstream, 2.2f));
         world.Events.Add(7.78f, () => ResolveCone(garuda, ActionId.Slipstream, garuda?.Rotation ?? MathF.PI, 2.1f, "Slipstream"));
-        world.Events.Add(10.32f, () => ResolveMistralSong(garuda, ActionId.MistralSongBoss, Get(state.MistralSongTarget), GreatWhirlwindSpot.Boss));
+        world.Events.Add(10.32f, () => ResolveMistralSong(garuda, ActionId.MistralSongBoss, Get(state.MistralSongTarget), GreatWhirlwindSpot.Boss, GarudaSongDamage));
         world.Events.Add(12.60f, () => garuda?.MoveTo(new Vector3(-6.3f, 0f, -0.5f), 8f, MathF.PI));
         world.Events.Add(13.44f, () => CastGreatWhirlwind(GreatWhirlwindSpot.Boss));
         world.Events.Add(16.43f, () => ResolveGreatWhirlwind(GreatWhirlwindSpot.Boss));
@@ -289,19 +291,27 @@ public sealed class UwuP1GarudaScenario : IScenario
     private readonly Dictionary<GreatWhirlwindSpot, Vector3> greatWhirlwindSpots = [];
     private readonly Dictionary<GreatWhirlwindSpot, SimEnemy?> greatWhirlwindCasters = [];
 
-    // The first player the song's line reaches takes it; a non-tank there dies. The line's green
-    // tornado then drops where it was stopped.
-    private void ResolveMistralSong(SimEnemy? caster, uint actionId, SimCharacter? target, GreatWhirlwindSpot spot)
+    // Median share of max HP from the logs. The first player the line reaches takes the heavy hit
+    // (non-tanks there took 160-260%); everyone behind takes the rest. The line's green tornado then
+    // drops where it was stopped.
+    private readonly record struct MistralSongDamage(float Intercept, float Behind);
+
+    private void ResolveMistralSong(SimEnemy? caster, uint actionId, SimCharacter? target, GreatWhirlwindSpot spot, MistralSongDamage songDamage)
     {
         if (caster == null || target == null) return;
         var toTarget = target.Position - caster.Position;
         var rotation = MathF.Atan2(toTarget.X, toTarget.Z);
-        PlayEffect(caster, actionId, 1.1f, rotation, target.GameObjectId);
 
-        var line = party.Find.InsideRect(new Placement(caster.Position, rotation), MistralSongHalfWidth, MistralSongLength);
-        var first = line.OrderBy(m => FlatDistance(m.Position, caster.Position)).FirstOrDefault();
+        var line = party.Find.InsideRect(new Placement(caster.Position, rotation), MistralSongHalfWidth, MistralSongLength)
+            .OrderBy(m => FlatDistance(m.Position, caster.Position)).ToList();
+        var first = line.FirstOrDefault();
+        PlayEffect(caster, actionId, 1.1f, rotation, (first ?? target).GameObjectId);
         greatWhirlwindSpots[spot] = first?.Position ?? target.Position;
-        if (first != null && !IsTank(first)) first.Die("Died to Mistral Song (no tank intercepted it)");
+        if (first == null) return;
+        if (!IsTank(first)) first.Die("Died to Mistral Song (no tank intercepted it)");
+        else damage.ApplyDamage(first, songDamage.Intercept, actionId, "Mistral Song", false);
+        foreach (var behind in line.Skip(1))
+            damage.ApplyDamage(behind, songDamage.Behind, actionId, "Mistral Song", false);
     }
 
     private void CastGreatWhirlwind(GreatWhirlwindSpot spot)
@@ -578,8 +588,8 @@ public sealed class UwuP1GarudaScenario : IScenario
 
     private void ResolveSistersSongs()
     {
-        ResolveMistralSong(suparna, ActionId.MistralSongSuparnaChirada, Get(state.SistersSongTargets[0]), GreatWhirlwindSpot.Suparna);
-        ResolveMistralSong(chirada, ActionId.MistralSongSuparnaChirada, Get(state.SistersSongTargets[1]), GreatWhirlwindSpot.Chirada);
+        ResolveMistralSong(suparna, ActionId.MistralSongSuparnaChirada, Get(state.SistersSongTargets[0]), GreatWhirlwindSpot.Suparna, SistersSongDamage);
+        ResolveMistralSong(chirada, ActionId.MistralSongSuparnaChirada, Get(state.SistersSongTargets[1]), GreatWhirlwindSpot.Chirada, SistersSongDamage);
     }
 
     private SimEnemy? eyeOfTheStorm;
