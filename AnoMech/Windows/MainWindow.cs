@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using Dalamud.Bindings.ImGui;
@@ -24,6 +25,7 @@ public unsafe class MainWindow : Window, IDisposable
     private readonly Plugin plugin;
     private readonly TitleBarButton autoCollapseButton;
     private IZone? _openZone;
+    private string? _pendingCategoryTab;
     internal ScenarioPanelWindow ScenarioPanel { get; }
     internal Vector2 ScenarioPanelAnchor { get; private set; }
     internal float ScenarioPanelHeight { get; private set; }
@@ -266,53 +268,73 @@ public unsafe class MainWindow : Window, IDisposable
         ImGui.TextUnformatted("Scenarios");
         ImGui.Separator();
 
-        foreach (var zone in plugin.Game.Zones)
+        if (!ImGui.BeginTabBar("##scenario-categories")) return;
+        foreach (var category in plugin.Game.Zones.Select(z => z.Category).Distinct())
         {
-            var shouldOpen = _openZone == zone;
-            ImGui.SetNextItemOpen(shouldOpen, ImGuiCond.Always);
-            var headerColor = BlendColor(
-                StyleColor(ImGuiCol.WindowBg),
-                StyleColor(ImGuiCol.Header),
-                0.72f);
-            ImGui.PushStyleColor(ImGuiCol.Header, headerColor);
-            var open = ImGui.CollapsingHeader($"{zone.Name}###scenario-zone-{zone.GetType().FullName}");
-            ImGui.PopStyleColor();
-            var sectionRight = ImGui.GetItemRectMax().X;
-            if (open != shouldOpen) _openZone = open ? zone : null;
-            if (!open) continue;
-            ImGui.Indent();
-            var buttonPadding = ImGui.GetStyle().FramePadding;
-            buttonPadding.X += ScenarioButtonExtraPadding * ImGuiHelpers.GlobalScale;
-            ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, buttonPadding);
-            ImGui.PushStyleVar(ImGuiStyleVar.ButtonTextAlign, new Vector2(0f, 0.5f));
-            foreach (var phase in plugin.Game.PhasesOf(zone))
-                foreach (var scenario in plugin.Game.ScenariosOf(phase))
+            var flags = _pendingCategoryTab == category ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+            if (!ImGui.BeginTabItem($"{category}###scenario-category-{category}", flags)) continue;
+            if (_pendingCategoryTab == category) _pendingCategoryTab = null;
+            string? lastExpansion = null;
+            foreach (var zone in plugin.Game.Zones.Where(z => z.Category == category))
+            {
+                if (zone.Expansion is { } expansion && expansion != lastExpansion)
                 {
-                    var selected = _selectedScenario == scenario;
-                    if (selected) PushSelectedScenarioStyle();
-                    // Zone-qualified: two zones can hold same-named scenarios (UMAD and UCOB
-                    // both have a P5 "Exaflares"), and a shared ImGui id makes the second
-                    // button unclickable.
-                    ImGui.PushID(FullName(scenario));
-                    var buttonWidth = sectionRight - ImGui.GetCursorScreenPos().X;
-                    var clicked = ImGui.Button(DisplayName(scenario), new Vector2(buttonWidth, 0));
-                    if (selected)
-                    {
-                        var min = ImGui.GetItemRectMin();
-                        var max = ImGui.GetItemRectMax();
-                        var accentWidth = 3f * ImGuiHelpers.GlobalScale;
-                        ImGui.GetWindowDrawList().AddRectFilled(
-                            min,
-                            new Vector2(min.X + accentWidth, max.Y),
-                            ImGui.GetColorU32(ImGuiCol.ButtonActive));
-                        ImGui.PopStyleColor(3);
-                    }
-                    ImGui.PopID();
-                    if (clicked) SelectScenario(scenario);
+                    ImGui.TextDisabled(expansion);
+                    lastExpansion = expansion;
                 }
-            ImGui.PopStyleVar(2);
-            ImGui.Unindent();
+                DrawZoneSection(zone);
+            }
+            ImGui.EndTabItem();
         }
+        ImGui.EndTabBar();
+    }
+
+    private void DrawZoneSection(IZone zone)
+    {
+        var shouldOpen = _openZone == zone;
+        ImGui.SetNextItemOpen(shouldOpen, ImGuiCond.Always);
+        var headerColor = BlendColor(
+            StyleColor(ImGuiCol.WindowBg),
+            StyleColor(ImGuiCol.Header),
+            0.72f);
+        ImGui.PushStyleColor(ImGuiCol.Header, headerColor);
+        var open = ImGui.CollapsingHeader($"{zone.Name}###scenario-zone-{zone.GetType().FullName}");
+        ImGui.PopStyleColor();
+        var sectionRight = ImGui.GetItemRectMax().X;
+        if (open != shouldOpen) _openZone = open ? zone : null;
+        if (!open) return;
+        ImGui.Indent();
+        var buttonPadding = ImGui.GetStyle().FramePadding;
+        buttonPadding.X += ScenarioButtonExtraPadding * ImGuiHelpers.GlobalScale;
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, buttonPadding);
+        ImGui.PushStyleVar(ImGuiStyleVar.ButtonTextAlign, new Vector2(0f, 0.5f));
+        foreach (var phase in plugin.Game.PhasesOf(zone))
+            foreach (var scenario in plugin.Game.ScenariosOf(phase))
+            {
+                var selected = _selectedScenario == scenario;
+                if (selected) PushSelectedScenarioStyle();
+                // Zone-qualified: two zones can hold same-named scenarios (UMAD and UCOB
+                // both have a P5 "Exaflares"), and a shared ImGui id makes the second
+                // button unclickable.
+                ImGui.PushID(FullName(scenario));
+                var buttonWidth = sectionRight - ImGui.GetCursorScreenPos().X;
+                var clicked = ImGui.Button(DisplayName(scenario), new Vector2(buttonWidth, 0));
+                if (selected)
+                {
+                    var min = ImGui.GetItemRectMin();
+                    var max = ImGui.GetItemRectMax();
+                    var accentWidth = 3f * ImGuiHelpers.GlobalScale;
+                    ImGui.GetWindowDrawList().AddRectFilled(
+                        min,
+                        new Vector2(min.X + accentWidth, max.Y),
+                        ImGui.GetColorU32(ImGuiCol.ButtonActive));
+                    ImGui.PopStyleColor(3);
+                }
+                ImGui.PopID();
+                if (clicked) SelectScenario(scenario);
+            }
+        ImGui.PopStyleVar(2);
+        ImGui.Unindent();
     }
 
     private void RestoreSelectedScenario()
@@ -338,6 +360,7 @@ public unsafe class MainWindow : Window, IDisposable
 
         _selectedScenario = scenario;
         _openZone = scenario.Phase.Zone;
+        _pendingCategoryTab = scenario.Phase.Zone.Category;
         _soloMode = false;
         _selectedStrat = 0;
         _selectedWaymark = _waymarkMemory.GetValueOrDefault(scenario.Phase.Zone);
