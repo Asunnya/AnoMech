@@ -8,6 +8,8 @@ using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.Network;
+using LuminaAction = Lumina.Excel.Sheets.Action;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
 
 namespace AnoMech.Scenarios.Uwu.P1Garuda;
@@ -44,6 +46,14 @@ public sealed class UwuP1GarudaScenario : IScenario
     private const uint BubbleEObjId = 0x1E8F68;
     private const float HazardStep = 0.1f;
     private const int ChargesToWake = 4;
+    private const uint SatinPlumeMaxHp = 35827;
+    private const float SatinPlumeWalkSpeed = 7f;
+    private const float SatinPlumeHitbox = 1f;
+    private const float PlayerGcdHit = 0.06f;
+    private const float PlayerOgcdHit = 0.02f;
+    private const byte GcdCooldownGroup = 58;
+    private static readonly Vector3 FirstPlumesGather = new(-7f, 0f, 3f);
+    private static readonly Vector3 SecondPlumesGather = new(0f, 0f, 3.5f);
 
     private SimWorld world = null!;
     private SimParty party = null!;
@@ -59,6 +69,10 @@ public sealed class UwuP1GarudaScenario : IScenario
     private bool bubbleActive;
     private int aetherialCharges;
     private readonly List<SimEnemy> satinPlumes = [];
+    private readonly Dictionary<SimEnemy, float> satinPlumeHp = [];
+    private readonly Dictionary<SimEnemy, float> satinPlumeBotDrain = [];
+    private bool satinPlumesGathered;
+    private int lastPlayerActionSequence = -1;
     private readonly List<SimEnemy> helpers = [];
     private readonly SimEnemy?[] featherDummies = new SimEnemy?[5];
     private readonly Dictionary<SimCharacter, float> bubbleDwell = [];
@@ -74,6 +88,9 @@ public sealed class UwuP1GarudaScenario : IScenario
         damage = new DamageSolver(party);
         state = new UwuP1GarudaState();
         satinPlumes.Clear();
+        satinPlumeHp.Clear();
+        satinPlumeBotDrain.Clear();
+        satinPlumesGathered = false;
         helpers.Clear();
         greatWhirlwindCasters.Clear();
         greatWhirlwindSpots.Clear();
@@ -81,15 +98,18 @@ public sealed class UwuP1GarudaScenario : IScenario
         bubbleDwell.Clear();
         bubbleActive = false;
         aetherialCharges = 0;
+        Plugin.PlayerInputHooks.ActionExecuted -= OnPlayerAction;
+        Plugin.PlayerInputHooks.ActionExecuted += OnPlayerAction;
 
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UwuP1GarudaState>)AiStrats[idx]).Run(state, world);
 
+        world.Events.Add(0f, SpawnArenaFloor);
         world.Events.Add(0f, SpawnGaruda);
         world.Events.Add(0.2f, () => garuda?.MoveTo(new Vector3(0f, 0f, -0.7f), 8f, MathF.PI));
         ScheduleHazards();
 
-        world.Events.Add(5.20f, () => Get(state.MistralSongTarget)?.AttachLockonVfx(LockonId.MistralSong, 5.2f));
+        world.Events.Add(5.20f, () => Lockon(Get(state.MistralSongTarget), LockonId.MistralSong));
         world.Events.Add(5.29f, () => CastSelf(garuda, ActionId.Slipstream, 2.2f));
         world.Events.Add(7.78f, () => ResolveCone(garuda, ActionId.Slipstream, garuda?.Rotation ?? MathF.PI, 2.1f, "Slipstream"));
         world.Events.Add(10.32f, () => ResolveMistralSong(garuda, ActionId.MistralSongBoss, Get(state.MistralSongTarget), GreatWhirlwindSpot.Boss));
@@ -97,12 +117,13 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(13.44f, () => CastGreatWhirlwind(GreatWhirlwindSpot.Boss));
         world.Events.Add(16.43f, () => ResolveGreatWhirlwind(GreatWhirlwindSpot.Boss));
 
-        world.Events.Add(18.52f, () => SpawnPlumes(state.SatinPlumesFirst, withSpiny: true));
         world.Events.Add(19.59f, () => CastGreatWhirlwind(GreatWhirlwindSpot.Boss));
-        world.Events.Add(20.33f, ShowPlumes);
+        world.Events.Add(20.33f, () => SpawnPlumes(state.SatinPlumesFirst, withSpiny: true));
         world.Events.Add(20.52f, FixateSpinyOnOffTank);
         world.Events.Add(20.61f, () => CastSelf(garuda, ActionId.Slipstream, 2.2f));
         world.Events.Add(22.57f, () => ResolveGreatWhirlwind(GreatWhirlwindSpot.Boss));
+        world.Events.Add(23.10f, () => SatinPlumesWalkTo(FirstPlumesGather));
+        world.Events.Add(24.50f, () => SatinPlumesGathered(24.50f, [33.9f, 35.0f, 35.8f, 37.5f]));
         world.Events.Add(23.11f, () => ResolveCone(garuda, ActionId.Slipstream, garuda?.Rotation ?? MathF.PI, 2.1f, "Slipstream"));
         world.Events.Add(25.73f, () => CastGreatWhirlwind(GreatWhirlwindSpot.Boss));
         world.Events.Add(26.58f, () => ResolveDownburst());
@@ -122,14 +143,10 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(38.21f, () => garuda?.SetTargetable(true));
         world.Events.Add(38.21f, () => CastSelf(spiny, ActionId.Gigastorm, 2.7f));
         world.Events.Add(38.30f, () => CastSelf(garuda, ActionId.MistralShriek, 2.7f));
-        world.Events.Add(39.12f, () => DespawnSatinPlume(0));
         world.Events.Add(41.19f, ResolveGigastorm);
         world.Events.Add(41.28f, () => Raidwide(garuda, ActionId.MistralShriek, 0.4f, 2.3f));
-        world.Events.Add(42.98f, () => DespawnSatinPlume(1));
         world.Events.Add(43.45f, SpawnBubble);
         world.Events.Add(43.45f, () => bubbleActive = true);
-        world.Events.Add(46.16f, () => DespawnSatinPlume(2));
-        world.Events.Add(46.16f, () => DespawnSatinPlume(3));
         world.Events.Add(47.77f, () => bubble?.SetVisible(true));
 
         world.Events.Add(48.68f, () => CastFriction(state.FrictionTargets[0]));
@@ -174,7 +191,8 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(105.31f, () => ResolveGreatWhirlwind(GreatWhirlwindSpot.Chirada));
 
         world.Events.Add(110.84f, () => SpawnPlumes(state.SatinPlumesSecond, withSpiny: false));
-        world.Events.Add(110.84f, ShowPlumes);
+        world.Events.Add(113.00f, () => SatinPlumesWalkTo(SecondPlumesGather));
+        world.Events.Add(114.50f, () => SatinPlumesGathered(114.50f, [123.1f, 124.3f, 125.3f, 126.3f]));
         world.Events.Add(112.40f, () => garuda?.MoveTo(new Vector3(-0.1f, 0f, -6.6f), 1.5f, MathF.PI));
         world.Events.Add(117.38f, () => PlaceSisters(UwuP1GarudaState.SuparnaTetherSpot, UwuP1GarudaState.ChiradaTetherSpot));
         world.Events.Add(117.47f, () => PlaySisters(ActionTimelineId.WarpEnd));
@@ -188,10 +206,6 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(124.73f, () => ResolveDownburst());
         world.Events.Add(126.74f, () => PlaySisters(ActionTimelineId.WarpStart2));
         utils.FeatherRain(FeatherRainDummies, 126.74f, 128.25f, 129.23f);
-        world.Events.Add(129.28f, () => DespawnSatinPlume(0));
-        world.Events.Add(131.16f, () => DespawnSatinPlume(1));
-        world.Events.Add(131.16f, () => DespawnSatinPlume(2));
-        world.Events.Add(133.30f, () => DespawnSatinPlume(3));
         world.Events.Add(134.50f, KillGaruda);
         world.Events.Add(136f, DespawnAll);
     }
@@ -217,18 +231,43 @@ public sealed class UwuP1GarudaScenario : IScenario
         return dummy;
     }
 
+    // The fight's floor EObj (sgvf_w1fz_b1448) that the server spawns. The primal sky comes from
+    // the phase's weather, not from director data or the other floor EObjs.
+    private void SpawnArenaFloor() => world.SpawnEventObject(new EventObjectSpawnConfig
+    {
+        EObjId = 2007457,
+        Placement = new(new(0.16f, 0, 1.4434f), 0),
+        ObjectIndex = 1,
+        TargetableStatus = 5,
+        EntityId = 0x4000829C,
+        LayoutId = 7538913,
+        GimmickId = 7538258,
+        TimelineState = 1,
+    });
+
     private void SpawnGaruda()
     {
         garuda = SpawnEnemy(BNpcBaseId.Garuda, BNpcNameId.Garuda, new Placement(new Vector3(0f, 0f, -10f), MathF.PI), true, true, EnemyListMode.Always);
         for (var i = 0; i < featherDummies.Length; i++) featherDummies[i] = SpawnDummy(Vector3.Zero);
     }
 
+    // The game's own head marker (ActorControl 34), like the server sends: the icon's AVFX ends on
+    // its own, so tracking it as a persistent SimVfx would free it twice.
+    private static void Lockon(SimCharacter? target, uint lockonId)
+    {
+        if (target == null) return;
+        PacketDispatcher.HandleActorControlPacket(target.EntityId, SetLockonControl, lockonId, target.GameObjectId.ObjectId, 0, 0, 0, 0, 0, 0, 0xE0000000, false);
+    }
+
+    private const uint SetLockonControl = 34;
+
     private void CastSelf(SimEnemy? caster, uint actionId, float castSeconds) =>
         caster?.NativeCast(actionId, ActionType.Action, 0f, castSeconds, false, targetId: caster.GameObjectId);
 
-    private void PlayEffect(SimEnemy? caster, uint actionId, float animationLock, float? rotation = null, GameObjectId? target = null) =>
+    // An effect without a position plays at the arena centre, so default it to the caster.
+    private void PlayEffect(SimEnemy? caster, uint actionId, float animationLock, float? rotation = null, GameObjectId? target = null, Vector3? at = null) =>
         caster?.NativeActionEffect(actionId, animationLock, (ushort)actionId, 0, ActionType.Action, 0,
-            rotation: rotation, animationTargetId: target ?? caster.GameObjectId);
+            rotation: rotation, position: at ?? caster.Position, animationTargetId: target ?? caster.GameObjectId);
 
     private void ResolveCone(SimEnemy? caster, uint actionId, float rotation, float animationLock, string cause)
     {
@@ -271,35 +310,122 @@ public sealed class UwuP1GarudaScenario : IScenario
         if (!greatWhirlwindCasters.TryGetValue(spot, out var caster) || caster == null)
             greatWhirlwindCasters[spot] = caster = SpawnDummy(at);
         caster?.SetPosition(new Placement(at, 0f));
-        CastSelf(caster, ActionId.GreatWhirlwind, 2.7f);
+        caster?.NativeCast(ActionId.GreatWhirlwind, ActionType.Action, 0f, 2.7f, false, position: at);
     }
 
     private void ResolveGreatWhirlwind(GreatWhirlwindSpot spot)
     {
         if (!greatWhirlwindSpots.TryGetValue(spot, out var at)) return;
-        if (greatWhirlwindCasters.GetValueOrDefault(spot) is { } caster) PlayEffect(caster, ActionId.GreatWhirlwind, 2.1f);
+        if (greatWhirlwindCasters.GetValueOrDefault(spot) is { } caster) PlayEffect(caster, ActionId.GreatWhirlwind, 2.1f, at: at);
         utils.ResolveSnapshot(party.Find.InsideCircle(at, GreatWhirlwindRadius).ToList(), "Great Whirlwind");
     }
 
-    private void SpawnPlumes(IReadOnlyList<Vector3> satinSpots, bool withSpiny)
+    private unsafe void SpawnPlumes(IReadOnlyList<Vector3> satinSpots, bool withSpiny)
     {
         satinPlumes.Clear();
+        satinPlumeHp.Clear();
+        satinPlumeBotDrain.Clear();
+        satinPlumesGathered = false;
         foreach (var at in satinSpots)
-            if (SpawnEnemy(BNpcBaseId.SatinPlume, BNpcNameId.SatinPlume, new Placement(at, 0f), true, false, EnemyListMode.Always) is { } plume)
-                satinPlumes.Add(plume);
+        {
+            if (SpawnEnemy(BNpcBaseId.SatinPlume, BNpcNameId.SatinPlume, new Placement(at, 0f), true, true, EnemyListMode.Always) is not { } plume) continue;
+            satinPlumes.Add(plume);
+            satinPlumeHp[plume] = 1f;
+            if (plume.BattleCharaPtr != null) plume.BattleCharaPtr->MaxHealth = SatinPlumeMaxHp;
+            ShowSatinPlumeHp(plume, 1f);
+        }
         if (withSpiny)
-            spiny = SpawnEnemy(BNpcBaseId.SpinyPlume, BNpcNameId.SpinyPlume, new Placement(UwuP1GarudaState.SpinyPlumeSpawn, 0f), true, false, EnemyListMode.Always);
+            spiny = SpawnEnemy(BNpcBaseId.SpinyPlume, BNpcNameId.SpinyPlume, new Placement(UwuP1GarudaState.SpinyPlumeSpawn, 0f), true, true, EnemyListMode.Always);
     }
 
-    private void ShowPlumes()
+    private void SatinPlumesWalkTo(Vector3 gather)
     {
-        foreach (var plume in satinPlumes) plume.SetVisible(true);
-        spiny?.SetVisible(true);
+        foreach (var plume in satinPlumes)
+        {
+            var fromGather = plume.Position - gather;
+            var stop = fromGather.Length() > 1.5f ? gather + Vector3.Normalize(fromGather) * 1.5f : plume.Position;
+            plume.MoveTo(stop, SatinPlumeWalkSpeed);
+        }
     }
 
-    private void DespawnSatinPlume(int index)
+    // The bots AoE the plumes down on the log's schedule; the player's hits only speed that up.
+    private void SatinPlumesGathered(float at, float[] botKillAt)
     {
-        if (index < satinPlumes.Count) satinPlumes[index].Despawn();
+        satinPlumesGathered = true;
+        for (var i = 0; i < satinPlumes.Count && i < botKillAt.Length; i++)
+            satinPlumeBotDrain[satinPlumes[i]] = 1f / (botKillAt[i] - at);
+        for (var t = at + HazardStep; t <= botKillAt.Max() + HazardStep; t += HazardStep)
+            world.Events.Add(t - at, ChipSatinPlumesWithBots);
+    }
+
+    private void ChipSatinPlumesWithBots()
+    {
+        foreach (var plume in satinPlumes.ToList())
+            DamageSatinPlume(plume, satinPlumeBotDrain.GetValueOrDefault(plume) * HazardStep);
+    }
+
+    private void DamageSatinPlume(SimEnemy plume, float fraction)
+    {
+        if (!satinPlumeHp.TryGetValue(plume, out var hp)) return;
+        hp -= fraction;
+        satinPlumeHp[plume] = hp;
+        ShowSatinPlumeHp(plume, hp);
+        if (hp > 0f) return;
+        satinPlumeHp.Remove(plume);
+        satinPlumes.Remove(plume);
+        plume.Despawn();
+    }
+
+    private static unsafe void ShowSatinPlumeHp(SimEnemy plume, float hp)
+    {
+        if (plume.BattleCharaPtr != null)
+            plume.BattleCharaPtr->Health = (uint)MathF.Ceiling(SatinPlumeMaxHp * MathF.Max(0f, hp));
+    }
+
+    private void OnPlayerAction(ActionType actionType, uint actionId)
+    {
+        if (actionType != ActionType.Action || satinPlumes.Count == 0 || !IsNewPlayerAction()) return;
+        if (Plugin.DataManager.GetExcelSheet<LuminaAction>().GetRowOrDefault(actionId) is not { } action) return;
+        var hits = SatinPlumesHitBy(action);
+        if (hits.Count == 0) return;
+        if (!satinPlumesGathered)
+        {
+            party.WipeAllPlayers("Hit a Satin Plume before the plumes gathered");
+            return;
+        }
+        var isGcd = action.CooldownGroup == GcdCooldownGroup || action.AdditionalCooldownGroup == GcdCooldownGroup;
+        foreach (var plume in hits) DamageSatinPlume(plume, isGcd ? PlayerGcdHit : PlayerOgcdHit);
+    }
+
+    private unsafe bool IsNewPlayerAction()
+    {
+        var am = ActionManager.Instance();
+        if (am == null) return false;
+        var seq = (int)am->LastUsedActionSequence;
+        if (seq == lastPlayerActionSequence) return false;
+        lastPlayerActionSequence = seq;
+        return true;
+    }
+
+    // Circles only: a cone or line counts as a circle of its length around the player, generous
+    // enough to catch an early hit on a plume still walking in.
+    private List<SimEnemy> SatinPlumesHitBy(LuminaAction action)
+    {
+        if (party.Player is not { } player) return [];
+        var selfAoe = action.CanTargetSelf && action.NeedToFaceTarget && action.CastType == 2 && action.EffectRange > 0;
+        if (!action.CanTargetHostile && !selfAoe) return [];
+        var targetId = Plugin.TargetManager.Target?.EntityId;
+        var target = new[] { garuda, spiny, suparna, chirada }.Concat(satinPlumes).FirstOrDefault(e => e != null && e.EntityId == targetId);
+        if (action.CanTargetHostile && target == null) return [];
+
+        var hits = new List<SimEnemy>();
+        if (action.CanTargetHostile && satinPlumes.Contains(target!)) hits.Add(target!);
+        if (action.EffectRange == 0 || action.CastType == 1) return hits;
+        var centre = selfAoe || action.CastType is not (2 or 5 or 6) ? player.Position : target!.Position;
+        foreach (var plume in satinPlumes)
+            if (!hits.Contains(plume) && FlatDistance(plume.Position, centre) <= action.EffectRange + SatinPlumeHitbox)
+                hits.Add(plume);
+        return hits;
     }
 
     private void FixateSpinyOnOffTank()
@@ -447,7 +573,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     private void MarkSistersSongTargets()
     {
         foreach (var role in state.SistersSongTargets)
-            Get(role)?.AttachLockonVfx(LockonId.MistralSong, 5.2f);
+            Lockon(Get(role), LockonId.MistralSong);
     }
 
     private void ResolveSistersSongs()

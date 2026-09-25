@@ -6,11 +6,13 @@ using AnoMech.Core.SimObjects;
 namespace AnoMech.Scenarios.Uwu;
 
 // The primal phases carry a "P<n>" menu prefix; the Ultima phase's empty Name has none. Every
-// phase shares the fight's one BGM track and weather.
+// phase shares the fight's one BGM track.
 public sealed class UwuZone : IZone
 {
     public static readonly UwuZone Instance = new();
-    public static readonly Phase Garuda = new(Instance, "P1", 95, 547);
+    // The territory's own weather (WeatherRate 26) is Garuda's sky; Ultimania is Ultima's.
+    private const byte GalesWeather = 28;
+    public static readonly Phase Garuda = new(Instance, "P1", GalesWeather, 547);
     public static readonly Phase Ultima = new(Instance, "", 95, 547);
 
     public string Name => "The Weapon's Refrain";
@@ -20,7 +22,7 @@ public sealed class UwuZone : IZone
     public ushort ItemLevel => UwuConstants.ItemLevel;
 
     public IReadOnlyList<WaymarkLayout> WaymarkPresets { get; } =
-        [new WaymarkLayout("Default", UwuConstants.NaurWaymarks)];
+        [new WaymarkLayout("Standard", UwuConstants.StandardWaymarks), new WaymarkLayout("Naur", UwuConstants.NaurWaymarks)];
 
     public void Run(SimWorld world) => world.EnforceArenaBoundary(UwuConstants.Geometry.ArenaRadius);
 }

@@ -24,8 +24,8 @@ public sealed class UwuP1GarudaAi : IScenarioAi<UwuP1GarudaState>
     private static readonly Vector2 SistersStack = new(6.8f, 6.9f);
     private static readonly Vector2 SouthStack = new(0.5f, 4.7f);
     private static readonly Vector2 BubbleCleanseSpot = new(-2.2f, 5.1f);
-    private static readonly Vector2 WestTetherHold = new(-6.4f, 2.8f);
-    private static readonly Vector2 EastTetherHold = new(7.9f, -1.3f);
+    private static readonly Vector2 WestTetherHold = new(-8.2f, 1.2f);
+    private static readonly Vector2 EastTetherHold = new(7.6f, 0.2f);
 
     private UwuP1GarudaState state = null!;
     private SimWorld world = null!;
@@ -172,8 +172,8 @@ public sealed class UwuP1GarudaAi : IScenarioAi<UwuP1GarudaState>
     private IAiMove TakeMesohighTethers()
     {
         var spots = StackSpots(new Vector2(0f, 4.2f), new Vector2(0f, -8.8f));
-        spots[(int)PartyRole.OffTank] = TetherTakeSpot(state.ChiradaMesohigh, PartyRole.OffTank, EastTetherHold);
-        spots[(int)PartyRole.CasterDps] = TetherTakeSpot(state.SuparnaMesohigh, PartyRole.CasterDps, WestTetherHold);
+        spots[(int)PartyRole.OffTank] = TetherTakeSpot(state.SuparnaMesohigh, PartyRole.OffTank, WestTetherHold);
+        spots[(int)PartyRole.CasterDps] = TetherTakeSpot(state.ChiradaMesohigh, PartyRole.CasterDps, EastTetherHold);
         return AiMove.Create(spots).NaturalOrder();
     }
 
