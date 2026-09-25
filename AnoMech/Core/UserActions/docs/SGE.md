@@ -12,7 +12,7 @@ _✅ works · ⚠️ partial · ❌ not simulated · ➖ nothing to simulate (pu
 | Egeiro | 24287 | ➖ | Raise. |
 | Physis | 24288 | ➖ | |
 | Phlegma | 24289 | ➖ | |
-| Eukrasia | 24290 | ⚠️ | Grants Eukrasia status (2606); gauge byte 0x0C not written. |
+| Eukrasia | 24290 | ✅ | Grants Eukrasia status (2606) and sets the gauge byte (SageStateHandler); every Eukrasian spell clears both. |
 | Eukrasian Diagnosis | 24291 | ✅ | Consumes Eukrasia (in clear list). |
 | Eukrasian Prognosis | 24292 | ✅ | At cap resolves to 37034 (in clear list). |
 | Eukrasian Dosis | 24293 | ✅ | At cap resolves to 24314 (in clear list). |
@@ -56,4 +56,3 @@ Repose, Esuna, Lucid Dreaming, Surecast, Rescue — ➖. Swiftcast ✅ (167 → 
 
 ## Not simulated
 - **Toxikon / Toxikon II (24304 / 24316)** — Addersting spend is wired (`CostGauges[69]`) but the gauge is never generated in-sim; its only source is a fully-absorbed barrier, and the sim has no incoming damage, so it stays at 0 and both actions are permanently unusable.
-- **Eukrasia gauge byte (SageGauge 0x0C)** — only the status (2606) is set, not the byte. The on-gauge Eukrasia indicator won't light, and if `GetAdjustedActionId` keys the augmented-spell swaps (Dosis III / Diagnosis / Prognosis → Eukrasian) on the gauge byte rather than the status, the upgraded spells won't surface. Needs an in-game check; if gauge-keyed, also write the byte.

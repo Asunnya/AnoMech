@@ -71,6 +71,13 @@ public sealed unsafe class SimOmen : ISimObject
         if (remaining is { } r) remaining = r - deltaSeconds;
     }
 
+    // Resizes the live telegraph in place, for a shape that grows or shrinks with its mechanic.
+    public void SetScale(Vector3 scale)
+    {
+        VfxFunctions.SetStaticVfxScale(primary, scale);
+        VfxFunctions.SetStaticVfxScale(alt, scale);
+    }
+
     public void Despawn()
     {
         if (primary != null)
