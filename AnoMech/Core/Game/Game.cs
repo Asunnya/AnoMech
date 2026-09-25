@@ -6,6 +6,7 @@ using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
 using AnoMech.Scenarios;
+using AnoMech.Scenarios.M9s.VampStomp;
 using AnoMech.Scenarios.Top.P2PartySynergy;
 using AnoMech.Scenarios.Top.P5Delta;
 using AnoMech.Scenarios.Top.P5Omega;
@@ -131,7 +132,8 @@ public sealed class Game : IDisposable
             new TopP6WaveCannon2Scenario(),
             new UltimatePredationScenario(),
             new UltimateSuppressionScenario(),
-            new UcobP5ExaflaresScenario()
+            new UcobP5ExaflaresScenario(),
+            new M9sVampStompScenario()
         };
 
         // Derive the zone tree from the flat registry (first-appearance order).

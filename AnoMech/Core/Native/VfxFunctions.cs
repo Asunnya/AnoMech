@@ -66,6 +66,13 @@ internal static unsafe class VfxFunctions
         return vfx;
     }
 
+    public static void SetStaticVfxScale(VfxObject* vfx, Vector3 scale)
+    {
+        if (vfx == null) return;
+        vfx->Scale = scale;
+        vfx->Flags |= 0x2;          // mark dirty, same as at spawn
+    }
+
     public static void RemoveStaticVfx(VfxObject* vfx)
     {
         if (vfx == null) return;

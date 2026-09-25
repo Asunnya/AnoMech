@@ -130,8 +130,12 @@ public sealed class SimWorld : ISimObject, IDisposable
     // `durationSeconds` and is cleaned up on world reset. `placement` is scenario-local
     // (like the rest of the SimXxx API); SimOmen lifts it to world coords. `scale`
     // follows SimOmen's convention: scale.X = halfWidth, scale.Z = length for rect omens.
-    public void SpawnOmen(string path, Placement placement, Vector3 scale, float durationSeconds)
-        => children.Add(new SimOmen(Coordinates, path, placement, scale, durationSeconds));
+    public SimOmen SpawnOmen(string path, Placement placement, Vector3 scale, float durationSeconds)
+    {
+        var omen = new SimOmen(Coordinates, path, placement, scale, durationSeconds);
+        children.Add(omen);
+        return omen;
+    }
 
     // Standalone telegraph derived from `actionId`'s own Omen sheet entry (shape/scale
     // read from Action.CastType/EffectRange/XAxisModifier), for a boss ability whose real
