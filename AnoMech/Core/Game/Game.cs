@@ -6,6 +6,14 @@ using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
 using AnoMech.Scenarios;
+using AnoMech.Scenarios.M9s.Aetherletting;
+using AnoMech.Scenarios.M9s.Coffinmaker;
+using AnoMech.Scenarios.M9s.Deathmatch;
+using AnoMech.Scenarios.M9s.Final;
+using AnoMech.Scenarios.M9s.Flails;
+using AnoMech.Scenarios.M9s.HellInACell;
+using AnoMech.Scenarios.M9s.VampStomp;
+using AnoMech.Scenarios.M9s.VampStomp2;
 using AnoMech.Scenarios.Top.P2PartySynergy;
 using AnoMech.Scenarios.Top.P5Delta;
 using AnoMech.Scenarios.Top.P5Omega;
@@ -133,7 +141,15 @@ public sealed class Game : IDisposable
             new UwuP1GarudaScenario(),
             new UltimatePredationScenario(),
             new UltimateSuppressionScenario(),
-            new UcobP5ExaflaresScenario()
+            new UcobP5ExaflaresScenario(),
+            new M9sVampStompScenario(),
+            new M9sCoffinmakerScenario(),
+            new M9sAetherlettingScenario(),
+            new M9sVampStomp2Scenario(),
+            new M9sFlailsScenario(),
+            new M9sHellInACellScenario(),
+            new M9sDeathmatchScenario(),
+            new M9sFinalScenario()
         };
 
         // Derive the zone tree from the flat registry (first-appearance order).
