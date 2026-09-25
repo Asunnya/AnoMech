@@ -176,6 +176,8 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
     {
         if (DisableAllActions && !IsStopAutosAction(actionType, actionId)) return false;
         var result = useActionHook.Original(self, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+        if (!result && actionType == ActionType.Action)
+            Plugin.Log.Debug($"[PlayerInput] client refused action {actionId}: ActionStatus {self->GetActionStatus(actionType, actionId)}");
         // Record a real action use for Party.Player.IsActing — but ignore the auto-attack-cancel
         // general action that UpdateDetour issues while stunned.
         if (result && !IsStopAutosAction(actionType, actionId))

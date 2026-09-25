@@ -13,6 +13,7 @@ public sealed unsafe class SimStatus : ISimObject
     public ushort StatusId { get; }
     public bool IsActive { get; private set; }
     public ushort Stacks { get; private set; }
+    public float Remaining => duration > 0f ? MathF.Max(0f, duration - elapsed) : float.PositiveInfinity;
 
     internal SimStatus(SimCharacter target, ushort statusId, float duration, ushort stacks)
     {
