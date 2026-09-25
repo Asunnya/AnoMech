@@ -5,10 +5,12 @@ using AnoMech.Core.SimObjects;
 
 namespace AnoMech.Scenarios.Uwu;
 
-// Single phase; empty Name = no menu prefix.
+// The primal phases carry a "P<n>" menu prefix; the Ultima phase's empty Name has none. Every
+// phase shares the fight's one BGM track and weather.
 public sealed class UwuZone : IZone
 {
     public static readonly UwuZone Instance = new();
+    public static readonly Phase Garuda = new(Instance, "P1", 95, 547);
     public static readonly Phase Ultima = new(Instance, "", 95, 547);
 
     public string Name => "The Weapon's Refrain";
