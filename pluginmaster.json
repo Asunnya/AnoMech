@@ -1,0 +1,27 @@
+[
+    {
+        "Author": "Asunnya (fork of Anomek's AnoMech)",
+        "Name": "AnoMech (Asunnya)",
+        "Punchline": "Another FFXIV mechanics simulator, with UWU and M9S scenarios in progress.",
+        "Description": "Asunnya's fork of AnoMech: spawns fake party members and bosses client-side so you can practice raid mechanics without a full party. Adds UWU (Garuda, Ifrit) and M9S scenarios.",
+        "InternalName": "AnoMech",
+        "AssemblyVersion": "0.4.2.0",
+        "RepoUrl": "https://github.com/Asunnya/AnoMech",
+        "ApplicableVersion": "any",
+        "Tags": [
+            "ultimate",
+            "savage",
+            "uwu",
+            "practice",
+            "simulator"
+        ],
+        "DalamudApiLevel": 15,
+        "IconUrl": "https://raw.githubusercontent.com/Asunnya/AnoMech/asunnya-release/images/icon.png",
+        "DownloadLinkInstall": "https://github.com/Asunnya/AnoMech/releases/latest/download/latest.zip",
+        "DownloadLinkTesting": "https://github.com/Asunnya/AnoMech/releases/latest/download/latest.zip",
+        "DownloadLinkUpdate": "https://github.com/Asunnya/AnoMech/releases/latest/download/latest.zip",
+        "IsHide": false,
+        "IsTestingExclusive": false,
+        "LastUpdate": "0"
+    }
+]
