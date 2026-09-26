@@ -13,7 +13,7 @@ namespace AnoMech.Core.Map;
 // ProcessMapEffectEx (the network-packet batch variant) routes through this same function
 // internally, so there is no separate commit step — this is the correct and only endpoint.
 //
-// Encoding: packetFlags high16 = State, low8 = Flags
+// Encoding: packetFlags high16 = State, low16 = Flags
 // State: selects the SGB animation mode on the FIRST call to a slot; ignored on subsequent calls.
 // Flags: triggers a specific animation action (0x01 show, 0x02 spawn, 0x04 hide, 0x08 despawn,
 //        0x10 eyelid-close-instant, 0x20 eyelid-close-anim, 0x40/0x80 charge anim).
@@ -40,7 +40,7 @@ internal sealed unsafe class MapEffects : IDisposable
         return hook.Original(module, index, state, flags);
     }
 
-    // packetFlags: high16=State, low8=Flags (ACT type-257 raw value).
+    // packetFlags: high16=State, low16=Flags (ACT type-257 raw value).
     internal void Apply(uint packetFlags, byte index)
     {
         if (!Loaded) return;
@@ -54,7 +54,7 @@ internal sealed unsafe class MapEffects : IDisposable
             Plugin.Log.Warning($"[MapEffect] index 0x{index:X} ignored: zone has {(effects == null ? 0 : effects->ItemCount)} map effects");
             return;
         }
-        hook.Original(module, index, (ushort)(packetFlags >> 16), (ushort)(packetFlags & 0xFF));
+        hook.Original(module, index, (ushort)(packetFlags >> 16), (ushort)(packetFlags & 0xFFFF));
     }
 
     public void Dispose()

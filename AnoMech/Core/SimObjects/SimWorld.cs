@@ -129,6 +129,18 @@ public sealed class SimWorld : ISimObject, IDisposable
     public bool IsOutsideArena(Vector3 local)
         => children.OfType<SimArenaBoundary>().FirstOrDefault()?.IsOutside(local) ?? false;
 
+    // Restores map-effect `index` with `offFlags` on teardown.
+    public void ResetMapEffectOnDespawn(byte index, uint offFlags)
+    {
+        var reset = children.OfType<SimMapEffectReset>().FirstOrDefault();
+        if (reset == null)
+        {
+            reset = new SimMapEffectReset(Map);
+            children.Add(reset);
+        }
+        reset.Record(index, offFlags);
+    }
+
     // Spawns a standalone AOE telegraph (omen StaticVfx) that auto-expires after
     // `durationSeconds` and is cleaned up on world reset. `placement` is scenario-local
     // (like the rest of the SimXxx API); SimOmen lifts it to world coords. `scale`

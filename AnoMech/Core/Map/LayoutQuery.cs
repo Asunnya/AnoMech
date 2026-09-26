@@ -77,6 +77,18 @@ internal static unsafe class LayoutQuery
         return hit;
     }
 
+    public static List<nint> FindAllBySgbPath(string sgbPath)
+    {
+        var hits = new List<nint>();
+        EnumerateAll(p =>
+        {
+            var path = GetSgbPath((SharedGroupLayoutInstance*)p);
+            if (path != null && string.Equals(path, sgbPath, StringComparison.OrdinalIgnoreCase))
+                hits.Add(p);
+        });
+        return hits;
+    }
+
     public static SharedGroupLayoutInstance* FindByEObjRow(uint eObjRowId)
     {
         var path = ResolveEObjSgbPath(eObjRowId);
