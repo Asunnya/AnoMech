@@ -25,6 +25,10 @@ public sealed class UwuP3TitanScenario : IScenario
     public bool SupportsSolo => true;
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new UwuP3TitanAi()];
+    public void DrawSettings() => settingsWindow.Draw();
+    public object SettingsOverrides => settingsWindow.Overrides;
+
+    private readonly UwuP3TitanSettingsWindow settingsWindow = new();
 
     private const float LandslideLength = 40f;
     private const float LandslideKnockback = 15f;
@@ -72,7 +76,7 @@ public sealed class UwuP3TitanScenario : IScenario
         party = world.Party;
         utils = new UwuUtils(world);
         damage = new DamageSolver(party);
-        state = new UwuP3TitanState();
+        state = new UwuP3TitanState(settingsWindow.Overrides, party.Player != null ? party.PlayerRole : null);
         titan = null;
         floor = null;
         titanFacesTank = false;
