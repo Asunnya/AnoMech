@@ -7,6 +7,8 @@ using AnoMech.Core.SimObjects;
 using AnoMech.Helpers;
 using AnoMech.Pointers;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.Network;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
 
 namespace AnoMech.Scenarios.Uwu;
@@ -27,6 +29,38 @@ public unsafe class UwuUtils(SimWorld world)
         byte[] unionData = [value];
         InstanceContentDirectorHelper.SetDirectorData(1, 0, unionData, true);
     }
+
+    // The fight's floor EObj (sgvf_w1fz_b1448) that the server spawns. The primal sky comes from
+    // the phase's weather, not from director data or the other floor EObjs.
+    public void SpawnArenaFloor() => world.SpawnEventObject(new EventObjectSpawnConfig
+    {
+        EObjId = 2007457,
+        Placement = new(new(0.16f, 0, 1.4434f), 0),
+        ObjectIndex = 1,
+        TargetableStatus = 5,
+        EntityId = 0x4000829C,
+        LayoutId = 7538913,
+        GimmickId = 7538258,
+        TimelineState = 1,
+    });
+
+    // The game's own head marker (ActorControl 34), like the server sends: the icon's AVFX ends on
+    // its own, so tracking it as a persistent SimVfx would free it twice.
+    public static void Lockon(SimCharacter? target, uint lockonId)
+    {
+        if (target == null) return;
+        PacketDispatcher.HandleActorControlPacket(target.EntityId, SetLockonControl, lockonId, target.GameObjectId.ObjectId, 0, 0, 0, 0, 0, 0, 0xE0000000, false);
+    }
+
+    private const uint SetLockonControl = 34;
+
+    public static void CastSelf(SimEnemy? caster, uint actionId, float castSeconds) =>
+        caster?.NativeCast(actionId, ActionType.Action, 0f, castSeconds, false, targetId: caster.GameObjectId);
+
+    // An effect without a position plays at the arena centre, so default it to the caster.
+    public static void PlayEffect(SimEnemy? caster, uint actionId, float animationLock, float? rotation = null, GameObjectId? target = null, Vector3? at = null) =>
+        caster?.NativeActionEffect(actionId, animationLock, (ushort)actionId, 0, ActionType.Action, 0,
+            rotation: rotation, position: at ?? caster.Position, animationTargetId: target ?? caster.GameObjectId);
 
     public void Awaken(SimEnemy? enemy, bool isUltima)
     {

@@ -7,10 +7,9 @@ using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.Game.Object;
-using FFXIVClientStructs.FFXIV.Client.Network;
 using LuminaAction = Lumina.Excel.Sheets.Action;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
+using static AnoMech.Scenarios.Uwu.UwuUtils;
 
 namespace AnoMech.Scenarios.Uwu.P1Garuda;
 
@@ -106,7 +105,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UwuP1GarudaState>)AiStrats[idx]).Run(state, world);
 
-        world.Events.Add(0f, SpawnArenaFloor);
+        world.Events.Add(0f, utils.SpawnArenaFloor);
         world.Events.Add(0f, SpawnGaruda);
         world.Events.Add(0.2f, () => garuda?.MoveTo(new Vector3(0f, 0f, -0.7f), 8f, MathF.PI));
         ScheduleHazards();
@@ -233,43 +232,11 @@ public sealed class UwuP1GarudaScenario : IScenario
         return dummy;
     }
 
-    // The fight's floor EObj (sgvf_w1fz_b1448) that the server spawns. The primal sky comes from
-    // the phase's weather, not from director data or the other floor EObjs.
-    private void SpawnArenaFloor() => world.SpawnEventObject(new EventObjectSpawnConfig
-    {
-        EObjId = 2007457,
-        Placement = new(new(0.16f, 0, 1.4434f), 0),
-        ObjectIndex = 1,
-        TargetableStatus = 5,
-        EntityId = 0x4000829C,
-        LayoutId = 7538913,
-        GimmickId = 7538258,
-        TimelineState = 1,
-    });
-
     private void SpawnGaruda()
     {
         garuda = SpawnEnemy(BNpcBaseId.Garuda, BNpcNameId.Garuda, new Placement(new Vector3(0f, 0f, -10f), MathF.PI), true, true, EnemyListMode.Always);
         for (var i = 0; i < featherDummies.Length; i++) featherDummies[i] = SpawnDummy(Vector3.Zero);
     }
-
-    // The game's own head marker (ActorControl 34), like the server sends: the icon's AVFX ends on
-    // its own, so tracking it as a persistent SimVfx would free it twice.
-    private static void Lockon(SimCharacter? target, uint lockonId)
-    {
-        if (target == null) return;
-        PacketDispatcher.HandleActorControlPacket(target.EntityId, SetLockonControl, lockonId, target.GameObjectId.ObjectId, 0, 0, 0, 0, 0, 0, 0xE0000000, false);
-    }
-
-    private const uint SetLockonControl = 34;
-
-    private void CastSelf(SimEnemy? caster, uint actionId, float castSeconds) =>
-        caster?.NativeCast(actionId, ActionType.Action, 0f, castSeconds, false, targetId: caster.GameObjectId);
-
-    // An effect without a position plays at the arena centre, so default it to the caster.
-    private void PlayEffect(SimEnemy? caster, uint actionId, float animationLock, float? rotation = null, GameObjectId? target = null, Vector3? at = null) =>
-        caster?.NativeActionEffect(actionId, animationLock, (ushort)actionId, 0, ActionType.Action, 0,
-            rotation: rotation, position: at ?? caster.Position, animationTargetId: target ?? caster.GameObjectId);
 
     private void ResolveCone(SimEnemy? caster, uint actionId, float rotation, float animationLock, string cause)
     {
