@@ -67,6 +67,10 @@ public class EventObjectSpawnConfig
     // For a prop whose SGB has no timeline for that state (the teleporters).
     public ushort HideAtState { get; init; } = 0;
 
+    // For an EObj bound to a zone SharedGroup: the SG outlives the EObj, so without this a
+    // restarted run finds it still in its last animated state. Pair with ForceSharedGroupActive.
+    public bool RestoreStateOnDespawn { get; init; } = false;
+
     public unsafe SpawnObjectPacket ToPacket(Coordinates coordinates)
     {
         var objectIndex = sbyte.Max(-1, ObjectIndex);
@@ -415,6 +419,13 @@ public unsafe class SimEventObject : ISimObject, IPositioned
     public void Despawn()
     {
         if (slot < 0) return;
+        if (SpawnConfig is { RestoreStateOnDespawn: true } config && obj != null)
+        {
+            var eo = (EventObject*)obj;
+            if (eo->SharedTimelineState != config.TimelineState)
+                obj->UpdateSharedTimelineState(eo->SharedTimelineState, config.TimelineState);
+            Native.LayoutInstanceDiagnostics.Deactivate(eo->SharedGroupLayoutInstance);
+        }
         var releasedSlot = slot;
 
         slot = -1;

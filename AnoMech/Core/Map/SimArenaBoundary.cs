@@ -27,17 +27,19 @@ internal sealed unsafe class SimArenaBoundary : ISimObject
     private readonly SimParty party;
     private readonly float radiusSq;
     private readonly float? squareHalfWidth;
-    private readonly string cause;
     private readonly VfxObject* ringVfx;
+    private bool lifted;
+
+    internal string Cause { get; }
 
     public bool IsAlive => true;
-    public bool IsActive => true;
+    public bool IsActive => !lifted;
 
     internal SimArenaBoundary(SimParty party, SimWorld world, float radius, string cause, bool showVfx = true)
     {
         this.party = party;
         this.radiusSq = radius * radius;
-        this.cause = cause;
+        Cause = cause;
 
         if (showVfx && Plugin.DataManager.FileExists(RingVfxPath))
             ringVfx = VfxFunctions.SpawnStaticVfx(RingVfxPath, new Placement(world.ScenarioOrigin, 0f), new Vector3(radius / 0.82f, 1f, radius / 0.82f));
@@ -47,7 +49,7 @@ internal sealed unsafe class SimArenaBoundary : ISimObject
     {
         this.party = party;
         this.squareHalfWidth = squareHalfWidth;
-        this.cause = cause;
+        Cause = cause;
     }
 
     // Shared by the per-frame fence and external callers (teleport-to-spawn on reset)
@@ -56,12 +58,15 @@ internal sealed unsafe class SimArenaBoundary : ISimObject
         ? MathF.Abs(local.X) > half || MathF.Abs(local.Z) > half
         : local.X * local.X + local.Z * local.Z > radiusSq;
 
+    internal void Lift() => lifted = true;
+
     public void Tick(float deltaSeconds)
     {
+        if (lifted) return;
         // Member positions are scenario-local; the boundary is centered on local zero.
         foreach (var member in party.ActiveMembers())
         {
-            if (IsOutside(member.Position)) member.Die(cause);
+            if (IsOutside(member.Position)) member.Die(Cause);
         }
     }
 

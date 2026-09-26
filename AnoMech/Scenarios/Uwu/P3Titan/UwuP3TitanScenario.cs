@@ -10,6 +10,7 @@ using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Network;
+using LuminaAction = Lumina.Excel.Sheets.Action;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
 using static AnoMech.Scenarios.Uwu.UwuUtils;
 using static AnoMech.Scenarios.Uwu.P3Titan.UwuP3TitanState;
@@ -31,11 +32,25 @@ public sealed class UwuP3TitanScenario : IScenario
     private const float FreefireRadius = 6f;
     private const float GaolChainReach = 7.5f;
     private const float GaolChainDelay = 0.7f;
+    private const float GaolSpotTolerance = 2.5f;
     private const float PrisonerFreedAfter = 1.1f;
     private const float TankBusterHalfAngle = MathF.PI / 4f;
     private const float RockBusterLength = 11f;
     private const float MountainBusterLength = 16f;
+    private const uint HealerGaolMaxHp = 1_300_000;
+    private const float HealerGaolDrainFrom = 99.5f;
+    private const float HealerGaolDrainTo = 102.0f;
+    private const float HealerGaolHpUntilPlayerHits = 0.05f;
     private const float JumpTurnSpeed = 3f;
+    private const string ShrunkenFloorDeath = "Fell off the shrunken floor";
+    private const float FreefireCasterRadius = 18f;
+    private const float MagitekBitRadius = 13f;
+    private const uint MagitekBitMaxHp = 59338;
+    private const float MagitekBitsDrainFrom = 162.0f;
+    private const float MagitekBitsDrainTo = 165.3f;
+    private const uint LahabreaMaxHp = 95389;
+    private const float LahabreaDrainFrom = 180.0f;
+    private const float LahabreaDrainTo = 193.6f;
 
     private SimWorld world = null!;
     private SimParty party = null!;
@@ -47,6 +62,13 @@ public sealed class UwuP3TitanScenario : IScenario
     private SimEventObject? floor;
     private bool titanFacesTank;
     private float? turningTo;
+    private PartyRole? busterTank;
+    private SimEnemy? healerGaol;
+    private SimEnemy? lahabrea;
+    private readonly List<SimEnemy> freefireCasters = [];
+    private readonly List<SimEnemy> magitekBits = [];
+    private bool playerHitHealerGaol;
+    private int lastPlayerActionSequence;
     private float landslideRotation;
     private readonly List<SimEnemy> helpers = [];
     private readonly SimEnemy?[] bombs = new SimEnemy?[6];
@@ -66,6 +88,12 @@ public sealed class UwuP3TitanScenario : IScenario
         floor = null;
         titanFacesTank = false;
         turningTo = null;
+        busterTank = null;
+        healerGaol = null;
+        lahabrea = null;
+        freefireCasters.Clear();
+        magitekBits.Clear();
+        playerHitHealerGaol = false;
         helpers.Clear();
         gaols.Clear();
         gaolSigns.Clear();
@@ -73,10 +101,13 @@ public sealed class UwuP3TitanScenario : IScenario
         Array.Clear(bombs);
         Array.Clear(lateBombs);
 
+        Plugin.PlayerInputHooks.ActionExecuted -= OnPlayerAction;
+        Plugin.PlayerInputHooks.ActionExecuted += OnPlayerAction;
+
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UwuP3TitanState>)AiStrats[idx]).Run(state, world);
 
-        world.Events.Add(0f, () => floor = utils.SpawnArenaFloor());
+        world.Events.Add(0f, () => utils.SpawnArenaFloor());
         world.Events.Add(0f, SpawnTitan);
         world.Events.Add(2.56f, () => titan?.SetVisible(true));
         world.Events.Add(2.56f, () => CastSelf(titan, ActionId.GeocrushLanding, 2.7f));
@@ -98,9 +129,10 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(32.00f, () => titan?.SetVisible(false));
         world.Events.Add(32.60f, () => LandOnEdge(state.FirstJumpBearing));
         world.Events.Add(32.67f, () => CastSelf(titan, ActionId.GeocrushJump, 2.7f));
+        world.Events.Add(32.40f, () => floor = utils.SpawnTitanArena());
         world.Events.Add(32.67f, () => AnimateFloor(1, 2));
         world.Events.Add(35.66f, () => Geocrush(ActionId.GeocrushJump, 0.8f, 32f));
-        world.Events.Add(36.70f, () => world.EnforceArenaBoundary(FirstShrinkRadius, "Fell off the shrunken floor"));
+        world.Events.Add(36.70f, () => world.EnforceArenaBoundary(FirstShrinkRadius, ShrunkenFloorDeath));
         world.Events.Add(38.02f, () => TitanTargetable(true));
         world.Events.Add(38.11f, () => utils.Awaken(titan, false));
 
@@ -118,6 +150,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(49.16f, () => BuryBombs(bombs, 5, 1));
         world.Events.Add(50.68f, ResolveLandslide);
         world.Events.Add(51.26f, () => Jail(state.GaolTargets));
+        world.Events.Add(51.26f, PunishPlayerOutOfGaolOrder);
         world.Events.Add(51.26f, () => CastBursts(bombs, 5, 1, 54.74f));
         world.Events.Add(52.30f, () => SpawnGaols(state.GaolTargets, [55.09f, 55.79f, 56.49f]));
         world.Events.Add(52.95f, () => CastLandslide(55.14f));
@@ -152,15 +185,14 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(87.02f, () => CastSelf(titan, ActionId.GeocrushJump, 2.7f));
         world.Events.Add(87.02f, () => AnimateFloor(10, 20));
         world.Events.Add(90.00f, () => Geocrush(ActionId.GeocrushJump, 0.8f, 32f));
-        world.Events.Add(91.00f, () => world.EnforceArenaBoundary(SecondShrinkRadius, "Fell off the shrunken floor"));
+        world.Events.Add(91.00f, () => world.EnforceArenaBoundary(SecondShrinkRadius, ShrunkenFloorDeath));
         world.Events.Add(92.36f, () => TitanTargetable(true));
         world.Events.Add(92.40f, PullTitanTowardCentre);
         world.Events.Add(92.45f, () => MarkGaolTargets([state.JailedHealer]));
         world.Events.Add(97.39f, () => Jail([state.JailedHealer]));
-        world.Events.Add(98.45f, () => SpawnGaols([state.JailedHealer], []));
+        world.Events.Add(98.45f, SpawnHealerGaol);
         world.Events.Add(99.53f, () => CastGraniteImpact(ActionId.GraniteImpact, 6.7f));
         world.Events.Add(104.84f, () => CastLandslide(107.02f, 109.02f));
-        world.Events.Add(105.01f, BreakRemainingGaolsQuietly);
         world.Events.Add(106.23f, () => GraniteImpact(ActionId.GraniteImpact));
         world.Events.Add(107.02f, ResolveLandslide);
         world.Events.Add(107.06f, CastAwakenedSecondHit);
@@ -171,8 +203,10 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(115.52f, Tumult);
         world.Events.Add(116.64f, Tumult);
         world.Events.Add(117.75f, Tumult);
+        world.Events.Add(116.00f, () => busterTank = PartyRole.OffTank);
         world.Events.Add(119.88f, () => TankBuster(PartyRole.OffTank, ActionId.RockBuster, RockBusterLength, 0.28f));
         world.Events.Add(123.98f, () => TankBuster(PartyRole.OffTank, ActionId.MountainBuster, MountainBusterLength, 0.6f));
+        world.Events.Add(125.50f, () => busterTank = null);
 
         world.Events.Add(126.08f, ForewarnLateBombs);
         world.Events.Add(128.00f, () => SpawnBomb(lateBombs, 0, state.LateBomb(0), 129.10f));
@@ -202,19 +236,40 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(138.60f, ResolveAwakenedSecondHit);
         world.Events.Add(138.69f, () => ResolveBursts(lateBombs, 2, 1));
         world.Events.Add(140.70f, () => ResolveBursts(lateBombs, 3, 1));
+        world.Events.Add(141.00f, () => busterTank = PartyRole.MainTank);
         world.Events.Add(144.80f, () => TankBuster(PartyRole.MainTank, ActionId.RockBuster, RockBusterLength, 0.28f));
 
-        world.Events.Add(148.05f, KillTitan);
+        world.Events.Add(148.05f, () => Leave(titan));
         world.Events.Add(148.05f, () => AnimateFloor(4, 8));
+        world.Events.Add(148.05f, () => world.LiftArenaBoundaries(ShrunkenFloorDeath));
         world.Events.Add(150.00f, DespawnAll);
+
+        world.Events.Add(156.68f, SpawnFreefireCasters);
+        world.Events.Add(157.14f, IntermissionFreefire);
+        world.Events.Add(158.83f, SpawnMagitekBits);
+        world.Events.Add(160.18f, () => { foreach (var bit in magitekBits) CastSelf(bit, ActionId.SelfDetonate, 11.7f); });
+        world.Events.Add(165.35f, InterruptMagitekBits);
+        world.Events.Add(167.20f, KillMagitekBits);
+        world.Events.Add(168.06f, SpawnLahabrea);
+        world.Events.Add(170.07f, Blight);
+        world.Events.Add(176.03f, () => { foreach (var member in AliveMembers()) member.RemoveStatus(StatusId.Doom); });
+        world.Events.Add(179.15f, () => lahabrea?.SetTargetable(true));
+        world.Events.Add(179.15f, () => CastSelf(lahabrea, ActionId.DarkIV, 16.7f));
+        world.Events.Add(193.72f, () => lahabrea?.SetTargetable(false));
+        world.Events.Add(193.81f, () => lahabrea?.PlayActionTimeline(ActionTimelineId.LahabreaFalls));
+        world.Events.Add(196.84f, () => lahabrea?.PlayActionTimeline(ActionTimelineId.LahabreaFadesOut));
+        world.Events.Add(197.91f, DespawnIntermission);
     }
 
     public void Tick(float delta, float elapsed)
     {
+        DrainHealerGaol(elapsed);
+        foreach (var bit in magitekBits) Drain(bit, MagitekBitMaxHp, MagitekBitsDrainFrom, MagitekBitsDrainTo, elapsed);
+        Drain(lahabrea, LahabreaMaxHp, LahabreaDrainFrom, LahabreaDrainTo, elapsed);
         if (titan == null) return;
         state.TitanPosition = titan.Position;
         if (turningTo is { } goal) TurnToward(goal, delta);
-        if (titanFacesTank && Get(state.Holder) is { } holder && holder.IsAlive() && !titan.IsCasting)
+        if (titanFacesTank && Get(busterTank ?? state.Holder) is { } holder && holder.IsAlive() && !titan.IsCasting)
             titan.Face(holder);
     }
 
@@ -441,13 +496,13 @@ public sealed class UwuP3TitanScenario : IScenario
             foreach (var hit in party.Find.InsideCircle(bomb.Position, BurstRadius).ToList())
                 if (!IsJailed(hit)) hit.Die("Died to a bomb's Burst");
             set[i] = null;
-            world.Events.Add(0.3f, () => FadeBomb(bomb));
+            world.Events.Add(0.3f, () => FadeOut(bomb));
             world.Events.Add(1.5f, bomb.Despawn);
         }
     }
 
-    private static void FadeBomb(SimEnemy bomb) =>
-        PacketDispatcher.HandleActorControlPacket(bomb.EntityId, 607, bomb.EntityId, 1, 0, 100, 0, 0, 0, 0, 0xE0000000, false);
+    private static void FadeOut(SimEnemy enemy) =>
+        PacketDispatcher.HandleActorControlPacket(enemy.EntityId, 607, enemy.EntityId, 1, 0, 100, 0, 0, 0, 0, 0xE0000000, false);
 
     private void Upheaval()
     {
@@ -460,16 +515,16 @@ public sealed class UwuP3TitanScenario : IScenario
 
     private void MarkGaolTargets() => MarkGaolTargets(state.GaolTargets);
 
-    // Automarker: Attack 1-3 in the gaol line order the bots use.
-    private void MarkGaolTargets(IEnumerable<PartyRole> roles)
+    // Automarker: Attack 1-3 along the gaol line, starting from Titan's side.
+    private void MarkGaolTargets(IReadOnlyList<PartyRole> roles)
     {
-        var sign = Sign.Attack1;
-        foreach (var role in roles)
+        for (var i = 0; i < roles.Count; i++)
         {
-            if (Get(role) is not { } target || !target.IsAlive()) continue;
+            if (Get(roles[i]) is not { } target || !target.IsAlive()) continue;
+            var sign = Sign.Attack1 + i;
             PlayEffect(titan, ActionId.RockThrow, 1.1f, target: target.GameObjectId);
             Markings.Set(sign, target.GameObjectId);
-            gaolSigns[role] = sign++;
+            gaolSigns[roles[i]] = sign;
         }
     }
 
@@ -486,6 +541,17 @@ public sealed class UwuP3TitanScenario : IScenario
             target.StopMoving();
             target.AddStatus(StatusId.Fetters, 25f);
             state.Jailed.Add(role);
+        }
+    }
+
+    // The player's gaol has to land on its numbered waymark or the chain order breaks.
+    private void PunishPlayerOutOfGaolOrder()
+    {
+        for (var i = 0; i < state.GaolTargets.Count; i++)
+        {
+            if (Get(state.GaolTargets[i]) is not SimPlayer player || !player.IsAlive()) continue;
+            if (Vector2.Distance(Flat(player.Position), state.GaolSpot(i)) <= GaolSpotTolerance) continue;
+            player.Die($"Gaol {i + 1} dropped off its spot (1 by Titan, 2 in the middle, 3 by the bomb)");
         }
     }
 
@@ -538,9 +604,57 @@ public sealed class UwuP3TitanScenario : IScenario
         Get(role)?.RemoveStatus(StatusId.Fetters);
     }
 
-    private void BreakRemainingGaolsQuietly()
+    private void SpawnHealerGaol()
     {
-        foreach (var gaol in gaols.Keys.ToList()) BreakGaol(gaol, explode: false);
+        SpawnGaols([state.JailedHealer], []);
+        healerGaol = gaols.FirstOrDefault(g => g.Value == state.JailedHealer).Key;
+        SetHealerGaolHp(1f);
+    }
+
+    // The bots burst it down; a jailed bot also needs one hit from the player before it breaks.
+    private void DrainHealerGaol(float elapsed)
+    {
+        if (healerGaol is not { IsActive: true } gaol || !gaols.ContainsKey(gaol)) return;
+        var hp = 1f - Math.Clamp((elapsed - HealerGaolDrainFrom) / (HealerGaolDrainTo - HealerGaolDrainFrom), 0f, 1f);
+        var playerIsJailed = Get(state.JailedHealer) is SimPlayer;
+        if (!playerIsJailed && !playerHitHealerGaol) hp = MathF.Max(hp, HealerGaolHpUntilPlayerHits);
+        SetHealerGaolHp(hp);
+        if (hp <= 0f) BreakGaol(gaol, explode: false);
+    }
+
+    private void SetHealerGaolHp(float fraction) => SetHp(healerGaol, HealerGaolMaxHp, fraction);
+
+    private static unsafe void SetHp(SimEnemy? enemy, uint maxHp, float fraction)
+    {
+        var chara = enemy?.BattleCharaPtr;
+        if (chara == null) return;
+        chara->MaxHealth = maxHp;
+        chara->Health = (uint)MathF.Ceiling(maxHp * Math.Clamp(fraction, 0f, 1f));
+    }
+
+    // The party burns the bits and Lahabrea on the clear's schedule; the player's hits don't change it.
+    private static void Drain(SimEnemy? enemy, uint maxHp, float from, float to, float elapsed)
+    {
+        if (enemy is not { IsActive: true } || elapsed < from - 1f) return;
+        SetHp(enemy, maxHp, 1f - Math.Clamp((elapsed - from) / (to - from), 0f, 1f));
+    }
+
+    private void OnPlayerAction(ActionType actionType, uint actionId)
+    {
+        if (actionType != ActionType.Action || healerGaol is not { IsActive: true } gaol || !IsNewPlayerAction()) return;
+        if (Plugin.TargetManager.Target?.EntityId != gaol.EntityId) return;
+        if (Plugin.DataManager.GetExcelSheet<LuminaAction>().GetRowOrDefault(actionId) is not { CanTargetHostile: true }) return;
+        playerHitHealerGaol = true;
+    }
+
+    private unsafe bool IsNewPlayerAction()
+    {
+        var am = ActionManager.Instance();
+        if (am == null) return false;
+        var seq = (int)am->LastUsedActionSequence;
+        if (seq == lastPlayerActionSequence) return false;
+        lastPlayerActionSequence = seq;
+        return true;
     }
 
     private void GraniteImpact(uint actionId)
@@ -642,6 +756,85 @@ public sealed class UwuP3TitanScenario : IScenario
         }
         foreach (var caster in landslideCasters) world.Events.Add(1.5f, () => DespawnHelper(caster.Caster));
         landslideCasters.Clear();
+    }
+
+    private void SpawnFreefireCasters()
+    {
+        for (var i = 0; i < 4; i++)
+        {
+            var at = AtBearing(90f * i, FreefireCasterRadius);
+            if (SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.UltimaWeapon, new Placement(at, FacingCentre(at)), false, true, EnemyListMode.Never) is { } caster)
+                freefireCasters.Add(caster);
+        }
+    }
+
+    private void IntermissionFreefire()
+    {
+        foreach (var caster in freefireCasters)
+        {
+            PlayEffect(caster, ActionId.FreefireIntermission, 1.1f);
+            foreach (var member in AliveMembers())
+                damage.ApplyDamage(member, 0.16f, ActionId.FreefireIntermission, "Raidwide", false);
+        }
+    }
+
+    private void SpawnMagitekBits()
+    {
+        for (var i = 0; i < 6; i++)
+        {
+            var at = AtBearing(30f + 60f * i, MagitekBitRadius);
+            if (SpawnEnemy(BNpcBaseId.MagitekBit, BNpcNameId.MagitekBit, new Placement(at, FacingCentre(at)), true, true, EnemyListMode.Always) is not { } bit) continue;
+            magitekBits.Add(bit);
+            SetHp(bit, MagitekBitMaxHp, 1f);
+        }
+    }
+
+    private void InterruptMagitekBits()
+    {
+        foreach (var bit in magitekBits)
+            PacketDispatcher.HandleActorControlPacket(bit.EntityId, InterruptCastControl, InterruptCastReason, 1, ActionId.SelfDetonate, 0, 0, 0, 0, 0, 0xE0000000, false);
+    }
+
+    private const uint InterruptCastControl = 15;
+    private const uint InterruptCastReason = 538;
+
+    private void KillMagitekBits()
+    {
+        foreach (var bit in magitekBits)
+        {
+            bit.SetTargetable(false);
+            FadeOut(bit);
+            world.Events.Add(1.5f, bit.Despawn);
+        }
+        magitekBits.Clear();
+    }
+
+    private void SpawnLahabrea()
+    {
+        lahabrea = SpawnEnemy(BNpcBaseId.Lahabrea, BNpcNameId.Lahabrea, new Placement(new Vector3(0f, 0f, -0.9f), 0f), false, true, EnemyListMode.Always);
+        SetHp(lahabrea, LahabreaMaxHp, 1f);
+        lahabrea?.PlayActionTimeline(ActionTimelineId.WarpEnd);
+    }
+
+    // Everyone is doomed and stunned; the Doom lifts before it runs out.
+    private void Blight()
+    {
+        PlayEffect(lahabrea, ActionId.Blight, 1.1f);
+        foreach (var member in AliveMembers())
+        {
+            member.StopMoving();
+            member.AddStatus(StatusId.Doom, 7.96f);
+            member.AddStatus(StatusId.DownForTheCount, 3.96f);
+        }
+    }
+
+    private void DespawnIntermission()
+    {
+        lahabrea?.Despawn();
+        lahabrea = null;
+        foreach (var enemy in freefireCasters.Concat(magitekBits)) enemy.Despawn();
+        freefireCasters.Clear();
+        magitekBits.Clear();
     }
 
     private void KillTitan()

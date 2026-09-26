@@ -10,8 +10,8 @@ namespace AnoMech.Scenarios.Uwu.P3Titan;
 public sealed class UwuP3TitanState
 {
     public const float JumpRadius = 14f;
-    public const float FirstShrinkRadius = 15.5f;
-    public const float SecondShrinkRadius = 11.8f;
+    public const float FirstShrinkRadius = 15.0f;
+    public const float SecondShrinkRadius = 11.5f;
     public const float LandslideHalfWidth = 3f;
     public const float WeightRadius = 6f;
     public const float BuryRadius = 3f;
@@ -61,6 +61,14 @@ public sealed class UwuP3TitanState
         FromJumpFrame(new Vector3(-5f, 0f, -5f)),
         FromJumpFrame(new Vector3(-12f, 0f, -5f * SafeSide)),
     ];
+
+    // Gaol line on the waymarks along Titan's axis, numbered from Titan's side.
+    public Vector2 GaolSpot(int order) => FromJumpFrame(order switch
+    {
+        0 => new Vector2(6.7f, 0.5f * SafeSide),
+        1 => new Vector2(0f, 1.0f * SafeSide),
+        _ => new Vector2(-6.7f, 1.0f * SafeSide),
+    });
 
     public Vector3 SixthBomb => FromJumpFrame(new Vector3(-12f, 0f, 5f * SafeSide));
 
