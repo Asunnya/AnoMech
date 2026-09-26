@@ -38,11 +38,11 @@ public sealed class M9sHellInACellState
         [PartyRole.OffTank, PartyRole.ShieldHealer, PartyRole.MeleeDpsB, PartyRole.CasterDps],
     ];
 
-    public static readonly float[] TowerCastAt = [37.88f, 60.25f];
-    public static readonly float[] TowerResolveAt = [42.90f, 65.20f];
-    public static readonly float[] TankCellDiesAt = [47.00f, 69.30f];
-    public static readonly float[] OtherCellsDieAt = [55.90f, 78.20f];
-    public static readonly float[][] UltrasonicCastAt = [[44.99f, 52.11f], [67.40f, 74.55f]];
+    public static readonly float[] TowerCastAt = [14.88f, 37.25f];
+    public static readonly float[] TowerResolveAt = [19.90f, 42.20f];
+    public static readonly float[] TankCellDiesAt = [24.00f, 46.30f];
+    public static readonly float[] OtherCellsDieAt = [32.90f, 55.20f];
+    public static readonly float[][] UltrasonicCastAt = [[21.99f, 29.11f], [44.40f, 51.55f]];
     public const float UltrasonicDelay = 5.7f;
 
     private static readonly float[] AllBearings = [0f, 45f, 90f, 135f, 180f, 225f, 270f, 315f];
@@ -69,7 +69,7 @@ public sealed class M9sHellInACellState
     public IReadOnlyList<float>[] TowerBearings { get; }
     public UltrasonicKind[][] UltrasonicOrder { get; }
     public IReadOnlyList<Vector3>[] PulpingPulses { get; }
-    public M9sSatisfied Satisfied { get; } = new(4);
+    public M9sSatisfied Satisfied { get; } = new(8);
 
     public M9sHellInACellState(M9sHellInACellStateOverrides overrides)
     {

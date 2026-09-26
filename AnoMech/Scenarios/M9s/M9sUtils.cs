@@ -7,11 +7,7 @@ using static AnoMech.Scenarios.M9s.M9sConstants;
 
 namespace AnoMech.Scenarios.M9s;
 
-// Vamp Fatale's Satisfied stacks. Crowd Kill gives four at once; beyond that, each stack in the
-// log lines up with a player getting hit by something avoidable, so every such player adds one
-// here. At 8+ Hardcore and Half Moon switch to their larger versions, and Brutal Rain hits
-// 3 + stacks/4 times: BossMod's formula, which matches the log's three opener hits at 0 stacks
-// and four in the second Vamp Stomp at 4.
+// Satisfied stacks: one per avoidable hit; 8+ enlarges attacks, Brutal Rain hits 3 + stacks/4.
 public sealed class M9sSatisfied(int initialStacks)
 {
     public const int MoreThreshold = 8;
@@ -49,8 +45,7 @@ public sealed class M9sSatisfied(int initialStacks)
     }
 }
 
-// Hardcore: a buster on the top two of the enmity list. Every pull of the log put it on both tanks,
-// so the tanks are the list here, with the next living players standing in if a tank is down.
+// Hardcore hits both tanks, falling back to the next living players.
 public sealed class M9sHardcore(SimParty party, DamageSolver damage, M9sSatisfied satisfied, Func<Vector3, SimEnemy?> spawnHelper)
 {
     private static readonly PartyRole[] EnmityOrder =
@@ -85,8 +80,10 @@ public sealed class M9sHardcore(SimParty party, DamageSolver damage, M9sSatisfie
 
 public static class M9sUtils
 {
-    // Raidwides aren't lethal on their own here (nothing tracks HP), so they only show the hit:
-    // `fraction` is the median share of max HP the clear's players took.
+    // The server sends it with 0x07 as a saw corridor goes up and 0x01 as it comes down.
+    public const uint CorridorDirectorCommand = 0x8000000D;
+
+    // Shows the hit only; `fraction` is the log's median share of max HP.
     public static void Raidwide(SimParty party, DamageSolver damage, uint actionId, float fraction)
     {
         for (var slot = 0; slot < 8; slot++)

@@ -8,11 +8,7 @@ using static AnoMech.Scenarios.M9s.M9sConstants;
 
 namespace AnoMech.Scenarios.M9s.Coffinmaker;
 
-// M9S saws phase, from the first Sadistic Screech to the arena coming back: the corridor, three
-// Dead Wakes eating it from the north, and four Half Moon + Coffinfiller cycles. Scenario time 0
-// is 54.0s into the clear in Network_30301_20260923.log (pull 10). The map effects are replayed
-// verbatim for the corridor and saw visuals; the corridor's walls are enforced here, since they
-// shrink with every Dead Wake.
+// M9S saws phase; timings from Network_30301_20260923.log pull 10 (t0 = 54s).
 public sealed class M9sCoffinmakerScenario : IScenario
 {
     public string Name => "Coffinmaker";
@@ -63,6 +59,7 @@ public sealed class M9sCoffinmakerScenario : IScenario
         world.Events.Add(6.63f, () => MapEffect(0x00020001, 0x00, 0x09, 0x0A, 0x0B, 0x0C));
         world.Events.Add(6.63f, () => MapEffect(0x00080004, 0x0F));
         world.Events.Add(6.63f, () => corridorActive = true);
+        world.Events.Add(6.63f, () => world.Map.DirectorUpdate(M9sUtils.CorridorDirectorCommand, 0x07));
         world.Events.Add(6.32f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.SadisticScreech, 0.40f));
         world.Events.Add(6.63f, () => vamp?.SetTargetable(false));
         ScheduleWallChecks();
@@ -104,7 +101,6 @@ public sealed class M9sCoffinmakerScenario : IScenario
         world.Events.Add(59.00f, () => ResolveSecondHalf(2));
 
         world.Events.Add(61.19f, () => CastCleavesAndFirstWave(3));
-        world.Events.Add(62.61f, () => MapEffect(0x80000004, 0x09, 0x0A, 0x0B, 0x0C));
         world.Events.Add(64.23f, () => CastSecondWave(3));
         world.Events.Add(66.15f, () => ResolveFirstHalf(3));
         world.Events.Add(69.19f, () => ResolveSecondHalf(3));
@@ -112,18 +108,22 @@ public sealed class M9sCoffinmakerScenario : IScenario
         world.Events.Add(60.00f, () => KillSawIf(SawKill.Fast));
         world.Events.Add(62.30f, () => KillSawIf(SawKill.Average));
         world.Events.Add(70.80f, () => KillSawIf(SawKill.Slow));
-        world.Events.Add(78.37f, () => vamp?.SetTargetable(true));
         world.Events.Add(78.37f, () => vamp?.Cast(ActionId.SadisticScreechCast, castSeconds: 4.7f));
         world.Events.Add(83.87f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.SadisticScreech, 0.40f));
         world.Events.Add(84.21f, () => MapEffect(0x00080004, 0x00, 0x11));
         world.Events.Add(84.21f, () => corridorActive = false);
+        world.Events.Add(84.21f, () => world.Map.DirectorUpdate(M9sUtils.CorridorDirectorCommand, 0x01));
         world.Events.Add(86f, DespawnAll);
     }
 
+    // The wall saws put away with 0x80000004, the corridor with 0x00080004.
     private void MapEffect(uint flags, params byte[] indices)
     {
         foreach (var index in indices)
+        {
             world.Map.AddEffect(flags, index);
+            world.ResetMapEffectOnDespawn(index, index is >= 0x09 and <= 0x0C ? 0x80000004u : 0x00080004u);
+        }
     }
 
     private void SpawnVamp()
@@ -174,13 +174,14 @@ public sealed class M9sCoffinmakerScenario : IScenario
 
     private void ResolveDeadWake() => state.Satisfied.AddFor(damage.Resolve(deadWake, ActionId.DeadWake, [DamageType.Lethal], []));
 
-    // The fourth cycle's Coffinfiller only fires while the saw lives; the log's kills land at
-    // three points (see SawKill).
+    // The saw's death retracts the wall saws and frees Vamp to be targeted.
     private void KillSawIf(SawKill when)
     {
         if (state.SawKill != when) return;
         sawAlive = false;
         saw?.Despawn();
+        MapEffect(0x80000004, 0x09, 0x0A, 0x0B, 0x0C);
+        vamp?.SetTargetable(true);
     }
 
     // The saw lurches 10y south in about 0.6s once each Dead Wake lands.
@@ -210,16 +211,31 @@ public sealed class M9sCoffinmakerScenario : IScenario
         if (sawAlive) CastWave(state.Cycles[index], state.Cycles[index].SecondWave, secondWave);
     }
 
+    // Director 0x80000026 lights each firing wall saw; the omen is drawn directly.
     private void CastWave(SawCycle cycle, IReadOnlyList<float> columns, List<SimEnemy> wave)
     {
         wave.Clear();
         foreach (var x in columns)
-            if (SpawnHelper(new Placement(new Vector3(x, 0f, cycle.FillerStartZ), 0f)) is { } filler)
-            {
-                filler.Cast(cycle.FillerActionId, castSeconds: 4.7f);
-                wave.Add(filler);
-            }
+        {
+            world.Map.DirectorUpdate(SawGlowCommand, SawIndex(x), SawGlowLength(cycle.FillerActionId), 0x01);
+            var origin = new Vector3(x, 0f, cycle.FillerStartZ);
+            if (SpawnHelper(new Placement(origin, 0f)) is not { } filler) continue;
+            filler.Cast(cycle.FillerActionId, castSeconds: 4.7f);
+            world.SpawnActionOmen(cycle.FillerActionId, origin, 0f, 4.7f);
+            wave.Add(filler);
+        }
     }
+
+    private const uint SawGlowCommand = 0x80000026;
+
+    private static uint SawIndex(float x) => 0x09u + (uint)MathF.Round((x + 7.5f) / 5f);
+
+    private static uint SawGlowLength(uint fillerActionId) => fillerActionId switch
+    {
+        ActionId.CoffinfillerLong => 0x0A,
+        ActionId.CoffinfillerMedium => 0x0B,
+        _ => 0x0C,
+    };
 
     private void ResolveFirstHalf(int index)
     {

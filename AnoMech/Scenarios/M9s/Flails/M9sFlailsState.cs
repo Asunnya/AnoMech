@@ -8,15 +8,7 @@ namespace AnoMech.Scenarios.M9s.Flails;
 // One Plummet round: two tank towers and the Electrocution puddle that becomes the doornail.
 public sealed record FlailRound(Vector3 NorthTower, Vector3 SouthTower, Vector3 Doornail);
 
-// Per-run randomization and timing for the flail phase.
-//
-// Measured from six pulls of one log. Towers and doornails only ever land on eight cells (x = ±5,
-// z = ±4, ±16), but the three rounds come as a whole sequence, and the log holds four distinct
-// ones (two of them twice); one is picked with the log's weights. The saws never vary (see
-// M9sFlailsSawData). The electrified puddle appears 0.7s after Electrocution lands, starts growing
-// at 0.5y/s from 3y 3.3s later, and goes out 0.45s after the doornail dies (39.08 / 59.63 / 74.52 in
-// the clear, 13-16s after it turns targetable). A doornail still up when the next round's towers
-// land (or the closing Sadistic Screech starts) wipes the party.
+// Flail phase randomization, from six pulls: one of four tower/doornail sequences, log-weighted.
 public sealed class M9sFlailsState
 {
     public const float TowerRadius = 3f;
@@ -102,8 +94,7 @@ public sealed class M9sFlailsState
     public static IReadOnlyList<SawHit> SawHitsBetween(float from, float to) =>
         M9sFlailsSawData.Hits.Where(h => h.At > from && h.At <= to).ToList();
 
-    // Whether standing at `point` at `time` gets a player killed, for anything this phase can place
-    // on them; `saws` only needs the hits near `time`. Tanks may stand in towers.
+    // Whether `point` is lethal at `time`; tanks may stand in towers.
     public bool IsLethal(Vector3 point, float time, bool isTank, float margin, IReadOnlyList<SawHit> saws)
     {
         if (MathF.Abs(point.X) > CorridorHalfWidth - 0.8f || MathF.Abs(point.Z) > CorridorHalfLength - 0.8f) return true;
@@ -122,8 +113,7 @@ public sealed class M9sFlailsState
         return false;
     }
 
-    // Towers and doornails share eight cells, numbered west column first, north to south; the map
-    // effects for both are indexed by it.
+    // Cells numbered west column first, north to south, as the map effects are.
     public static int CellIndex(Vector3 cell) =>
         (cell.X > 0f ? 4 : 0) + Array.IndexOf(CellRows, (int)MathF.Round(cell.Z));
 

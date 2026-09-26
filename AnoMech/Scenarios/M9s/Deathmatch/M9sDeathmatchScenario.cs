@@ -213,7 +213,10 @@ public sealed class M9sDeathmatchScenario : IScenario
     private void RevealBatShapes(int cycle)
     {
         for (var group = 0; group < 2; group++)
+        {
+            bats[group]?.RemoveStatus(StatusId.BatShape);
             bats[group]?.AddStatusParam(StatusId.BatShape, state.BatIsCircle(group, cycle) ? ShapeCircle : ShapeDonut);
+        }
     }
 
     private void CastBatShapes(int cycle)

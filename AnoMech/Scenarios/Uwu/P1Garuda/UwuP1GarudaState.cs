@@ -7,13 +7,7 @@ using AnoMech.Core.SimObjects;
 
 namespace AnoMech.Scenarios.Uwu.P1Garuda;
 
-// Per-run randomization for the Garuda phase. Measured from the 86 pulls of six logs that reached
-// it: the Satin Plumes take 4 of 12 fixed spots each wave, the Spiny Plume always spawns at
-// (-10, 0), the sisters hide at (-/+6, 0) before Feather Rain, sing from two distinct random
-// cardinals at 19.5y and always tether from Suparna west / Chirada east, and Mistral Song, Friction
-// and Mistral Song (sisters) mark random players. The opening Mistral Song is drawn from the healers,
-// the strat's assumption; Friction and the sisters' songs from non-tanks: Friction's point is to
-// spread Thermal Low through the stack, and the songs are the tanks' to intercept.
+// Garuda randomization, from 86 pulls; the opening Mistral Song always targets a healer.
 public sealed class UwuP1GarudaState
 {
     public static readonly Vector3 SpinyPlumeSpawn = new(-10f, 0f, 0f);

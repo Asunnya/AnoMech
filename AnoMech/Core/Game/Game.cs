@@ -28,6 +28,7 @@ using AnoMech.Scenarios.Umad.P5Celestriad;
 using AnoMech.Scenarios.Umad.P5Exaflares;
 using AnoMech.Scenarios.Uwu.P1Garuda;
 using AnoMech.Scenarios.Uwu.P2Ifrit;
+using AnoMech.Scenarios.Uwu.P3Titan;
 using AnoMech.Scenarios.Uwu.UltimatePredation;
 using AnoMech.Scenarios.Uwu.UltimateSuppression;
 using Dalamud.Game.Text;
@@ -141,6 +142,7 @@ public sealed class Game : IDisposable
             new TopP6WaveCannon2Scenario(),
             new UwuP1GarudaScenario(),
             new UwuP2IfritScenario(),
+            new UwuP3TitanScenario(),
             new UltimatePredationScenario(),
             new UltimateSuppressionScenario(),
             new UcobP5ExaflaresScenario(),

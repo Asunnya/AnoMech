@@ -101,10 +101,20 @@ public class UwuConstants
         public const uint CrimsonCyclone = 11103;
         public const uint CrimsonCycloneAwaken = 11104;
         public const uint RadiantPlumePuddle = 11105;
+        public const uint RockBuster = 11106;
+        public const uint MountainBuster = 11107;
+        public const uint WeightOfTheLandTitan = 11108;
+        public const uint WeightOfTheLand = 11109;
+        public const uint GeocrushJump = 11110;
+        public const uint Upheaval = 11111;
         public const uint BoulderTitan = 11112;
         public const uint Bury = 11113;
         public const uint Burst = 11114;
         public const uint RockThrow = 11115;
+        public const uint RockThrowHelper = 11116;
+        public const uint GraniteImpactGaols = 11117;
+        public const uint Freefire = 11118;
+        public const uint LandslideTitanNormal = 11119;
         public const uint LandslideLine = 11120;
         public const uint LandslideTitan = 11121;
         public const uint UltimatePredation = 11126;
@@ -121,6 +131,7 @@ public class UwuConstants
         public const uint AetherochemicalLaserRight = 11141;
         public const uint AetherochemicalLaserLeft = 11142;
         public const uint TankPurge = 11143;
+        public const uint EarthenFury = 11152;
         public const uint MistralSong = 11150;
         public const uint Tumult = 11288;
         public const uint InfernalFetters = 11289;
@@ -131,6 +142,7 @@ public class UwuConstants
         public const uint PostUltimatePredation3 = 11477;
         public const uint UltimateAnnihilation = 11596;
         public const uint UltimateSuppression = 11597;
+        public const uint GeocrushLanding = 11517;
     }
 
     public class ActionTimelineId

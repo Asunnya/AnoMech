@@ -19,16 +19,16 @@ public sealed class M9sHellInACellAi : IScenarioAi<M9sHellInACellState>
         state = stateParam;
         var ai = new AiManager(world);
         ai.Move(0.5f, () => AiMove.All(new Vector2(0f, 3f)));
-        ai.Move(32.8f, () => AiMove.All(NearestSpotClearOfPulses(0, new Vector2(0f, 3f))));
+        ai.Move(9.8f, () => AiMove.All(NearestSpotClearOfPulses(0, new Vector2(0f, 3f))));
 
-        ai.Move(38.0f, () => SoakTowersAndFormUp(0, UltrasonicStep(0, 0)));
-        ai.Move(50.8f, () => FormUpFreeGroup(0, UltrasonicStep(0, 1)));
+        ai.Move(15.0f, () => SoakTowersAndFormUp(0, UltrasonicStep(0, 0)));
+        ai.Move(27.8f, () => FormUpFreeGroup(0, UltrasonicStep(0, 1)));
 
-        ai.Move(60.4f, () => SoakTowersAndFormUp(1, UltrasonicStep(1, 0)));
-        ai.Move(73.2f, () => FormUpFreeGroup(1, UltrasonicStep(1, 1)));
+        ai.Move(37.4f, () => SoakTowersAndFormUp(1, UltrasonicStep(1, 0)));
+        ai.Move(50.2f, () => FormUpFreeGroup(1, UltrasonicStep(1, 1)));
 
-        ai.Move(81.5f, () => AiMove.All(NearestSpotClearOfPulses(1, new Vector2(0f, 3f))));
-        ai.Move(85.5f, () => AiMove.All(NearestSpotClearOfPulses(2, new Vector2(0f, 3f))));
+        ai.Move(58.5f, () => AiMove.All(NearestSpotClearOfPulses(1, new Vector2(0f, 3f))));
+        ai.Move(62.5f, () => AiMove.All(NearestSpotClearOfPulses(2, new Vector2(0f, 3f))));
     }
 
     private UltrasonicKind UltrasonicStep(int set, int step) => state.UltrasonicOrder[set][step];

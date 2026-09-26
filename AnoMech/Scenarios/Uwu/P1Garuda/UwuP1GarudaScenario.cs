@@ -13,14 +13,8 @@ using static AnoMech.Scenarios.Uwu.UwuUtils;
 
 namespace AnoMech.Scenarios.Uwu.P1Garuda;
 
-// UWU P1, Garuda from the pull to her death. Scenario time 0 is the pull of the clear in
-// Network_30208_20260816.log (pull 18); every timestamp below is that pull's, and the phase ends
-// where it killed her.
-//
-// Thermal Low is the phase's bookkeeping: Friction and the Spiny Plume's Cyclone stack it (to 2),
-// standing in the bubble the Spiny's Gigastorm leaves cleanses it, and Mesohigh only spares a player
-// who still carries it. Each two-stack cleanse charges Garuda; the fourth wakes her (the aura only:
-// the clear killed her before a woken Wicked Wheel came up).
+// UWU P1 Garuda; timings from the clear in Network_30208_20260816.log (pull 18).
+// Thermal Low cleansed at two stacks charges Garuda; four charges wake her.
 public sealed class UwuP1GarudaScenario : IScenario
 {
     public string Name => "Garuda";
@@ -105,7 +99,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UwuP1GarudaState>)AiStrats[idx]).Run(state, world);
 
-        world.Events.Add(0f, utils.SpawnArenaFloor);
+        world.Events.Add(0f, () => utils.SpawnArenaFloor());
         world.Events.Add(0f, SpawnGaruda);
         world.Events.Add(0.2f, () => garuda?.MoveTo(new Vector3(0f, 0f, -0.7f), 8f, MathF.PI));
         ScheduleHazards();
@@ -258,9 +252,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     private readonly Dictionary<GreatWhirlwindSpot, Vector3> greatWhirlwindSpots = [];
     private readonly Dictionary<GreatWhirlwindSpot, SimEnemy?> greatWhirlwindCasters = [];
 
-    // Median share of max HP from the logs. The first player the line reaches takes the heavy hit
-    // (non-tanks there took 160-260%); everyone behind takes the rest. The line's green tornado then
-    // drops where it was stopped.
+    // First player in the line takes the heavy hit (log medians); its tornado drops there.
     private readonly record struct MistralSongDamage(float Intercept, float Behind);
 
     private void ResolveMistralSong(SimEnemy? caster, uint actionId, SimCharacter? target, GreatWhirlwindSpot spot, MistralSongDamage songDamage)
@@ -384,8 +376,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         return true;
     }
 
-    // Circles only: a cone or line counts as a circle of its length around the player, generous
-    // enough to catch an early hit on a plume still walking in.
+    // Cones and lines count as circles of their length, to catch early hits.
     private List<SimEnemy> SatinPlumesHitBy(LuminaAction action)
     {
         if (party.Player is not { } player) return [];
@@ -467,8 +458,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         member.AddStatus(StatusId.ThermalLow);
     }
 
-    // Cleansing two stacks at once is what charges Garuda toward waking; the explosion itself is a
-    // light raidwide either way.
+    // Only a two-stack cleanse charges Garuda.
     private void CleanseThermalLow(SimCharacter member)
     {
         if (member.FindStatus(StatusId.ThermalLow) is not { } thermalLow) return;
@@ -589,8 +579,7 @@ public sealed class UwuP1GarudaScenario : IScenario
             state.ChiradaMesohigh = world.Tether(chirada, End.Passable(seeds[1], PassableHalfWidth), TetherId.Mesohigh);
     }
 
-    // Mesohigh bursts on whoever holds each tether: anyone caught without Thermal Low dies, and it
-    // cleanses those who had it.
+    // Kills holders without Thermal Low, cleanses those with it.
     private void ResolveMesohigh()
     {
         foreach (var (sister, tether) in new[] { (suparna, state.SuparnaMesohigh), (chirada, state.ChiradaMesohigh) })

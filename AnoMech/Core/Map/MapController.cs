@@ -139,7 +139,7 @@ public sealed unsafe class MapController : IDisposable
 
     // ── Map effects ───────────────────────────────────────────────────────────
 
-    // Replay a single MapEffect state change. packetFlags: high16=State, low8=Flags.
+    // Replay a single MapEffect state change. packetFlags: high16=State, low16=Flags.
     public void AddEffect(uint packetFlags, byte index) => effects.Apply(packetFlags, index);
 
     // Replay a native DirectorUpdate event (instance progress / state sync) — the
