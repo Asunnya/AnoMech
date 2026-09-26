@@ -123,6 +123,11 @@ public sealed class SimWorld : ISimObject, IDisposable
     public void EnforceArenaBoundary(float radius, string cause = "Walked out of arena")
         => children.Add(new SimArenaBoundary(Party, this, radius, cause, showVfx: !Map.IsInInstance));
 
+    public void LiftArenaBoundaries(string cause)
+    {
+        foreach (var boundary in children.OfType<SimArenaBoundary>().Where(b => b.Cause == cause)) boundary.Lift();
+    }
+
     public void EnforceSquareArenaBoundary(float halfWidth, string cause = "Walked out of arena")
         => children.Add(new SimArenaBoundary(Party, halfWidth, cause));
 

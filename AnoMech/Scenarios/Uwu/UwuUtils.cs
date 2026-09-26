@@ -43,6 +43,21 @@ public unsafe class UwuUtils(SimWorld world)
         TimelineState = 1,
     });
 
+    // Titan's arena EObj (LVD_Battle_Titan): its yellow ring shows up and shrinks on the jumps.
+    public SimEventObject? SpawnTitanArena() => world.SpawnEventObject(new EventObjectSpawnConfig
+    {
+        EObjId = 2007457,
+        Placement = new(Vector3.Zero, 0),
+        ObjectIndex = 2,
+        TargetableStatus = 5,
+        EntityId = 0x4000829D,
+        LayoutId = 7372736,
+        GimmickId = 7372735,
+        TimelineState = 1,
+        RestoreStateOnDespawn = true,
+        ForceSharedGroupActive = true,
+    });
+
     // Native head marker; its AVFX ends on its own, so it isn't tracked as a SimVfx.
     public static void Lockon(SimCharacter? target, uint lockonId)
     {

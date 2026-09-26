@@ -23,14 +23,16 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     private const float TightSpread = 0.3f;
 
     private static readonly Vector2 TitansLeftSide = new(12f, -5.8f);
-    private static readonly Vector2 TitansRightSide = new(13.8f, 5.8f);
+    private static readonly Vector2 TitansRightSide = new(12f, 5.8f);
 
     private UwuP3TitanState state = null!;
+    private Vector2? groupTarget;
     private SimWorld world = null!;
 
     public void Run(UwuP3TitanState stateParam, SimWorld worldParam)
     {
         state = stateParam;
+        groupTarget = null;
         world = worldParam;
         var ai = new AiManager(world);
 
@@ -53,21 +55,52 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         ai.Move(57.8f, () => PartyTo(TitansLeftSide, withGaolTargets: true), jitter: 0f);
 
         ai.Move(70.3f, () => PartyTo(TitansRightSide, withGaolTargets: true), jitter: 0f);
-        ai.Move(73.3f, () => PartyTo(new Vector2(7f, 6.5f), withGaolTargets: true), jitter: 0f);
+        ai.Move(73.3f, () => PartyTo(new Vector2(4f, 8.5f), withGaolTargets: true), jitter: 0f);
         ai.Move(73.3f, () => HolderTo(new Vector2(1f, 0f)), jitter: 0f);
         PlanEvery(ai, 76.1f, 80.3f, _ => []);
 
-        ai.Move(84.9f, () => Group(OppositeSecondJump(13f)));
+        ai.Move(84.9f, () => Group(OppositeSecondJump(10f)));
         ai.Move(90.1f, () => Group(OppositeSecondJump(8.5f)));
-        ai.Move(92.5f, () => PartyTo(FromSecondJumpFrame(new Vector2(-2.8f, 0f)), withGaolTargets: true, jumpFrame: false), jitter: 0f);
-        ai.Move(92.5f, () => HolderAt(FromSecondJumpFrame(new Vector2(5.5f, 0f))), jitter: 0f);
-        PlanEvery(ai, 104.9f, 116.0f, _ => []);
-        PlanEvery(ai, 116.0f, 124.5f, _ => [(int)PartyRole.OffTank]);
-        ai.Move(116.0f, () => TankOppositeTheParty(PartyRole.OffTank));
-        PlanEvery(ai, 124.5f, 141.0f, _ => []);
+        ai.Move(92.5f, PartyInFrontHolderBehindTitan, jitter: 0f);
+        PlanEvery(ai, 104.9f, 109.4f, _ => []);
+        ai.Move(109.5f, PartyInFrontHolderBehindTitan, jitter: 0f);
+        ai.Move(116.0f, OffTankBehindTitanForTheBuster, jitter: 0f);
+        ai.Move(126.0f, PartyBehindTitanRangedInFront, jitter: 0f);
+        PlanEvery(ai, 128.3f, 141.0f, _ => []);
         PlanEvery(ai, 141.0f, 147.9f, _ => [(int)PartyRole.MainTank]);
         ai.Move(141.0f, () => TankOppositeTheParty(PartyRole.MainTank));
         ai.Move(148.1f, () => Group(Vector2.Zero));
+    }
+
+    private IAiMove PartyInFrontHolderBehindTitan()
+    {
+        groupTarget = null;
+        var spots = new Vector2?[8];
+        var front = FromSecondJumpFrame(new Vector2(-4f, 0f));
+        for (var slot = 0; slot < 8; slot++) spots[slot] = front + SpreadOffset(slot, TightSpread);
+        spots[(int)PartyRole.CasterDps] = FromSecondJumpFrame(new Vector2(-10f, 0f));
+        if (!state.Jailed.Contains(state.Holder)) spots[(int)state.Holder] = FromSecondJumpFrame(new Vector2(5f, 0f));
+        foreach (var jailed in state.Jailed) spots[(int)jailed] = null;
+        return AiMove.Create(spots).NaturalOrder();
+    }
+
+    private IAiMove OffTankBehindTitanForTheBuster()
+    {
+        var spots = new Vector2?[8];
+        spots[(int)PartyRole.OffTank] = FromSecondJumpFrame(new Vector2(5.5f, 0f));
+        spots[(int)PartyRole.MainTank] = FromSecondJumpFrame(new Vector2(-3f, 0f));
+        return AiMove.Create(spots).NaturalOrder();
+    }
+
+    private IAiMove PartyBehindTitanRangedInFront()
+    {
+        groupTarget = null;
+        var spots = new Vector2?[8];
+        var behind = FromSecondJumpFrame(new Vector2(10f, 0f));
+        for (var slot = 0; slot < 8; slot++) spots[slot] = behind + SpreadOffset(slot, TightSpread);
+        spots[(int)PartyRole.CasterDps] = FromSecondJumpFrame(new Vector2(-10f, 0f));
+        spots[(int)PartyRole.RegenHealer] = FromSecondJumpFrame(new Vector2(-10f, 1f));
+        return AiMove.Create(spots).NaturalOrder();
     }
 
     private void PlanEvery(AiManager ai, float from, float to, Func<float, int[]> excluded)
@@ -83,6 +116,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
 
     private IAiMove Group(Vector2 anchor, float spread = GroupSpread)
     {
+        groupTarget = null;
         var spots = new Vector2?[8];
         for (var slot = 0; slot < 8; slot++) spots[slot] = anchor + SpreadOffset(slot, spread);
         return AiMove.Create(spots).NaturalOrder();
@@ -122,6 +156,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
 
     private IAiMove PartyTo(Vector2 spot, bool withGaolTargets, bool jumpFrame = true)
     {
+        groupTarget = null;
         var anchor = jumpFrame ? state.FromJumpFrame(spot) : spot;
         var holderMovesAlone = !state.GaolTargets.Contains(state.Holder);
         var spots = new Vector2?[8];
@@ -147,18 +182,11 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     private IAiMove HolderTo(Vector2 jumpFrameSpot) =>
         state.GaolTargets.Contains(state.Holder) ? Nobody() : Only(state.Holder, state.FromJumpFrame(jumpFrameSpot));
 
-    private Vector2 GaolSpot(int order) => state.FromJumpFrame(order switch
-    {
-        0 => new Vector2(-6.6f, 1.4f * state.SafeSide),
-        1 => new Vector2(-0.6f, 2.0f * state.SafeSide),
-        _ => new Vector2(5.9f, 0.6f * state.SafeSide),
-    });
-
     private Vector2 BesideGaolSpot(int order) => state.FromJumpFrame(order switch
     {
-        0 => new Vector2(-6.6f, 3.8f * state.SafeSide),
-        1 => new Vector2(-0.6f, 3.8f * state.SafeSide),
-        _ => new Vector2(4.5f, 3.6f * state.SafeSide),
+        0 => new Vector2(5.5f, 3.5f * state.SafeSide),
+        1 => new Vector2(0f, 3.8f * state.SafeSide),
+        _ => new Vector2(-6.7f, 3.8f * state.SafeSide),
     });
 
     private IAiMove JailedBesideTheirGaolSpotsOutOfTheLandslide()
@@ -172,7 +200,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     private IAiMove JailedIntoTheChain()
     {
         var spots = new Vector2?[8];
-        for (var i = 0; i < state.GaolTargets.Count; i++) spots[(int)state.GaolTargets[i]] = GaolSpot(i);
+        for (var i = 0; i < state.GaolTargets.Count; i++) spots[(int)state.GaolTargets[i]] = state.GaolSpot(i);
         return AiMove.Create(spots).NaturalOrder();
     }
 
@@ -198,7 +226,12 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         var spots = new Vector2?[8];
         if (members.Count == 0) return AiMove.Create(spots).NaturalOrder();
         var anchor = members.Aggregate(Vector2.Zero, (sum, x) => sum + Flat(x.member!.Position)) / members.Count;
-        var target = NearestSpotClearOfUpcomingHazards(anchor, now, Margin + GroupSpread);
+        var upcoming = state.Hazards.Where(h => h.At > now).ToList();
+        var target = groupTarget is { } kept && kept.Length() <= ArenaRadiusAt(now) - 1f - GroupSpread
+            && ClearOfHazardsOnTheWay(anchor, kept, now, upcoming, GroupSpread + 0.2f)
+            ? kept
+            : NearestSpotClearOfUpcomingHazards(anchor, now, Margin + GroupSpread);
+        groupTarget = target;
         foreach (var (slot, _) in members) spots[slot] = target + SpreadOffset(slot, GroupSpread);
         if (!excluded.Contains(holder) && !state.Jailed.Contains(state.Holder) && world.Party.Get(holder) is { } tank && tank.IsAlive())
             spots[holder] = state.Hazards.Any(h => h.At > now)
@@ -219,24 +252,29 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     {
         var upcoming = state.Hazards.Where(h => h.At > now).OrderBy(h => h.At).ToList();
         var reach = ArenaRadiusAt(now) - 1f - GroupSpread;
-        for (var count = upcoming.Count; count >= 0; count--)
-        {
-            var hazards = upcoming.Take(count).ToList();
-            Vector2? best = null;
-            var bestDistance = float.MaxValue;
-            for (var x = -reach; x <= reach; x += SearchStep)
-                for (var z = -reach; z <= reach; z += SearchStep)
-                {
-                    var spot = new Vector2(x, z);
-                    if (spot.Length() > reach) continue;
-                    var distance = Vector2.Distance(from, spot);
-                    if (distance >= bestDistance || !ClearOfHazardsOnTheWay(from, spot, now, hazards, margin)) continue;
-                    best = spot;
-                    bestDistance = distance;
-                }
-            if (best is { } found) return found;
-        }
+        if (NearestClearSpot(from, now, upcoming, margin, reach) is { } clearOfAll)
+            return clearOfAll;
+        for (var count = upcoming.Count - 1; count >= 0; count--)
+            if (NearestClearSpot(from, now, upcoming.Take(count).ToList(), margin, reach) is { } found)
+                return found;
         return from;
+    }
+
+    private static Vector2? NearestClearSpot(Vector2 from, float now, List<UwuP3TitanState.Hazard> hazards, float margin, float reach)
+    {
+        Vector2? best = null;
+        var bestDistance = float.MaxValue;
+        for (var x = -reach; x <= reach; x += SearchStep)
+            for (var z = -reach; z <= reach; z += SearchStep)
+            {
+                var spot = new Vector2(x, z);
+                if (spot.Length() > reach) continue;
+                var distance = Vector2.Distance(from, spot);
+                if (distance >= bestDistance || !ClearOfHazardsOnTheWay(from, spot, now, hazards, margin)) continue;
+                best = spot;
+                bestDistance = distance;
+            }
+        return best;
     }
 
     private static bool ClearOfHazardsOnTheWay(Vector2 from, Vector2 to, float now, IEnumerable<UwuP3TitanState.Hazard> hazards, float margin)
@@ -263,7 +301,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     }
 
     private static float ArenaRadiusAt(float now) =>
-        now < 36.7f ? 19.4f : now < 91f ? UwuP3TitanState.FirstShrinkRadius : UwuP3TitanState.SecondShrinkRadius;
+        now < 32.6f ? 19.4f : now < 87f ? UwuP3TitanState.FirstShrinkRadius : UwuP3TitanState.SecondShrinkRadius;
 
     private static Vector2 ClampToArena(Vector2 spot, float limit)
     {

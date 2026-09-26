@@ -47,6 +47,8 @@ public class UwuConstants
         public const uint GraniteGaol = 8729;
         public const uint Ifrit = 8730;
         public const uint InfernalNail = 8731;
+        public const uint Lahabrea = 8732;
+        public const uint MagitekBit = 8733;
         public const uint UltimaWeapon = 8734;
         public const uint Dummy = 9020;
     }
@@ -66,6 +68,8 @@ public class UwuConstants
         public const uint Titan = 1801;
         public const uint GraniteGaol = 1804;
         public const uint UltimaWeapon = 2137;
+        public const uint Lahabrea = 2143;
+        public const uint MagitekBit = 5563;
     }
 
     public class ActionId
@@ -117,6 +121,9 @@ public class UwuConstants
         public const uint LandslideTitanNormal = 11119;
         public const uint LandslideLine = 11120;
         public const uint LandslideTitan = 11121;
+        public const uint SelfDetonate = 11122;
+        public const uint Blight = 11123;
+        public const uint DarkIV = 11124;
         public const uint UltimatePredation = 11126;
         public const uint ViscousAetheroplasmUltima = 11129;
         public const uint ViscousAetheroplasmEffect = 11130;
@@ -143,6 +150,7 @@ public class UwuConstants
         public const uint UltimateAnnihilation = 11596;
         public const uint UltimateSuppression = 11597;
         public const uint GeocrushLanding = 11517;
+        public const uint FreefireIntermission = 11509;
     }
 
     public class ActionTimelineId
@@ -152,13 +160,17 @@ public class UwuConstants
         public const ushort WarpStart2 = 7738;
         public const ushort WarpEnd = 7747;
         public const ushort SistersArrive = 7748;
+        public const ushort LahabreaFalls = 3783;
+        public const ushort LahabreaFadesOut = 6439;
     }
 
     public class StatusId
     {
         public const ushort VulnerabilityUp = 202;
+        public const ushort Doom = 210;
         public const ushort Fetters = 292;
         public const ushort InfernalFetters = 377;
+        public const ushort DownForTheCount = 783;
         public const ushort FireResistanceDownII = 1255;
         public const ushort ThermalLow = 1525;
         public const ushort AccursedFlame = 1527;
