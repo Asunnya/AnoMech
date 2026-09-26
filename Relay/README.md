@@ -8,7 +8,7 @@ AnoMech firewalls off FFXIV's own server traffic during a scenario), so this pro
 exists just to get them talking.
 
 **There's no default/public relay bundled with the plugin.** Every group runs their
-own — nothing connects until you type a URL into the Multiplayer window. It's built to
+own — nothing connects until you type a URL into the plugin's Multiplayer screen. It's built to
 be safe to run as a genuinely public service too (anyone, not just people you've
 personally shared a URL with) — see [Running it as a public
 service](#running-it-as-a-public-service) and [Security notes](#security-notes).
@@ -214,7 +214,7 @@ anomech-relay --port 7890 --token <shared-secret> --admin-token <a-different-sec
   both require it (sent as a header, never in the URL/query string). Hand it out to
   the people you actually want using this relay; everyone else gets `401` before a
   WebSocket ever opens. Leave unset to keep the original "anyone with the URL" model.
-  The plugin's Multiplayer window only shows a password field when the relay it's
+  The plugin's Multiplayer screen only shows a password field when the relay it's
   pointed at actually has one set (see [Configuring the plugin](#configuring-the-plugin)).
 
   **Setting `--token` also enforces TLS.** A password sent in the clear isn't a
@@ -478,14 +478,13 @@ Bans and limit changes live in memory only — they reset when the relay restart
 
 ## Configuring the plugin
 
-Open the Multiplayer window (`/anomech mp`, or the "Multiplayer..." button once a
-multiplayer-supported scenario is selected) and type your relay's address into the
-**Relay URL** field. Just the address is enough (`relay.example.com`, or
+Open the Multiplayer screen (`/anomech mp`, or the **Multiplayer** button in the main
+window while in an inn) and type your relay's address into the **Server** field. Just the address is enough (`relay.example.com`, or
 `203.0.113.5:7890` without TLS) — the plugin tries `wss://` first and falls back to
 `ws://` only if that relay doesn't support it, telling you which one it used. An
 explicit `ws://`/`wss://` also works. Remembered across sessions once set.
 
-If the relay you typed requires `--token`, a **Relay password** field appears
+If the relay you typed requires `--token`, a **Password** field appears
 automatically underneath (the plugin asks the relay's plain `/info` endpoint whether
 one is needed before showing it) — also remembered across sessions. A relay with no
 token set never shows the field at all. The saved password is tied to the relay it was

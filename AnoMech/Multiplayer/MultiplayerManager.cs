@@ -193,6 +193,10 @@ public sealed partial class MultiplayerManager : IDisposable
     public bool RelayAttestsSender => relay?.SupportsSenderIdentity ?? false;
     public bool IsRunning => running;
     public string? SessionCode { get; private set; }
+    // The host has no SessionCode until the relay assigns one.
+    public bool IsHostConnecting => IsHost && relay != null && SessionCode == null;
+    public bool InSession => SessionCode != null || IsHostConnecting;
+    public EmbeddedRelay Embedded { get; } = new();
     public string? RelayUrl { get; private set; }
     // Captured at Host/Join time so a mid-session config edit doesn't change what the
     // reconnect loop sends.
@@ -243,6 +247,20 @@ public sealed partial class MultiplayerManager : IDisposable
     public void HostSession(string relayUrl)
     {
         LeaveSession();
+        HostSessionCore(relayUrl);
+    }
+
+    // Null on success, otherwise why the server couldn't start.
+    public string? HostEmbeddedSession(int port)
+    {
+        LeaveSession();
+        if (Embedded.Start(port) is { } error) return error;
+        HostSessionCore(Embedded.LocalUrl);
+        return null;
+    }
+
+    private void HostSessionCore(string relayUrl)
+    {
         ConnectionError = null;
         peerSecret = RelayWire.RelayCredential(Plugin.Config.EnsurePeerSecret(), relayUrl);
         MyPeerId = RelayWire.PeerId(peerSecret);
@@ -340,6 +358,7 @@ public sealed partial class MultiplayerManager : IDisposable
         else
             relay?.Dispose();
         relay = null;
+        Embedded.Stop();
 
         running = false;
         peerEntryQueued = false;

@@ -74,7 +74,7 @@ public sealed class UmadP3LimitCutSettingsWindow
             SettingsGrid.End();
         }
         // The Thunder III plan is drawn by UmadP3LimitCutScenario.DrawMultiplayerSettings so it
-        // stays editable while the Multiplayer window is open, as Black Hole's does.
+        // stays editable while a multiplayer fight is running, as Black Hole's does.
     }
 
     public void DrawPerPlayer()

@@ -28,6 +28,8 @@ public class Configuration : IPluginConfiguration
     public string RelayAccessToken { get; set; } = "";
     public string RelayTokenOrigin { get; set; } = "";
 
+    public int EmbeddedRelayPort { get; set; } = 7890;
+
     public string TokenForRelay(string url)
     {
         // A password saved before it was tied to a relay belongs to the one saved alongside it.

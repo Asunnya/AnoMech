@@ -37,7 +37,10 @@ public unsafe class MainWindow : Window, IDisposable
     private readonly TitleBarButton autoCollapseButton;
     private IZone? _openZone;
     internal ScenarioPanelWindow ScenarioPanel { get; }
+    internal PartyPanelWindow PartyPanel { get; }
+    private readonly MultiplayerUi multiplayerUi;
     internal Vector2 ScenarioPanelAnchor { get; private set; }
+    internal Vector2 RightPanelAnchor { get; private set; }
     internal float ScenarioPanelHeight { get; private set; }
     internal bool IsActuallyCollapsed { get; private set; }
     private float _windowChromeHeight;
@@ -100,6 +103,8 @@ public unsafe class MainWindow : Window, IDisposable
 
         this.plugin = plugin;
         ScenarioPanel = new ScenarioPanelWindow(this);
+        PartyPanel = new PartyPanelWindow(this, plugin.Multiplayer);
+        multiplayerUi = new MultiplayerUi(plugin);
         IsOpen = false;
         RestoreSelectedScenario();
 
@@ -117,19 +122,6 @@ public unsafe class MainWindow : Window, IDisposable
                 $"Auto-collapse while running: {(Plugin.Config.AutoCollapseWhileRunning ? "On" : "Off")}"),
         };
         TitleBarButtons.Add(autoCollapseButton);
-
-        // Global tools live in the title bar so the scenario header stays focused on the
-        // selected scenario. Higher priority places Multiplayer to the left of Settings.
-        TitleBarButtons.Add(new TitleBarButton
-        {
-            Icon = FontAwesomeIcon.Users,
-            IconOffset = new Vector2(2f, 1f) * uiScale,
-            Priority = 1,
-            Click = _ => plugin.MultiplayerWindow.Toggle(),
-            ShowTooltip = () => ImGui.SetTooltip(plugin.Multiplayer.IsConnected
-                ? "Multiplayer (connected)"
-                : "Multiplayer"),
-        });
 
         // Small gear opens the settings window (same toggle as /anomech config).
         TitleBarButtons.Add(new TitleBarButton
@@ -162,10 +154,43 @@ public unsafe class MainWindow : Window, IDisposable
     // A peer never sets Game.ActiveScenario: in a session the run is the session's.
     private bool RunActive => plugin.Multiplayer.SessionCode != null ? plugin.Multiplayer.IsRunning : plugin.Game.IsScenarioActive;
 
+    private bool InSession => plugin.Multiplayer.InSession;
+    private bool IsGuest => plugin.Multiplayer.SessionCode != null && !plugin.Multiplayer.IsHost;
+
+    // The whole window becomes the multiplayer setup screen until a session starts.
+    private bool _showMultiplayerSetup;
+    internal bool ShowingMultiplayerSetup => _showMultiplayerSetup && !InSession;
+    private bool _wasInSession;
+
+    internal void OpenMultiplayer()
+    {
+        IsOpen = true;
+        if (!InSession) _showMultiplayerSetup = true;
+    }
+
+    // A session that ended on someone else's terms reopens the setup screen, where its reason
+    // is shown; leaving on our own returns to the scenario view.
+    private void TrackSessionEnd()
+    {
+        var inSession = InSession;
+        if (inSession) _showMultiplayerSetup = false;
+        else if (_wasInSession && plugin.Multiplayer.SessionEndReason != null) _showMultiplayerSetup = true;
+        _wasInSession = inSession;
+    }
+
+    // A guest runs whatever the host picked, so its window shows that scenario.
+    private void FollowHostScenario()
+    {
+        if (!IsGuest || plugin.Multiplayer.TryResolveScenario() is not { } hostScenario) return;
+        if (_selectedScenario != hostScenario) SelectScenario(hostScenario, persist: false);
+    }
+
     // The window is collapsible while a scenario runs, and expands again when the run ends.
     // Outside a run, fake-zone sessions keep it expanded so the next action is visible.
     public override void PreOpenCheck()
     {
+        TrackSessionEnd();
+        FollowHostScenario();
         if (_clearCollapsedRequest)
         {
             Collapsed = null;
@@ -269,7 +294,11 @@ public unsafe class MainWindow : Window, IDisposable
         ScenarioPanelAnchor = new Vector2(windowPos.X, contentTop);
         _windowChromeHeight = contentTop - windowPos.Y;
         ScenarioPanelHeight = windowPos.Y + ImGui.GetWindowSize().Y - contentTop;
-        DrawMainContent();
+        RightPanelAnchor = new Vector2(windowPos.X + ImGui.GetWindowSize().X, contentTop);
+        if (ShowingMultiplayerSetup)
+            multiplayerUi.DrawSetupScreen(() => _showMultiplayerSetup = false);
+        else
+            DrawMainContent();
     }
 
     // Size the left panel to the widest scenario label so names never clip as scenarios are added.
@@ -301,12 +330,10 @@ public unsafe class MainWindow : Window, IDisposable
         ImGui.TextUnformatted(lockedZone?.Name ?? "Scenarios");
         ImGui.Separator();
 
-        var mpWindowOpen = plugin.MultiplayerWindow.IsOpen;
-        var mpConnected = plugin.Multiplayer.IsConnected;
         if (lockedZone != null)
         {
             var right = ImGui.GetCursorScreenPos().X + ImGui.GetContentRegionAvail().X;
-            DrawZoneScenarios(lockedZone, right, mpWindowOpen, mpConnected);
+            DrawZoneScenarios(lockedZone, right);
             return;
         }
         foreach (var zone in plugin.Game.Zones)
@@ -329,13 +356,15 @@ public unsafe class MainWindow : Window, IDisposable
             if (open != shouldOpen) _openZone = open ? zone : null;
             if (!open) continue;
             ImGui.Indent();
-            DrawZoneScenarios(zone, sectionRight, mpWindowOpen, mpConnected);
+            DrawZoneScenarios(zone, sectionRight);
             ImGui.Unindent();
         }
     }
 
-    private void DrawZoneScenarios(IZone zone, float sectionRight, bool mpWindowOpen, bool mpConnected)
+    private void DrawZoneScenarios(IZone zone, float sectionRight)
     {
+        var inSession = InSession;
+        var guest = IsGuest;
         var buttonPadding = ImGui.GetStyle().FramePadding;
         buttonPadding.X += ScenarioButtonExtraPadding * ImGuiHelpers.GlobalScale;
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, buttonPadding);
@@ -344,7 +373,7 @@ public unsafe class MainWindow : Window, IDisposable
             foreach (var scenario in plugin.Game.ScenariosOf(phase))
             {
                 var selected = _selectedScenario == scenario;
-                var mpUnsupported = (mpWindowOpen || mpConnected) && !scenario.SupportsMultiplayer;
+                var mpUnsupported = inSession && !scenario.SupportsMultiplayer;
                 if (selected) PushSelectedScenarioStyle();
                 else PushScenarioHoverStyle();
                 // Zone-qualified: two zones can hold same-named scenarios (UMAD and UCOB
@@ -352,11 +381,11 @@ public unsafe class MainWindow : Window, IDisposable
                 // button unclickable.
                 ImGui.PushID(FullName(scenario));
                 var buttonWidth = sectionRight - ImGui.GetCursorScreenPos().X;
-                ImGui.BeginDisabled(mpUnsupported);
+                ImGui.BeginDisabled(mpUnsupported || guest);
                 var clicked = ImGui.Button(DisplayName(scenario), new Vector2(buttonWidth, 0));
                 ImGui.EndDisabled();
-                if (mpUnsupported && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                    ImGui.SetTooltip($"This scenario doesn't support multiplayer. {MpDisabledReason(mpWindowOpen, mpConnected)}");
+                if ((mpUnsupported || guest) && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    ImGui.SetTooltip(guest ? "The host picks the scenario." : "This scenario doesn't support multiplayer.");
                 if (selected)
                 {
                     DrawSelectionAccent();
@@ -411,14 +440,7 @@ public unsafe class MainWindow : Window, IDisposable
         }
     }
 
-    // Shared wording for every control disabled by the Multiplayer window or a live session.
-    private static string MpDisabledReason(bool windowOpen, bool connected) => (windowOpen, connected) switch
-    {
-        (true, true) => "Disabled: the Multiplayer window is open and you're connected to a multiplayer session.",
-        (true, false) => "Disabled while the Multiplayer window is open.",
-        (false, true) => "Disabled while connected to a multiplayer session.",
-        _ => "",
-    };
+    private const string MpDisabledReason = "Disabled in a multiplayer session.";
 
     // Distinct, ordered region labels from the strats' IScenarioAi.Group; empty = ungrouped.
     private static IReadOnlyList<string> StratGroups(IScenario scenario)
@@ -431,36 +453,37 @@ public unsafe class MainWindow : Window, IDisposable
 
     private void DrawMainContent()
     {
+        var inSession = InSession;
         if (_selectedScenario == null)
         {
             DrawScenarioPanelToggle();
             ImGui.SameLine();
             ImGui.TextDisabled("Select a scenario");
+            if (inSession) DrawSession();
+            else DrawMultiplayerButton();
             return;
         }
 
         var game = plugin.Game;
-        var mpWindowOpen = plugin.MultiplayerWindow.IsOpen;
-        var mpConnected = plugin.Multiplayer.IsConnected;
-        var mpActive = mpWindowOpen || mpConnected;
-        var mpGuest = mpConnected && !plugin.Multiplayer.IsHost;
-        ReconcileSetup(mpConnected, mpGuest);
+        var mpGuest = IsGuest;
+        ReconcileSetup(inSession, mpGuest);
 #if DEBUG
-        if (mpActive) game.EventTimeScale = 1f;
+        if (inSession) game.EventTimeScale = 1f;
 #endif
 
         DrawScenarioHeader(game);
-        DrawPrimaryActions(game);
-        DrawSoloOption(game);
+        if (inSession) DrawSession();
+        DrawPrimaryActions(game, inSession);
+        if (!inSession) DrawSoloOption(game);
         DrawLocationHint();
-        DrawRunOptions(game, mpWindowOpen, mpConnected);
+        DrawRunOptions(game, inSession);
 
         ImGui.Spacing();
-        DrawSections(_selectedScenario, mpWindowOpen, mpConnected, mpGuest);
+        DrawSections(_selectedScenario, inSession, mpGuest);
     }
 
-    // Every frame, Setup expanded or not: Start and the Multiplayer window's Start read these.
-    // Once connected the role comes from the Multiplayer claim, and only the host's region/strat
+    // Every frame, Setup expanded or not: both Start buttons read these.
+    // In a session the role comes from the Party panel seat, and only the host's region/strat
     // is broadcast and run; each is reset, not just disabled, so a stale pick can't apply.
     private void ReconcileSetup(bool mpConnected, bool mpGuest)
     {
@@ -500,43 +523,42 @@ public unsafe class MainWindow : Window, IDisposable
         return inRegion;
     }
 
-    private void DrawSections(IScenario scenario, bool mpWindowOpen, bool mpConnected, bool mpGuest)
+    // Mirrors the visibility rules of DrawStratSelector and DrawWaymarkSelector.
+    private static bool HasStratChoice(IScenario scenario) =>
+        StratGroups(scenario).Count > 0 || scenario.AiStrats.Count > 1;
+
+    private static bool HasWaymarkChoice(IScenario scenario) =>
+        scenario.Phase.Zone.WaymarkPresets.Count > 1;
+
+    private void DrawSections(IScenario scenario, bool inSession, bool mpGuest)
     {
-        var mpActive = mpWindowOpen || mpConnected;
-        if (ImGui.TreeNodeEx("Setup###scenario-setup-v3",
-                ImGuiTreeNodeFlags.DefaultOpen | ImGuiTreeNodeFlags.FramePadding))
+        // In a session the seat comes from the Party panel, so Setup can be left with nothing.
+        var hasSetup = !inSession || HasStratChoice(scenario) || HasWaymarkChoice(scenario);
+        if (hasSetup)
         {
-            if (SettingsGrid.Begin("##scenario-setup-grid"))
+            if (ImGui.TreeNodeEx("Setup###scenario-setup-v3",
+                    ImGuiTreeNodeFlags.DefaultOpen | ImGuiTreeNodeFlags.FramePadding))
             {
-                DrawRoleSelector(mpConnected);
-                DrawStratSelector(mpGuest);
-                DrawWaymarkSelector();
-                SettingsGrid.End();
+                if (SettingsGrid.Begin("##scenario-setup-grid"))
+                {
+                    if (!inSession) DrawRoleSelector();
+                    DrawStratSelector(mpGuest);
+                    DrawWaymarkSelector();
+                    SettingsGrid.End();
+                }
+                ImGui.TreePop();
             }
-            ImGui.TreePop();
+            ImGui.Spacing();
         }
 
-        ImGui.Spacing();
         if (ImGui.TreeNodeEx("Scenario settings###scenario-config-v3",
                 ImGuiTreeNodeFlags.FramePadding))
         {
-            if (mpConnected)
-            {
-                ImGui.TextDisabled(plugin.Multiplayer.IsHost
-                    ? "Configured in the Multiplayer window while hosting."
-                    : "The host configures the scenario -- see the Multiplayer window.");
-            }
+            if (inSession)
+                multiplayerUi.DrawScenarioSettings(scenario);
             else
             {
-                // DrawMultiplayerSettings only matters in multiplayer, so it stays outside the
-                // disabled block.
-                ImGui.BeginGroup();
-                ImGui.BeginDisabled(mpActive);
                 scenario.DrawSettings();
-                ImGui.EndDisabled();
-                ImGui.EndGroup();
-                if (mpActive && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                    ImGui.SetTooltip(MpDisabledReason(mpWindowOpen, mpConnected));
                 scenario.DrawMultiplayerSettings();
             }
             ImGui.TreePop();
@@ -547,13 +569,13 @@ public unsafe class MainWindow : Window, IDisposable
         if (ImGui.TreeNodeEx("Debug###debug-v3",
                 ImGuiTreeNodeFlags.FramePadding))
         {
-            ImGui.BeginDisabled(mpActive);
+            ImGui.BeginDisabled(inSession);
             ImGui.BeginGroup();
             debugMenu.DrawSpeedControl();
             ImGui.EndGroup();
             ImGui.EndDisabled();
-            if (mpActive && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip(MpDisabledReason(mpWindowOpen, mpConnected));
+            if (inSession && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(MpDisabledReason);
             debugMenu.DrawDebugContent();
             ImGui.TreePop();
         }
@@ -647,7 +669,7 @@ public unsafe class MainWindow : Window, IDisposable
         return clicked;
     }
 
-    private void DrawPrimaryActions(AnoMech.Core.Game.Game game)
+    private void DrawPrimaryActions(AnoMech.Core.Game.Game game, bool inSession)
     {
         var uiScale = ImGuiHelpers.GlobalScale;
         var actionSize = new Vector2(140f * uiScale, 32f * uiScale);
@@ -656,15 +678,37 @@ public unsafe class MainWindow : Window, IDisposable
             if (DrawSemanticButton("Stop", actionSize, StopColor))
                 plugin.ResetScenario();
         }
+        else if (inSession)
+            multiplayerUi.DrawStartButton(actionSize);
         else
             DrawStartButton(actionSize);
 
         if (game.World.Map.IsInInstance)
         {
             ImGui.SameLine();
-            if (DrawSemanticButton("Leave", actionSize, StopColor))
+            if (DrawSemanticButton(inSession ? "Return to inn###leave-instance" : "Leave###leave-instance", actionSize, StopColor))
                 plugin.LeaveInstance();
+            if (inSession && ImGui.IsItemHovered())
+                ImGui.SetTooltip("Takes the whole party back to the inn. Everyone stays in the session.");
         }
+        else if (!inSession && !RunActive)
+        {
+            DrawMultiplayerButton(actionSize);
+        }
+    }
+
+    private void DrawSession()
+    {
+        multiplayerUi.DrawSessionStrip(PartyPanel);
+        multiplayerUi.DrawSessionMessages();
+    }
+
+    // Sessions start from the inn, like any scenario.
+    private void DrawMultiplayerButton(Vector2 size = default)
+    {
+        if (!ZoneSession.IsInInn() || plugin.Game.World.Map.IsInInstance) return;
+        ImGui.SameLine();
+        if (ImGui.Button("Multiplayer", size)) _showMultiplayerSetup = true;
     }
 
     private bool SoloSelected => _selectedScenario is { SupportsSolo: true } && _soloMode;
@@ -796,9 +840,8 @@ public unsafe class MainWindow : Window, IDisposable
 
     // God mode and auto-restart are disabled while a session is being set up or is live; forced
     // off, not just disabled, so a stale value can't apply.
-    private static void DrawRunOptions(AnoMech.Core.Game.Game game, bool mpWindowOpen, bool mpConnected)
+    private static void DrawRunOptions(AnoMech.Core.Game.Game game, bool mpActive)
     {
-        var mpActive = mpWindowOpen || mpConnected;
         ImGui.Spacing();
         if (mpActive) game.GodMode = false;
         ImGui.BeginDisabled(mpActive);
@@ -806,7 +849,7 @@ public unsafe class MainWindow : Window, IDisposable
         if (ImGui.Checkbox("God mode", ref god)) game.GodMode = god;
         ImGui.EndDisabled();
         if (mpActive && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(MpDisabledReason(mpWindowOpen, mpConnected));
+            ImGui.SetTooltip(MpDisabledReason);
         ImGui.SameLine();
         // A host rerunning on its own would desync the session, so this is solo-only.
         if (mpActive) game.AutoRestart = false;
@@ -816,7 +859,7 @@ public unsafe class MainWindow : Window, IDisposable
         ImGui.EndDisabled();
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(mpActive
-                ? MpDisabledReason(mpWindowOpen, mpConnected)
+                ? MpDisabledReason
                 : "Restart the same scenario immediately after a successful run. A death turns this back off.");
         ImGui.SameLine();
         ImGui.TextDisabled($"Streak: {game.MechanicStreak}");
@@ -845,17 +888,13 @@ public unsafe class MainWindow : Window, IDisposable
         }
     }
 
-    private void DrawRoleSelector(bool mpConnected)
+    private void DrawRoleSelector()
     {
         var idx = _roleOverride is { } role ? (int)role + 1 : 0;
         SettingsGrid.Row("Role:");
         ImGui.SetNextItemWidth(SetupDropdownWidth * ImGuiHelpers.GlobalScale);
-        ImGui.BeginDisabled(mpConnected);
         if (ImGui.Combo("##role", ref idx, RoleLabels, RoleLabels.Length))
             _roleOverride = idx == 0 ? null : (PartyRole)(idx - 1);
-        ImGui.EndDisabled();
-        if (mpConnected && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Role is claimed via the Multiplayer window instead. " + MpDisabledReason(false, true));
     }
 
     // Only meaningful when a scenario offers more than one strat; hidden otherwise.
@@ -880,7 +919,7 @@ public unsafe class MainWindow : Window, IDisposable
         }
         ImGui.EndDisabled();
         if (mpGuest && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Only the host's selection is used in multiplayer. " + MpDisabledReason(false, true));
+            ImGui.SetTooltip("Only the host's selection is used in multiplayer.");
     }
 
     // Region buttons + a region-filtered strat dropdown, over the pick ReconcileStrat keeps valid.

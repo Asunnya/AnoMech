@@ -62,8 +62,6 @@ public sealed class Plugin : IDalamudPlugin
     private ConfigWindow ConfigWindow { get; init; }
     // Static so MultiplayerManager can read the host's current selection.
     internal static MainWindow MainWindow { get; private set; } = null!;
-    internal MultiplayerWindow MultiplayerWindow { get; init; }
-    internal RunningSimWindow RunningSimWindow { get; init; }
 #if DEBUG
     private DamageDebugWindow DamageDebugWindow { get; init; }
 #endif
@@ -88,14 +86,11 @@ public sealed class Plugin : IDalamudPlugin
             if (Config.EnableUserActions) UserActions.Enable();
             ConfigWindow = new ConfigWindow(this);
             MainWindow = new MainWindow(this);
-            MultiplayerWindow = new MultiplayerWindow(this);
-            RunningSimWindow = new RunningSimWindow(this);
 
             WindowSystem.AddWindow(ConfigWindow);
             WindowSystem.AddWindow(MainWindow);
             WindowSystem.AddWindow(MainWindow.ScenarioPanel);
-            WindowSystem.AddWindow(MultiplayerWindow);
-            WindowSystem.AddWindow(RunningSimWindow);
+            WindowSystem.AddWindow(MainWindow.PartyPanel);
 #if DEBUG
             DamageDebugWindow = new DamageDebugWindow(this);
             WindowSystem.AddWindow(DamageDebugWindow);
@@ -188,7 +183,6 @@ public sealed class Plugin : IDalamudPlugin
         LogManager?.Dispose();
         ConfigWindow?.Dispose();
         MainWindow?.Dispose();
-        MultiplayerWindow?.Dispose();
 #if DEBUG
         DamageDebugWindow?.Dispose();
 #endif
@@ -219,7 +213,17 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception e) { Core.DiagnosticLog.Warn($"[Plugin] Game.Tick threw: {e}"); }
         try { UserActions.Tick(fw->FrameDeltaTime); }
         catch (Exception e) { Core.DiagnosticLog.Warn($"[Plugin] UserActions.Tick threw: {e}"); }
-        try { Multiplayer.Tick(fw->FrameDeltaTime); }
+        try
+        {
+            // Every frame, not just while the settings are drawn: peers read what the host has
+            // selected whether or not its window is open.
+            if (Multiplayer.SessionCode != null)
+            {
+                Multiplayer.PublishSelectedScenario(MainWindow.SelectedScenario);
+                Multiplayer.PublishScenarioSettings(MainWindow.SelectedScenario);
+            }
+            Multiplayer.Tick(fw->FrameDeltaTime);
+        }
         catch (Exception e) { Core.DiagnosticLog.Warn($"[Plugin] Multiplayer.Tick threw: {e}"); }
     }
 
@@ -263,7 +267,7 @@ public sealed class Plugin : IDalamudPlugin
                 break;
             case "mp":
             case "multiplayer":
-                MultiplayerWindow.Toggle();
+                MainWindow.OpenMultiplayer();
                 break;
             case "start":
                 StartSelectedScenario(solo: false);
@@ -290,7 +294,7 @@ public sealed class Plugin : IDalamudPlugin
         // Starting here bypasses MultiplayerManager: a host would run the fight without a
         // StartMessage, a peer would start a second independent simulation.
         if (scenario.SupportsMultiplayer && Multiplayer.IsConnected)
-            return "Connected to a multiplayer session -- use Start in the Multiplayer window instead.";
+            return "In a multiplayer session -- only the host's Start button runs it.";
         if (Game.StartWaitingOn is { } waiting) return $"Waiting for {waiting} to settle before starting...";
         // A settle only delays the start; Game.RunScenario waits it out.
         if (ZoneSession.StartBlockedReason(out var settling) is { } blocked && settling == null)

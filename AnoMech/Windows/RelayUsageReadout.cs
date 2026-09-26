@@ -1,86 +1,19 @@
+#if DEBUG
 using System;
-using System.Linq;
 using System.Numerics;
 using AnoMech.Multiplayer;
-using AnoMech.Scenarios;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Windowing;
 
 namespace AnoMech.Windows;
 
-// The session controls while a multiplayer session is in the sim, where the Multiplayer window
-// is hidden; MainWindow keeps Start, Stop and Leave. Every button calls the same methods the
-// Multiplayer window uses.
-public sealed class RunningSimWindow : Window
+// What this client is spending against the relay's per-connection caps, plus the traffic either
+// way. The relay enforces these; the plugin only reports them.
+internal static class RelayUsageReadout
 {
-    private readonly Plugin plugin;
-
-    public RunningSimWindow(Plugin plugin) : base("Multiplayer###AnoMechRunningSim")
-    {
-        this.plugin = plugin;
-        Flags |= ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse;
-        ShowCloseButton = false;
-        RespectCloseHotkey = false;
-        IsOpen = false;
-    }
-
-    public override void PreOpenCheck()
-    {
-        IsOpen = plugin.Game.World.Map.IsInInstance && plugin.Multiplayer.SessionCode != null;
-    }
-
-    public override void Draw()
-    {
-        var mp = plugin.Multiplayer;
-        if (!mp.Session.Started)
-        {
-            MainWindow.PushSemanticColors(MainWindow.StartColor);
-            plugin.MultiplayerWindow.DrawStartButton();
-            MainWindow.PopSemanticColors();
-            ImGui.SameLine();
-        }
-
-        MainWindow.PushSemanticColors(MainWindow.StopColor);
-        plugin.MultiplayerWindow.DrawLeaveSessionButton();
-        MainWindow.PopSemanticColors();
-
-        DrawRoster();
-#if DEBUG
-        DrawRelayUsage();
-#endif
-    }
-
-    // The Multiplayer window is hidden while a sim runs, so the host needs a way to remove
-    // someone from here.
-    private void DrawRoster()
-    {
-        var mp = plugin.Multiplayer;
-        if (!mp.IsHost || !ImGui.CollapsingHeader("Players")) return;
-        var others = mp.Session.Names.Keys.Where(id => id != mp.MyPeerId).ToList();
-        if (others.Count == 0)
-        {
-            ImGui.TextDisabled("Nobody else is connected.");
-            return;
-        }
-        foreach (var id in others)
-        {
-            ImGui.PushID(id.ToString());
-            var seat = mp.Session.ClaimedBy.FirstOrDefault(kv => kv.Value == id);
-            var where = mp.Session.ClaimedBy.ContainsValue(id) ? SettingsGrid.RoleLabel(seat.Key) : "no role";
-            ImGui.TextUnformatted($"{mp.Session.NameOf(id)} ({where})");
-            ImGui.SameLine(200);
-            MultiplayerWindow.DrawKickBanButtons(mp, id);
-            ImGui.PopID();
-        }
-    }
-
-#if DEBUG
-    // What this client is spending against the relay's per-connection caps, plus the traffic
-    // either way. Debug readout: the relay enforces these, the plugin only reports them.
-    private void DrawRelayUsage()
+    internal static void Draw(MultiplayerManager mp)
     {
         if (!ImGui.CollapsingHeader("Relay usage (debug)")) return;
-        RelayStats.ObservePeers(plugin.Multiplayer.Session.Names.Count);
+        RelayStats.ObservePeers(mp.Session.Names.Count);
         var s = RelayStats.Current;
 
         if (ImGui.BeginTable("##relayusage", 3, ImGuiTableFlags.SizingFixedFit))
@@ -140,5 +73,5 @@ public sealed class RunningSimWindow : Window
         => value >= 1024 * 1024 ? $"{value / (1024f * 1024f):F2} MB"
             : value >= 1024 ? $"{value / 1024f:F1} KB"
             : $"{value} B";
-#endif
 }
+#endif
