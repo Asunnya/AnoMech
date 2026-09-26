@@ -24,8 +24,8 @@ public sealed class TopP5SigmaAi : IScenarioAi<TopP5SigmaState>
         state = s;
         var ai = new AiManager(world);
 
-        var handBait = state.DynamisTargets.Random(2, state.HelloWorldTargets.List);
-        var hWJumpsOrder = RoleList.AllExcept(world.Party, state.HelloWorldTargets.List.Concat(handBait.List).ToArray());
+        var handBait = state.HandBait;
+        var hWJumpsOrder = state.HelloWorldJumpOrder;
         markingsOrder = new(world.Party, [handBait[0], hWJumpsOrder[0], handBait[1], hWJumpsOrder[1],
                         hWJumpsOrder[2], hWJumpsOrder[3], state.HelloWorldTargets[0], state.HelloWorldTargets[1]]);
 
@@ -39,7 +39,7 @@ public sealed class TopP5SigmaAi : IScenarioAi<TopP5SigmaState>
         ai.Move(44f, InitialPositions, jitter: 3f);
         ai.Move(50f, RearLasersPrePosition, arrivalTime: 56.5f);
         ai.Move(58f, AdjustForLegs, arrivalTime: 60.5f);
-        ai.Move(62f, HelloWorldPositions, arrivalTime: 66.5f);
+        ai.Move(62f, HelloWorldPositions, arrivalTime: 67f);
         ai.Move(73f, InitialPositions);
     }
 

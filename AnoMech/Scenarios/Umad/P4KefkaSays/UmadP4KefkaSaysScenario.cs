@@ -2,11 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
+using AnoMech.Core.Native;
 using AnoMech.Core.SimObjects;
+using AnoMech.Multiplayer;
 using static AnoMech.Scenarios.Umad.UmadConstants;
 
 namespace AnoMech.Scenarios.Umad.P4KefkaSays;
@@ -15,17 +18,21 @@ namespace AnoMech.Scenarios.Umad.P4KefkaSays;
 // Player id -> role (first-seen order in the window):
 //   10066D86 MT, 100AC8F1 OT, 100AE96C H1, 100702A3 H2,
 //   10018AEA M1, 100AF82E M2, 100A7A8F R1, 1009061B C.
-public sealed class UmadP4KefkaSaysScenario : IScenario
+public sealed class UmadP4KefkaSaysScenario : IMultiplayerReplayable
 {
     public string Name => "Kefka Says";
     public IPhase Phase => UmadZone.P4;
+    public bool SupportsMultiplayer => true;
+    public uint? TankMaxHealth => Tunables.RealTankMaxHealth;
 
     public void DrawSettings() => settingsWindow.Draw();
+    public object SettingsOverrides => settingsWindow.Overrides;
     private readonly UmadP4KefkaSaysSettingsWindow settingsWindow = new();
 
     public IReadOnlyList<IScenarioAi> AiStrats =>
     [
-        new UmadP4KefkaSaysAi(),
+        new UmadP4KefkaSaysAi(UmadP4KefkaSaysAi.GazeLayout.SupportsNorthDpsSouth),
+        new UmadP4KefkaSaysAi(UmadP4KefkaSaysAi.GazeLayout.CentreLane),
     ];
 
     private UmadP4KefkaSaysState state = null!;
@@ -35,11 +42,19 @@ public sealed class UmadP4KefkaSaysScenario : IScenario
     private SimEnemy[] detonationHelpers = [];  // invisible KefkaHelper that casts DeathSurge on Allagan Field detonation
     private int detonatioHelperIndex;
 
+    // The current run's randomized per-run assignments, exposed so
+    // MultiplayerManager can read them after a host Start and broadcast them --
+    // lets a peer's local "debug: bot controls my character" mode replay the
+    // same choreography a host-side bot in that role would produce. Mirrors
+    // UmadP3BlackHoleScenario.LastState.
+    public UmadP4KefkaSaysState? LastState { get; private set; }
+
     public void Run(SimWorld worldParam, int? selectedAi)
     {
         world = worldParam;
         party = worldParam.Party;
         state = new UmadP4KefkaSaysState(party, settingsWindow.Overrides);
+        LastState = state;
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UmadP4KefkaSaysState>)AiStrats[idx]).Run(state, world);
         damage = new DamageSolver(party);
@@ -62,6 +77,15 @@ public sealed class UmadP4KefkaSaysScenario : IScenario
         Run_OtherDebuffs();
         Run_AccelerationBomb();
     }
+
+    // First played on a fresh actor, where an unloaded timeline can drop (see ActionTimelinePreload).
+    private static readonly (ushort Id, string Key)[] NeoExdeathTimelines =
+    [
+        (TimelineId.NeoExdeathShow, "mon_sp/m0418/show/mon_sp001"),
+    ];
+
+    public void RunInstanceEvents(SimWorld instanceWorld)
+        => ActionTimelinePreload.Preload(NeoExdeathTimelines, "UmadP4KefkaSays");
 
     private void Run_InstanceEvents()
     {
@@ -141,6 +165,9 @@ public sealed class UmadP4KefkaSaysScenario : IScenario
     {
         var player = party.Player;
         if (player == null || !player.IsAlive()) return;
+        // Unconditional so a survival shows up in the dump too -- otherwise there's
+        // no way to tell "the fix worked" from "this run's bomb never resolved".
+        DiagnosticLog.Info($"[AccelerationBomb] real={real} IsActing={player.IsActing} IsMoving={player.IsMoving} role={player.Role} pos=({player.Position.X:F1},{player.Position.Z:F1}).");
         // real (honest) -> must be still, die if acting; fake (lie) -> must move, die if still.
         if (real ? player.IsActing : !player.IsActing)
             player.Die(real ? "Moved during Acceleration Bomb"
@@ -228,7 +255,7 @@ public sealed class UmadP4KefkaSaysScenario : IScenario
         SimEnemy? neo_Exdeath_400041A4 = null;
         world.Events.Add(0f, () => neo_Exdeath_400041A4 = world.SpawnEnemy(new EnemySpawnConfig(BNpcBaseId: BNpcBaseId.NeoExdeath, NameId: BNpcNameId.NeoExdeath, Level: 100, Targetable: false, EnemyList: EnemyListMode.OnlyWhenVisible, IsVisible: false, Placement: new Placement(new Vector3(20.000f, 0.000f, 0.000f), -1.570f))));
         world.Events.Add(6.32f, () => neo_Exdeath_400041A4?.SetPosition(new Placement(new Vector3(14.142f, 0.000f, -14.142f), -0.785f)));
-        world.Events.Add(6.46f, () => neo_Exdeath_400041A4?.PlayActionTimeline(TimelineId.Spawn));
+        world.Events.Add(6.46f, () => neo_Exdeath_400041A4?.PlayAnimationTimeline(TimelineId.NeoExdeathShow));
         world.Events.Add(6.46f, () => neo_Exdeath_400041A4?.SetVisible(true));
         
         world.Events.Add(11.28f, () => neo_Exdeath_400041A4?.AddStatus(StatusId.KefkaLiesVfx, stacks: state.Wave1TrueVal, overrideStacks: true));
@@ -241,15 +268,15 @@ public sealed class UmadP4KefkaSaysScenario : IScenario
         world.Events.Add(41.26f, () => neo_Exdeath_400041A4?.Cast(ActionId.GrandCross));
         world.Events.Add(51.26f, () => neo_Exdeath_400041A4?.RemoveStatus(StatusId.KefkaLiesVfx));
         
-        world.Events.Add(53.28f, () => neo_Exdeath_400041A4?.PlayActionTimeline(TimelineId.WarpOut));
+        world.Events.Add(53.28f, () => neo_Exdeath_400041A4?.PlayAnimationTimeline(TimelineId.WarpOut));
         world.Events.Add(55.25f, () => neo_Exdeath_400041A4?.SetPosition(state.NeoExdeathDirection.Apply(new Placement(new Vector3(0, 0, -20), 0))));
-        world.Events.Add(55.58f, () => neo_Exdeath_400041A4?.PlayActionTimeline(TimelineId.Spawn));
+        world.Events.Add(55.58f, () => neo_Exdeath_400041A4?.PlayAnimationTimeline(TimelineId.NeoExdeathShow));
         
         world.Events.Add(57.30f, () => neo_Exdeath_400041A4?.AddStatus(StatusId.KefkaLiesVfx, stacks: state.Wave4TrueVal, overrideStacks: true));
         world.Events.Add(57.39f, () => neo_Exdeath_400041A4?.Cast(state.Antilights[0].ResolveFloodAction));
         world.Events.Add(63.39f, () => neo_Exdeath_400041A4?.RemoveStatus(StatusId.KefkaLiesVfx));
         
-        world.Events.Add(65.52f, () => neo_Exdeath_400041A4?.PlayActionTimeline(TimelineId.WarpOut));
+        world.Events.Add(65.52f, () => neo_Exdeath_400041A4?.PlayAnimationTimeline(TimelineId.WarpOut));
         world.Events.Add(65.52f, () => neo_Exdeath_400041A4?.SetVisible(false));
     }
 
@@ -258,7 +285,7 @@ public sealed class UmadP4KefkaSaysScenario : IScenario
         SimEnemy? chaos_400041A5 = null;
         world.Events.Add(0f, () => chaos_400041A5 = world.SpawnEnemy(new EnemySpawnConfig(BNpcBaseId: BNpcBaseId.Chaos, NameId: BNpcNameId.Chaos, Level: 100, Targetable: false, EnemyList: EnemyListMode.OnlyWhenVisible, IsVisible: false, Placement: new Placement(new Vector3(-18.000f, 0.000f, 0.000f), 1.570f))));
         world.Events.Add(6.37f, () => chaos_400041A5?.SetPosition(new Placement(new Vector3(-12.728f, 0.000f, -12.728f), 0.785f)));
-        world.Events.Add(6.46f, () => chaos_400041A5?.PlayActionTimeline(TimelineId.Spawn));
+        world.Events.Add(6.46f, () => chaos_400041A5?.PlayAnimationTimeline(TimelineId.Spawn));
         world.Events.Add(6.46f, () => chaos_400041A5?.SetVisible(true));
         
         world.Events.Add(16.42f, () => chaos_400041A5?.AddStatus(StatusId.KefkaLiesVfx, stacks: state.ChaosMysteries[0].StatusValue, overrideStacks: true));
@@ -268,7 +295,7 @@ public sealed class UmadP4KefkaSaysScenario : IScenario
         world.Events.Add(31.43f, () => chaos_400041A5?.Cast(state.ChaosMysteries[1].Cast.Action));
         world.Events.Add(41.43f, () => chaos_400041A5?.RemoveStatus(StatusId.KefkaLiesVfx));
         
-        world.Events.Add(43.49f, () => chaos_400041A5?.PlayActionTimeline(TimelineId.WarpOut));
+        world.Events.Add(43.49f, () => chaos_400041A5?.PlayAnimationTimeline(TimelineId.WarpOut));
     }
 
     private void Run_Kefka_400040E5_1()
@@ -430,9 +457,34 @@ public sealed class UmadP4KefkaSaysScenario : IScenario
             if (i < 2)
             {
                 world.Events.Add(104.29f, () => neo_Exdeath_400040E9_5?.SetPosition(state.Wave2.Get(shriekTargetId)!.Position));
-                world.Events.Add(104.39f, () => neo_Exdeath_400040E9_5?.Cast(ActionId.DeathShriek)); 
+                world.Events.Add(104.39f, () => neo_Exdeath_400040E9_5?.Cast(ActionId.DeathShriek));
                 world.Events.Add(104.39f, () => damage.ResolveGaze(state.Wave2.Get(shriekTargetId), lookAway: state.Wave2True));
             }
         }
+    }
+
+    public MpMessage? BuildReplayStateMessage()
+        => LastState is { } s ? new P4AiReplayStateMessage(
+            s.Mystery.Select(m => m.BlizzardOffset).ToArray(),
+            s.Mystery.Select(m => m.LightningOffset).ToArray(),
+            s.Mystery.Select(m => m.LightningOrientation).ToArray(),
+            s.Wave1First, s.Wave1.List, s.Wave1True,
+            s.Wave2.List, s.Wave2True,
+            s.InfernoMystery.IsTrue, s.TsunamiMystery.IsTrue,
+            s.Wave3.List, s.Wounds,
+            s.Antilights[0].Antilight == Antilight.White,
+            s.NeoExdeathDirection.RadiansFromNorth)
+        : null;
+
+    public object? StartReplay(MpMessage message, int aiIndex, PartyRole myRole, SimWorld replayWorld)
+    {
+        if (message is not P4AiReplayStateMessage msg) return null;
+        var shadowState = UmadP4KefkaSaysState.FromNetworkReplay(
+            replayWorld.Party, msg.MysteryBlizzardOffset, msg.MysteryLightningOffset, msg.MysteryLightningOrientation,
+            msg.Wave1First, msg.Wave1, msg.Wave1True, msg.Wave2, msg.Wave2True,
+            msg.InfernoIsTrue, msg.TsunamiIsTrue, msg.Wave3, msg.Wounds,
+            msg.Antilight0IsWhite, msg.NeoExdeathDirectionRadians);
+        ((IScenarioAi<UmadP4KefkaSaysState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
+        return shadowState;
     }
 }

@@ -8,10 +8,41 @@ namespace AnoMech.Scenarios.Umad;
 public sealed class UmadZone : IZone
 {
     public static readonly UmadZone Instance = new();
-    public static readonly Phase P2 = new(Instance, "P2", 79, 20292);
-    public static readonly Phase P3 = new(Instance, "P3", 174, 20293);
-    public static readonly Phase P4 = new(Instance, "P4", 174, 20293);
-    public static readonly Phase P5 = new(Instance, "P5", 175, 20294, InitP5Arena);
+
+    public static bool SuppressP1Scenery;
+
+    // Each slot's resting state as the real client holds it when the phase's scenarios start.
+    // Applied from the first frame, they land before the SGBs stream in, so nothing plays its
+    // transition. Deactivating the SharedGroups as well was tried: the engine re-activates them,
+    // a visible frame each time.
+    private static readonly ushort[] P1ArenaStates =
+    [
+        0x10, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1,
+        1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    ];
+    private static readonly ushort[] P2ArenaStates =
+    [
+        0x40, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1,
+        1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    ];
+    private static readonly ushort[] P3ArenaStates =
+    [
+        0x200, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1,
+        1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    ];
+    private static readonly ushort[] P5ArenaStates =
+    [
+        0x800, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1,
+        1, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4,
+    ];
+
+    // 77 is the zone-in weather between pulls; a pull switches to 78.
+    public const float P1Haze = 1000f;
+    public static readonly Phase P1 = new(Instance, "P1", 78, 20291, clientSetup: world => InitArena(world, P1ArenaStates, SuppressP1Scenery));
+    public static readonly Phase P2 = new(Instance, "P2", 79, 20292, clientSetup: world => InitArena(world, P2ArenaStates));
+    public static readonly Phase P3 = new(Instance, "P3", 174, 20293, clientSetup: world => InitArena(world, P3ArenaStates));
+    public static readonly Phase P4 = new(Instance, "P4", 174, 20293, clientSetup: world => InitArena(world, P3ArenaStates));
+    public static readonly Phase P5 = new(Instance, "P5", 175, 20294, clientSetup: world => InitArena(world, P5ArenaStates));
 
     public string Name => "Dancing Mad";
     public uint TerritoryId => 1363;
@@ -21,24 +52,20 @@ public sealed class UmadZone : IZone
     public IReadOnlyList<WaymarkLayout> WaymarkPresets => Waymarks;
     public IReadOnlyList<Vector3> ColliderRemovalPoints => [new(0f, 0f, -10f)];
 
-    public void Run(SimWorld world) => UmadReplayData.Seed();
+    public void Run(SimWorld world) { }
 
-    private static void InitP5Arena(SimWorld world) => world.Events.Add(1f, () =>
+    // Replay-derived RSV/RSF data the server would deliver in a real duty; peers need it too, or
+    // their BgParts point at unseeded paths and render black. Idempotent.
+    public void RunClientSetup(SimWorld world) => UmadReplayData.Seed();
+
+    // The state as both halves: the slot rests in it and plays it now, or once its SGB is ready.
+    private static void InitArena(SimWorld world, ushort[] states, bool suppressHidden = false) => world.Events.Add(0f, () =>
     {
-        var s = new ushort[0x24];
-        for (var i = 0; i < s.Length; i++) s[i] = 0x4; // base default (hide/empty)
-        s[0x11] = 0x1; s[0x12] = 0x1;                  // base lit holes
-        s[0x00] = 0x40;                                // P5
-        s[0x14] = 0x200;                               // P5 centerpiece ("nine holes")
-        for (var i = 0x15; i <= 0x1C; i++) s[i] = 0x1; // P5 nine holes
-        for (var i = 0x1D; i <= 0x21; i++) s[i] = 0x2; // P5 towers of rubble
-
-        for (byte slot = 0; slot < s.Length; slot++)
+        for (byte slot = 0; slot < states.Length; slot++)
         {
-            var state = s[slot];
-            var flags = (byte)(state & 0xFF);
-            if (flags == 0) flags = 0x01;              // 0x200: no action bit -> "show"
-            world.Map.AddEffect(((uint)state << 16) | flags, slot);
+            var state = states[slot];
+            world.Map.AddEffect(((uint)state << 16) | state, slot, broadcast: false);
+            if (suppressHidden && slot > 0 && state == 4) world.Map.SuppressArenaSlot(slot);
         }
     });
 

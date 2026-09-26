@@ -15,6 +15,7 @@ public sealed class UmadP4KefkaSaysSettingsWindow
         if (ImGui.Button("Auto")) ResetAll();
         if (SettingsGrid.Begin("##umadp4kefkasays"))
         {
+            SettingsGrid.FightOnlyNote();
 #if DEBUG
             DrawFirstBlizzard();
             DrawFirstLightning();

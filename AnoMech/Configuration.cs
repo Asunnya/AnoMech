@@ -1,5 +1,6 @@
 using Dalamud.Configuration;
 using System;
+using AnoMech.Network;
 
 namespace AnoMech;
 
@@ -17,6 +18,43 @@ public class Configuration : IPluginConfiguration
     public bool AutoCollapseWhileRunning { get; set; } = false;
     public string LastSelectedScenario { get; set; } = "";
 
+    // Multiplayer relay address (see Relay/README.md) -- remembered across
+    // sessions so the user only has to type it once.
+    public string RelayServerUrl { get; set; } = "";
+
+    // Optional shared secret some relays require to connect. Bound to the relay it was entered
+    // for (RelayTokenOrigin) and only ever sent there, so pointing the plugin at another relay
+    // can't hand it over; never logged.
+    public string RelayAccessToken { get; set; } = "";
+    public string RelayTokenOrigin { get; set; } = "";
+
+    public string TokenForRelay(string url)
+    {
+        // A password saved before it was tied to a relay belongs to the one saved alongside it.
+        if (RelayTokenOrigin.Length == 0 && RelayAccessToken.Length != 0) RelayTokenOrigin = OriginOf(RelayServerUrl);
+        var origin = OriginOf(url);
+        return origin.Length != 0 && origin == RelayTokenOrigin ? RelayAccessToken : "";
+    }
+
+    public static string OriginOf(string url)
+    {
+        try { return RelayWire.Origin(url); }
+        catch (Exception) { return ""; }
+    }
+
+    // Stable per-install multiplayer identity. Each relay gets a credential derived from it
+    // (RelayWire.RelayCredential); the relay turns that into the public id it stamps on
+    // everything we send, so nobody else can act as us. Reused across Host/Join so a peer who
+    // drops and rejoins the same session is the same player and keeps their role.
+    public string PeerSecret { get; set; } = "";
+
+    public string EnsurePeerSecret()
+    {
+        if (RelayWire.IsValidSecret(PeerSecret)) return PeerSecret;
+        PeerSecret = RelayWire.NewSecret();
+        Save();
+        return PeerSecret;
+    }
     // Resolve the player's own actions client-side, since the sim firewall blocks
     // the server responses that normally grant them. Sprint is always resolved;
     // this gates everything else (shared actions + per-job kits).

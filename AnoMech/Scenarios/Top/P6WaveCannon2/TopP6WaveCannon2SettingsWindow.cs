@@ -14,6 +14,7 @@ public sealed class TopP6WaveCannon2SettingsWindow
         if (ImGui.Button("Auto")) ResetAll();
         if (SettingsGrid.Begin("##p6wavecannon2"))
         {
+            SettingsGrid.FightOnlyNote();
             DrawCosmoArrow();
             SettingsGrid.End();
         }

@@ -7,6 +7,7 @@ using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
+using AnoMech.Multiplayer;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Network;
@@ -14,10 +15,11 @@ using static AnoMech.Scenarios.Uwu.UwuConstants;
 
 namespace AnoMech.Scenarios.Uwu.UltimateSuppression;
 
-public unsafe class UltimateSuppressionScenario : IScenario
+public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
 {
     public string Name => "Ultimate Suppression";
     public IPhase Phase => UwuZone.Ultima;
+    public bool SupportsMultiplayer => true;
     public IReadOnlyList<IScenarioAi> AiStrats => [new UltimateSuppressionAi()];
     public void DrawSettings() => settingsWindow.Draw();
 
@@ -26,8 +28,13 @@ public unsafe class UltimateSuppressionScenario : IScenario
     private SimWorld world = null!;
     private SimParty party = null!;
 
-    private UwuUtils utils = null!;
+    // Lazy off `world`: RunInstanceEvents runs for a peer, which never calls Run.
+    private UwuUtils? utilsInstance;
+    private UwuUtils utils => utilsInstance ??= new UwuUtils(world);
     private UltimateSuppressionState state = null!;
+
+    // Polled by the multiplayer host; null until Run has assigned roles.
+    public UltimateSuppressionState? LastState { get; private set; }
 
     private SimEnemy? ultima;
     private SimEnemy? garuda;
@@ -44,13 +51,26 @@ public unsafe class UltimateSuppressionScenario : IScenario
     private Stopwatch razorPlumesBack = new();
     private Dictionary<SimEnemy, Placement> razorPlumes = new();
 
+    // The arena reveal is fixed-time and independent of this run's randomization, so it belongs
+    // here: a peer never runs Run and would stay in the void.
+    public void RunInstanceEvents(SimWorld instanceWorld)
+    {
+        world = instanceWorld;
+        world.Events.Add(1, () =>
+        {
+            utils.UpdateArena(1);
+            utils.UpdateArena(2);
+        });
+        world.Events.Add(24.70f, () => utils.UpdateArena(4));
+    }
+
     public void Run(SimWorld world, int? selectedAi)
     {
         this.world = world;
         party = world.Party;
 
-        utils = new(world);
         state = new(party, settingsWindow.Overrides);
+        LastState = state;
 
         razorPlumesDamage = false;
         razorPlumesRotate.Reset();
@@ -244,13 +264,6 @@ public unsafe class UltimateSuppressionScenario : IScenario
             world.SpawnEventObject(config);
         });
 
-        world.Events.Add(1, () =>
-        {
-            utils.UpdateArena(1);
-            utils.UpdateArena(2);
-        });
-
-        world.Events.Add(24.70f, () => utils.UpdateArena(4));
     }
 
     private void Ultima()
@@ -895,5 +908,33 @@ public unsafe class UltimateSuppressionScenario : IScenario
         }
 
         return closest.Position;
+    }
+
+    public MpMessage? BuildReplayStateMessage()
+    {
+        if (LastState is not { } s) return null;
+        if (RoleOf(s.PlayerLightPillar) is not { } lightPillar || RoleOf(s.PlayerGaol) is not { } gaol
+            || RoleOf(s.PlayerFlamingCrush) is not { } flamingCrush) return null;
+        var mistralSongs = s.PlayerMistralSongs.Select(RoleOf).ToArray();
+        var eruptions = s.PlayerEruptions.Select(RoleOf).ToArray();
+        if (mistralSongs.Any(r => r is null) || eruptions.Any(r => r is null)) return null;
+        return new UltimateSuppressionAiReplayStateMessage(
+            lightPillar, mistralSongs.Select(r => r!.Value).ToArray(),
+            eruptions.Select(r => r!.Value).ToArray(), gaol, flamingCrush, s.SuppressionSpotOrder);
+    }
+
+    private static PartyRole? RoleOf(SimCharacter? member) => (member as ISimPartyMember)?.Role;
+
+    // The Ai drives AiManager, which ticks on a peer like any other scenario, so there is no
+    // replay clock of its own to keep.
+    public object? StartReplay(MpMessage message, int aiIndex, PartyRole myRole, SimWorld replayWorld)
+    {
+        if (message is not UltimateSuppressionAiReplayStateMessage msg || aiIndex < 0 || aiIndex >= AiStrats.Count) return null;
+        var shadowState = UltimateSuppressionState.FromNetworkReplay(
+            replayWorld.Party, msg.LightPillar, msg.MistralSongs, msg.Eruptions, msg.Gaol, msg.FlamingCrush,
+            msg.SuppressionSpotOrder);
+        if (shadowState == null) return null;
+        ((IScenarioAi<UltimateSuppressionState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
+        return shadowState;
     }
 }

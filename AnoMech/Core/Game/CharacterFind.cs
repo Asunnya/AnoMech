@@ -323,9 +323,12 @@ public sealed class CharacterFind<T> where T : IPositioned
 public readonly struct AoeQuery(uint actionId, Placement source,
     float omenRotate = 0f, float? size = null)
 {
+    public uint ActionId { get; } = actionId;
     public Placement Source { get; } = source;
+    public float OmenRotate { get; } = omenRotate;
+    public float? Size { get; } = size;
 
     public IReadOnlyList<T> Run<T>(CharacterFind<T> find) where T : IPositioned =>
-        find.InsideActionAoe(actionId, Source, omenRotate, size);
+        find.InsideActionAoe(ActionId, Source, OmenRotate, Size);
 }
 

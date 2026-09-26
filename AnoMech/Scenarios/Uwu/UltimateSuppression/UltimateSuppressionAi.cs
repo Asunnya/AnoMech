@@ -39,11 +39,9 @@ public class UltimateSuppressionAi : IScenarioAi<UltimateSuppressionState>
 
     private IAiMove SuppressionStart()
     {
-        const int SpotCount = 6;
-        var fraction = 90 / (SpotCount - 1);
-        var spots = Enumerable.Range(0, SpotCount)
+        var fraction = 90 / (UltimateSuppressionState.SuppressionSpots - 1);
+        var spots = state.SuppressionSpotOrder
             .Select(x => RotateSuppresionSpot(fraction * x))
-            .Shuffle()
             .ToArray();
 
         return AiMove.Create(

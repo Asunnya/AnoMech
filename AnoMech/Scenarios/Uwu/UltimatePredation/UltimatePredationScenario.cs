@@ -6,6 +6,8 @@ using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
+using AnoMech.Multiplayer;
+using AnoMech.Pointers;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -14,20 +16,28 @@ using static AnoMech.Scenarios.Uwu.UwuConstants;
 
 namespace AnoMech.Scenarios.Uwu.UltimatePredation;
 
-public class UltimatePredationScenario : IScenario
+public unsafe class UltimatePredationScenario : IMultiplayerReplayable
 {
     public string Name => "Ultimate Predation";
     public IPhase Phase => UwuZone.Ultima;
+    public bool SupportsMultiplayer => true;
     public IReadOnlyList<IScenarioAi> AiStrats => [new UltimatePredationAi()];
     public void DrawSettings() => settingsWindow.Draw();
+    public object SettingsOverrides => settingsWindow.Overrides;
 
     private readonly UltimatePredationSettingsWindow settingsWindow = new();
 
     private SimWorld world = null!;
     private SimParty party = null!;
 
-    private UwuUtils utils = null!;
+    // Lazy off `world`: RunInstanceEvents runs for a peer, which never calls Run.
+    private UwuUtils? utilsInstance;
+    private UwuUtils utils => utilsInstance ??= new UwuUtils(world);
     private UltimatePredationState state = null!;
+
+    // Exposed so MultiplayerManager can read the AI-relevant subset after a host Start and
+    // broadcast it -- see UmadP3BlackHoleScenario.LastState for the pattern.
+    public UltimatePredationState? LastState { get; private set; }
 
     private SimEnemy? ultima;
     private SimEnemy? garuda;
@@ -43,8 +53,12 @@ public class UltimatePredationScenario : IScenario
         this.world = world;
         party = world.Party;
 
-        utils = new(world);
         state = new(settingsWindow.Overrides);
+        LastState = state;
+        // Unconditional, before the optional bot-run below -- a debug-bot peer needs these
+        // resolved even when the host runs no bots itself (real players, selectedAi null).
+        // Idempotent against AiStrats[idx].Run also calling into the same resolution below.
+        new UltimatePredationAi().ResolveSafeSpots(state);
 
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UltimatePredationState>)AiStrats[idx]).Run(state, world);
@@ -59,6 +73,17 @@ public class UltimatePredationScenario : IScenario
         IfritPost();
         Titan();
         TitanPost();
+    }
+
+    // UwuUtils.UpdateArena is a fixed-time native call with no dependency on this run's
+    // randomized state -- same class as UmadP3BlackHoleScenario.RunInstanceEvents' replays. It
+    // has no broadcast wiring of its own, so leaving it in Run() left it host-only: it never
+    // revealed the arena for a peer, previously misdiagnosed as a native streaming race
+    // (LayoutId resolves null on the HOST too, despite the host's arena rendering fine).
+    public void RunInstanceEvents(SimWorld world)
+    {
+        this.world = world;
+        ArenaReveal();
     }
 
     private void Init()
@@ -150,19 +175,22 @@ public class UltimatePredationScenario : IScenario
         {
             var config = new EventObjectSpawnConfig
             {
-                EObjId = 2007457,
+                EObjId = EObjId.Arena,
                 Placement = new(new(0.16f, 0, 1.4434f), 0),
                 ObjectIndex = 1,
                 TargetableStatus = 5,
                 EntityId = 0x4000829C,
-                LayoutId = 7538913,
+                LayoutId = EObjId.ArenaLayoutId,
                 GimmickId = 7538258,
                 TimelineState = 1
             };
 
             world.SpawnEventObject(config);
         });
+    }
 
+    private void ArenaReveal()
+    {
         world.Events.Add(1, () => utils.UpdateArena(1));
 
         world.Events.Add(71.57f, () => utils.UpdateArena(2));
@@ -368,11 +396,7 @@ public class UltimatePredationScenario : IScenario
         world.Events.Add(69, () =>
         {
             // TODO: Use a proper Enmity system for this
-            Plugin.ChatGui.Print(new XivChatEntry
-            {
-                Type = XivChatType.SystemMessage,
-                Message = new SeStringBuilder().AddText($"[AnoMech] {Name}: Assuming Tank Swap").Build(),
-            });
+            world.Announce($"{Name}: Assuming Tank Swap");
 
             ultima?.SetTarget(ot);
         });
@@ -422,11 +446,7 @@ public class UltimatePredationScenario : IScenario
         world.Events.Add(77.34f, () =>
         {
             // TODO: Use a proper Enmity system for this
-            Plugin.ChatGui.Print(new XivChatEntry
-            {
-                Type = XivChatType.SystemMessage,
-                Message = new SeStringBuilder().AddText($"[AnoMech] {Name}: Assuming Tank Swap").Build(),
-            });
+            world.Announce($"{Name}: Assuming Tank Swap");
 
             ultima?.SetTarget(mt);
         });
@@ -1047,5 +1067,42 @@ public class UltimatePredationScenario : IScenario
         }
     }
 
-    
+    public MpMessage? BuildReplayStateMessage()
+    {
+        if (LastState is not { } s) return null;
+        // ResolveSafeSpots (called unconditionally in Run, before this can ever be polled)
+        // guarantees these three are set.
+        if (s.ResolvedSafeCardinal is not { } safeCardinal
+            || s.ResolvedSafeFirstSet is not { } safeFirstSet
+            || s.ResolvedSafeSecondSet is not { } safeSecondSet) return null;
+        return new UltimatePredationAiReplayStateMessage(
+            s.GarudaPlacement.Position.X, s.GarudaPlacement.Position.Y, s.GarudaPlacement.Position.Z, s.GarudaPlacement.Rotation,
+            s.TitanPlacement.Position.X, s.TitanPlacement.Position.Y, s.TitanPlacement.Position.Z, s.TitanPlacement.Rotation,
+            s.IfritPlacement.Position.X, s.IfritPlacement.Position.Y, s.IfritPlacement.Position.Z, s.IfritPlacement.Rotation,
+            s.UltimaPlacement.Position.X, s.UltimaPlacement.Position.Y, s.UltimaPlacement.Position.Z, s.UltimaPlacement.Rotation,
+            safeCardinal.Position.X, safeCardinal.Position.Y, safeCardinal.Position.Z, safeCardinal.Rotation,
+            safeFirstSet.Position.X, safeFirstSet.Position.Y, safeFirstSet.Position.Z, safeFirstSet.Rotation,
+            safeSecondSet.Position.X, safeSecondSet.Position.Y, safeSecondSet.Position.Z, safeSecondSet.Rotation);
+    }
+
+    public object? StartReplay(MpMessage message, int aiIndex, PartyRole myRole, SimWorld replayWorld)
+    {
+        if (message is not UltimatePredationAiReplayStateMessage msg) return null;
+        var shadowState = UltimatePredationState.FromNetworkReplay(
+            new Placement(new Vector3(msg.GarudaX, msg.GarudaY, msg.GarudaZ), msg.GarudaRotation),
+            new Placement(new Vector3(msg.TitanX, msg.TitanY, msg.TitanZ), msg.TitanRotation),
+            new Placement(new Vector3(msg.IfritX, msg.IfritY, msg.IfritZ), msg.IfritRotation),
+            new Placement(new Vector3(msg.UltimaX, msg.UltimaY, msg.UltimaZ), msg.UltimaRotation));
+        shadowState.ResolvedSafeCardinal = new Placement(new Vector3(msg.SafeCardinalX, msg.SafeCardinalY, msg.SafeCardinalZ), msg.SafeCardinalRotation);
+        shadowState.ResolvedSafeFirstSet = new Placement(new Vector3(msg.SafeFirstSetX, msg.SafeFirstSetY, msg.SafeFirstSetZ), msg.SafeFirstSetRotation);
+        shadowState.ResolvedSafeSecondSet = new Placement(new Vector3(msg.SafeSecondSetX, msg.SafeSecondSetY, msg.SafeSecondSetZ), msg.SafeSecondSetRotation);
+        ((IScenarioAi<UltimatePredationState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
+        return shadowState;
+    }
+
+    public void RefreshLiveHandles(object shadowStateObj, IReadOnlyDictionary<int, SimEnemy> peerEnemies)
+    {
+        if (shadowStateObj is not UltimatePredationState shadowState) return;
+        shadowState.ScenarioObjects.Titan ??= peerEnemies.Values.FirstOrDefault(e => e.BNpcBaseId == BNpcBaseId.Titan);
+    }
 }

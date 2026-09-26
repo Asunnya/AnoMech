@@ -33,15 +33,12 @@ public sealed class UmadP5CelestriadAi : IScenarioAi<UmadP5CelestriadState>
 
     public void Run(UmadP5CelestriadState state, SimWorld world)
     {
-        var party = world.Party;
-        var playerSlot = (int)party.PlayerRole;
-
         for (var set = 0; set < 3; set++)
         {
             var s = set;
-            world.Events.Add(CelestriadTiming.TowerStart[s] + MoveDelay, () => PlaceSet(world, state, s, playerSlot, half: 0f));
+            world.Events.Add(CelestriadTiming.TowerStart[s] + MoveDelay, () => PlaceSet(world, state, s, half: 0f));
             if (CelestriadTiming.CcAt[s] is { } cc)
-                world.Events.Add(cc + ChoiceReadDelay, () => PlaceSet(world, state, s, playerSlot, HalfFor(state, s)));
+                world.Events.Add(cc + ChoiceReadDelay, () => PlaceSet(world, state, s, HalfFor(state, s)));
         }
     }
 
@@ -50,7 +47,7 @@ public sealed class UmadP5CelestriadAi : IScenarioAi<UmadP5CelestriadState>
             ? (choice == CatastrophicChoice.Aero ? -1f : 1f)
             : 0f;
 
-    private static void PlaceSet(SimWorld world, UmadP5CelestriadState state, int set, int playerSlot, float half)
+    private static void PlaceSet(SimWorld world, UmadP5CelestriadState state, int set, float half)
     {
         var party = world.Party;
         var freeRoles = state.PlayerDebuffElement.Where(kv => kv.Value is null).Select(kv => kv.Key).ToArray();
@@ -70,18 +67,17 @@ public sealed class UmadP5CelestriadAi : IScenarioAi<UmadP5CelestriadState>
 
             var towers = group.ToArray();
             for (var i = 0; i < towers.Length; i++)
-                PlaceAtTower(party, towers[i], i == 0 ? debuffedRoles : freeRoles, playerSlot, half);
+                PlaceAtTower(party, towers[i], i == 0 ? debuffedRoles : freeRoles, half);
         }
     }
 
-    private static void PlaceAtTower(SimParty party, CelestriadTower tower, IReadOnlyList<PartyRole> roles, int playerSlot, float half)
+    private static void PlaceAtTower(SimParty party, CelestriadTower tower, IReadOnlyList<PartyRole> roles, float half)
     {
         var inward = Vector3.Normalize(-tower.Position);
         var lateral = new Vector3(-inward.Z, 0f, inward.X);
 
         for (var i = 0; i < roles.Count; i++)
         {
-            if ((int)roles[i] == playerSlot) continue;
             var bot = party.Get(roles[i]);
             if (bot is null || !bot.IsAlive()) continue;
 

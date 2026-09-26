@@ -16,22 +16,27 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
+using AnoMech.Multiplayer;
 using AnoMech.Scenarios.Umad.P2Forsaken.Ai;
 using static AnoMech.Scenarios.Umad.UmadConstants;
 
 namespace AnoMech.Scenarios.Umad.P2Forsaken;
 
-public sealed class UmadP2ForsakenScenario : IScenario
+public sealed class UmadP2ForsakenScenario : IMultiplayerReplayable
 {
     public string Name => "Forsaken";
     public IPhase Phase => UmadZone.P2;
+    public bool SupportsMultiplayer => true;
+    public uint? TankMaxHealth => Tunables.RealTankMaxHealth;
 
     public void DrawSettings() => settingsWindow.Draw();
+    public object SettingsOverrides => settingsWindow.Overrides;
     private readonly UmadP2ForsakenSettingsWindow settingsWindow = new();
 
     public IReadOnlyList<IScenarioAi> AiStrats =>
@@ -54,12 +59,22 @@ public sealed class UmadP2ForsakenScenario : IScenario
     private SimParty party = null!;
     private DamageSolver damage = null!;
 
+    // The current run's randomized per-run assignments, exposed so
+    // MultiplayerManager can read them after a host Start and broadcast them --
+    // lets a peer's local "debug: bot controls my character" mode replay the
+    // same choreography a host-side bot in that role would produce. Mirrors
+    // UmadP3BlackHoleScenario.LastState.
+    public UmadP2ForsakenState? LastState { get; private set; }
+
+    // Edge-triggers BuildMidRunUpdateMessage -- see IMultiplayerReplayable.BuildMidRunUpdateMessage.
+    private string? lastBroadcastLockonsKey;
 
     public void Run(SimWorld worldParam, int? selectedAi)
     {
         world = worldParam;
         party = worldParam.Party;
         state = new UmadP2ForsakenState(party, settingsWindow.Overrides);
+        LastState = state;
         if (selectedAi is { } idx && idx >= 0 && idx < AiStrats.Count)
             ((IScenarioAi<UmadP2ForsakenState>)AiStrats[idx]).Run(state, world);
         damage = new DamageSolver(party);
@@ -78,18 +93,11 @@ public sealed class UmadP2ForsakenScenario : IScenario
     {
         
         world.Events.Add(timeBase, () => world.Map.AddEffect(packetFlags: 0x00020001U, index: (byte)(direction.Index() + 1)));
-        world.Events.Add(timeBase + 3f, () => world.Map.AddEffect(packetFlags: 0x00020008U, index: (byte)(direction.Index() + 1)));
+        world.Events.Add(timeBase + 3f, () => world.Map.AddEffect(packetFlags: 0x00080004U, index: (byte)(direction.Index() + 1)));
     }
     
     private void Run_InstanceEvents()
     {
-        
-        world.Events.Add(1f, () =>
-        {
-            for (int i = 0; i < 8; i++)
-                world.Map.AddEffect(packetFlags: 0x00000004U, index: (byte)(i + 1));
-        });
-        world.Events.Add(1f, () => world.Map.AddEffect(packetFlags: 0x00080004U, index: (byte)0x00));
         world.Events.Add(2.37f, () => world.Map.AddEffect(packetFlags: 0x00080004U, index: (byte)0x11));
         world.Events.Add(9.43f, () => world.Map.AddEffect(packetFlags: 0x00020001U, index: (byte)0x11));
         world.Events.Add(11.04f, () => world.Map.AddEffect(packetFlags: 0x00040001U, index: (byte)0x12));
@@ -251,7 +259,7 @@ public sealed class UmadP2ForsakenScenario : IScenario
                s += $"{role}=0,";
            }
        }
-       Plugin.Log.Info($"Lockons reassignment {s}");
+       DiagnosticLog.Info($"Lockons reassignment {s}");
     }
     
     private void ResolveTower(SimCharacter character, int index)
@@ -264,7 +272,7 @@ public sealed class UmadP2ForsakenScenario : IScenario
         world.Events.Add(0.5f, () =>
         {
             if (towerHelper[index]?.Placement() != position)
-                Plugin.Log.Warning($"tower helper position changed from {position} to {towerHelper[index]?.Placement()}");
+                DiagnosticLog.Warn($"tower helper position changed from {position} to {towerHelper[index]?.Placement()}");
             towerHelper[index]?.SetPosition(position);
             switch (lockon)
             {
@@ -323,7 +331,7 @@ public sealed class UmadP2ForsakenScenario : IScenario
         world.Events.Add(start + 6f, () => enemy?.Face(party.Player));
         world.Events.Add(start + 6.1f, () => enemy?.Cast(end.AllThingsEnding, targetLocation: party.Player!.Position));
         world.Events.Add(start + 11.1f, () => damage.Resolve(enemy, end.AllThingsEnding, [DamageType.Lethal], [], size: Geometry.AllThingsEndHalfCone, coneRotationDelta: end.RotationOverride));
-        world.Events.Add(start + 14.1f, () => enemy?.PlayActionTimeline(TimelineId.WarpOut));
+        world.Events.Add(start + 14.1f, () => enemy?.PlayAnimationTimeline(TimelineId.WarpOut));
     }
 
     
@@ -337,5 +345,32 @@ public sealed class UmadP2ForsakenScenario : IScenario
             RunCloneEndAttack(kefka_40004FD0, 74.24f, 2, i);
             RunCloneEndAttack(kefka_40004FD0, 95.06f, 3, i);
         }
+    }
+
+    public MpMessage? BuildReplayStateMessage()
+        => LastState is { } s ? new P2AiReplayStateMessage(s.EndAttacks, s.NewNorth.RadiansFromNorth, s.Rotation, s.Lockons) : null;
+
+    public object? StartReplay(MpMessage message, int aiIndex, PartyRole myRole, SimWorld replayWorld)
+    {
+        if (message is not P2AiReplayStateMessage msg) return null;
+        var shadowState = UmadP2ForsakenState.FromNetworkReplay(msg.EndAttacks, msg.NewNorthRadians, msg.Rotation, msg.Lockons);
+        ((IScenarioAi<UmadP2ForsakenState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
+        return shadowState;
+    }
+
+    public MpMessage? BuildMidRunUpdateMessage()
+    {
+        if (LastState is not { } s) return null;
+        var lockonsKey = string.Join(",", s.Lockons.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value}"));
+        if (lastBroadcastLockonsKey == lockonsKey) return null;
+        lastBroadcastLockonsKey = lockonsKey;
+        DiagnosticLog.Info($"[Multiplayer] Host: broadcasting P2 Lockons update -- [{lockonsKey}].");
+        return new P2LockonsUpdateMessage(new Dictionary<PartyRole, uint>(s.Lockons));
+    }
+
+    public void ApplyMidRunUpdate(object shadowStateObj, MpMessage message)
+    {
+        if (shadowStateObj is UmadP2ForsakenState shadowState && message is P2LockonsUpdateMessage update)
+            shadowState.Lockons = update.Lockons;
     }
 }

@@ -68,7 +68,7 @@ public sealed class UcobP5ExaflaresAi : IScenarioAi<UcobP5ExaflaresState>
         if (live.Count == 0) return;
 
         var taken = new List<Vector3>(8);
-        foreach (var (slot, bot) in BotsMostAtRiskFirst(now, live))
+        foreach (var (slot, bot) in SlotsMostAtRiskFirst(now, live))
         {
             var from = bot.Position;
 
@@ -156,16 +156,12 @@ public sealed class UcobP5ExaflaresAi : IScenarioAi<UcobP5ExaflaresState>
     private IReadOnlyList<ExaflareHit> TelegraphedHitsWithin(float now, float horizon) =>
         state.Hits.Where(h => h.KnownAt <= now && h.Time > now && h.Time <= now + horizon).ToList();
 
-    private IEnumerable<(int Slot, SimCharacter Bot)> BotsMostAtRiskFirst(float now, IReadOnlyList<ExaflareHit> threats)
+    private IEnumerable<(int Slot, SimCharacter Bot)> SlotsMostAtRiskFirst(float now, IReadOnlyList<ExaflareHit> threats)
     {
-        var playerSlot = (int)world.Party.PlayerRole;
-        var bots = new List<(int, SimCharacter)>(7);
+        var slots = new List<(int, SimCharacter)>(8);
         for (var slot = 0; slot < 8; slot++)
-        {
-            if (slot == playerSlot) continue;
-            if (world.Party.Get(slot) is { } bot && bot.IsAlive()) bots.Add((slot, bot));
-        }
-        return bots.OrderBy(b => RouteClearance(b.Item2.Position, b.Item2.Position, now, threats)).ToList();
+            if (world.Party.Get(slot) is { } member && member.IsAlive()) slots.Add((slot, member));
+        return slots.OrderBy(b => RouteClearance(b.Item2.Position, b.Item2.Position, now, threats)).ToList();
     }
 
     private static bool IsRouteSafe(Vector3 from, Vector3 to, float now, IReadOnlyList<ExaflareHit> threats) =>

@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game.Party;
@@ -34,6 +35,15 @@ namespace AnoMech.Scenarios.Top.P5Sigma
 
         public RoleList HelloWorldTargets { get; }
 
+        // Resolved once here (not live inside TopP5SigmaAi.Run) -- see RoleList.Random(Rng, ...)'s
+        // doc comment for why a live pick there would let a peer's own bot-controlled replay
+        // choose different hand-bait targets than the host's bots did.
+        public RoleList HandBait { get; }
+
+        // The other four, in the order TopP5SigmaAi marks and places them; resolved here for the
+        // same reason as HandBait.
+        public RoleList HelloWorldJumpOrder { get; }
+
         public readonly Tower?[] Towers;
 
         public int FirstMissing;
@@ -45,7 +55,7 @@ namespace AnoMech.Scenarios.Top.P5Sigma
             DynamisTargets = new RoleListBuilder
             {
                 Size = 6,
-                IncludePlayer = overrides.Dynamis,
+                Membership = overrides.ResolveDynamis(party.PlayerRole),
             }.Build(party);
             WaveCannonTargets = SelectWaveCannonTargets(Order);
 
@@ -56,24 +66,62 @@ namespace AnoMech.Scenarios.Top.P5Sigma
             SpinnerRotation = overrides.SpinnerRotation ?? rng.NextObj(Rotation.Clockwise, Rotation.CounterClockwise);
             OmegaFAttack = overrides.OmegaFForm ?? rng.NextObj(OmegaAttack.Legs, OmegaAttack.Staff);
 
-            HelloWorldTargets = new RoleListBuilder()
+            var (helloSlots, helloMembership) = overrides.ResolveHelloWorld(party.PlayerRole);
+            HelloWorldTargets = new RoleListBuilder
             {
                 Size = 2,
-                ForcePlayerIndex = overrides.HelloWorld switch
-                {
-                    HelloWorldOption.Near => [0], HelloWorldOption.Far => [1], _ => []
-                },
-                IncludePlayer = overrides.HelloWorld switch { HelloWorldOption.No => false, _ => null }
+                Slots = helloSlots,
+                Membership = helloMembership,
             }.Build(party);
+
+            HandBait = DynamisTargets.Random(rng, 2, HelloWorldTargets.List);
+            HelloWorldJumpOrder = new RoleList(party, Enum.GetValues<PartyRole>())
+                .Random(rng, 4, HelloWorldTargets.List.Concat(HandBait.List).ToArray());
 
             Towers = (GlitchType == GlitchType.Mid ? MidGlitchTowers : FarGlitchTowers)
                      .Select(t => t == null ? t : t with { Position = AdjustedNorthA.Apply(t.Position) })
                      .ToArray();
         }
 
+        // Network-replay constructor: reconstructs the fields TopP5SigmaAi reads.
+        // WaveCannonTargets/Towers are harmless placeholders -- only the scenario's own
+        // host-only resolution reads them. GlitchType/OmegaAttack/Rotation aren't
+        // JSON-serializable in a reconstructible way, so which named static instance was
+        // chosen is carried as a bool.
+        private TopP5SigmaState(
+            SimParty party, PartyRole[] order, PartyRole[] dynamisTargets, PartyRole[] helloWorldTargets,
+            PartyRole[] handBait, PartyRole[] helloWorldJumpOrder, float newNorthARadians, float newNorthBRadians,
+            bool towerNorthFlipped, bool glitchIsFar, bool spinnerIsClockwise, bool omegaFIsStaff, int firstMissing,
+            int secondMissing)
+        {
+            Order = new RoleList(party, order);
+            WaveCannonTargets = RoleList.Empty();
+            DynamisTargets = new RoleList(party, dynamisTargets);
+            GlitchType = glitchIsFar ? GlitchType.Far : GlitchType.Mid;
+            NewNorthA = new Direction(newNorthARadians);
+            NewNorthB = new Direction(newNorthBRadians);
+            TowerNorthFlipped = towerNorthFlipped;
+            SpinnerRotation = spinnerIsClockwise ? Rotation.Clockwise : Rotation.CounterClockwise;
+            OmegaFAttack = omegaFIsStaff ? OmegaAttack.Staff : OmegaAttack.Legs;
+            HelloWorldTargets = new RoleList(party, helloWorldTargets);
+            HandBait = new RoleList(party, handBait);
+            HelloWorldJumpOrder = new RoleList(party, helloWorldJumpOrder);
+            Towers = [];
+            FirstMissing = firstMissing;
+            SecondMissing = secondMissing;
+        }
 
-        // MidGlitch: 6 towers on the 22.5°-offset inner ring at radius 17.
-        // Extracted from TOP_pull_05_clear.log (01:23:34.933), rotated so the two
+        public static TopP5SigmaState FromNetworkReplay(
+            SimParty party, PartyRole[] order, PartyRole[] dynamisTargets, PartyRole[] helloWorldTargets,
+            PartyRole[] handBait, PartyRole[] helloWorldJumpOrder, float newNorthARadians, float newNorthBRadians,
+            bool towerNorthFlipped, bool glitchIsFar, bool spinnerIsClockwise, bool omegaFIsStaff, int firstMissing,
+            int secondMissing)
+            => new(party, order, dynamisTargets, helloWorldTargets, handBait, helloWorldJumpOrder, newNorthARadians,
+                   newNorthBRadians, towerNorthFlipped, glitchIsFar, spinnerIsClockwise, omegaFIsStaff, firstMissing,
+                   secondMissing);
+
+
+        // MidGlitch: 6 towers on the 22.5°-offset inner ring at radius 17, rotated so the two
         // adjacent SOLOs frame compass N (bossmod-canonical: relNorth → N).
         // N half holds only the two SOLOs; S half going E→W is PAIR, SOLO, SOLO, PAIR.
         // 15.706 = 17·cos 22.5°, 6.506 = 17·sin 22.5°.
@@ -87,11 +135,10 @@ namespace AnoMech.Scenarios.Top.P5Sigma
             new(new Vector3(-6.506f, 0f, +15.706f), MinPlayers: 1), // SOLO SSW (202.5°)
         };
 
-        // FarGlitch: 5 towers — derived from bossmod P5Sigma.cs (apex pair at rel N,
-        // base pairs at rel SE/SW, solos at rel W/E). Rotated so the alone (apex)
-        // pair-tower is at compass N. Radius 17 assumed to match MidGlitch; positions
-        // on true cardinals/intercardinals. NOT verified against a log — no
-        // FarGlitch Sigma pull in the available logs reached tower spawn.
+        // FarGlitch: 5 towers, following bossmod P5Sigma.cs (apex pair at rel N, base pairs at
+        // rel SE/SW, solos at rel W/E), rotated so the apex pair-tower is at compass N.
+        // UNVERIFIED: radius 17 is assumed to match MidGlitch and the positions are placed on
+        // true cardinals/intercardinals. Neither is observed; treat both as guesses.
         // 12.021 = 17/√2.
         private static readonly Tower?[] FarGlitchTowers =
         {

@@ -1,12 +1,25 @@
 using AnoMech.Core.Game;
+using AnoMech.Core.Native;
 using AnoMech.Helpers;
 using AnoMech.Pointers;
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
 using FFXIVClientStructs.FFXIV.Client.Game.Network;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.Network;
+using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using System.Numerics;
 
 namespace AnoMech.Core.SimObjects;
+
+// How an EObj animation beat (the server's ActorControl category 413, param1/param2) reaches
+// the client. ActorControl feeds the real packet through the client's own dispatcher; the
+// other two are the FFXIVClientStructs member functions guessed to be that handler.
+public enum PropBeatMode
+{
+    ActorControl,
+    PlayAnimation,
+    SetSharedTimelineState,
+}
 
 public class EventObjectSpawnConfig
 {
@@ -30,6 +43,9 @@ public class EventObjectSpawnConfig
     public float Radius { get; init; } = 1;
     public ushort FateId { get; init; } = 0;
     public byte EventState { get; init; } = 0;
+    // SpawnObjectPacket +0x30; the real EObj spawns carry 3 in the low byte plus a per-object
+    // index in the high word.
+    public uint Arg2 { get; init; } = 0;
 
     // This is the SG state index that means "visible" for this EObj.
     // The orb (1EB83C) is already visible at the engine default state=0, so leave it at 0.
@@ -39,6 +55,17 @@ public class EventObjectSpawnConfig
 
     public bool SpawnVisible { get; init; } = true;
     public float Lifetime { get; init; } = 0;
+
+    // Deactivate the SGB Sound children every frame: the P1 gaze props' timeline keeps
+    // re-triggering statue/Kefka voice cues.
+    public bool MuteSound { get; init; } = false;
+
+    // Debug aid (see LayoutInstanceDiagnostics.ForceActive): force the SharedGroup active once
+    // attached and after every beat.
+    public bool ForceSharedGroupActive { get; init; } = false;
+
+    // For a prop whose SGB has no timeline for that state (the teleporters).
+    public ushort HideAtState { get; init; } = 0;
 
     public unsafe SpawnObjectPacket ToPacket(Coordinates coordinates)
     {
@@ -61,6 +88,7 @@ public class EventObjectSpawnConfig
             Rotation = MathUtil.QuantizeRotation(Placement.Rotation),
             FateId = FateId,
             EventState = EventState,
+            Arg2 = Arg2,
             PositionX = worldPos.X,
             PositionY = worldPos.Y,
             PositionZ = worldPos.Z
@@ -97,14 +125,28 @@ public unsafe class SimEventObject : ISimObject, IPositioned
     private readonly Coordinates coordinates;
     private readonly ushort visibleState;
     private readonly float lifetime;
+    private readonly uint layoutId;
+
+    // The SharedGroup behind LayoutId can stay mid-load after the C#-visible state already
+    // looks correct; logged at fixed checkpoints.
+    private int loadCheckFrames;
+    private bool loadCheckDone;
 
     public uint EObjRowId { get; }
     public string DisplayName => $"EObj 0x{EObjRowId:X}";
+
+    // Lets a peer reconstruct the same prop (SimTower has none: a tower's states drive it).
+    public EventObjectSpawnConfig? SpawnConfig { get; private set; }
     public int Slot => slot;
     public nint Address => (nint)obj;
     public GameObjectId GameObjectId => obj == null ? default : obj->GetGameObjectId();
 
     public bool IsAlive => slot >= 0 && obj != null;
+
+    // The SharedGroup attaches ~1s after the spawn; a beat before that only writes the static
+    // state and runs no SGB timeline.
+    public bool IsSharedGroupAttached => obj != null && ((EventObject*)obj)->SharedGroupLayoutInstance != null;
+    public bool IsSharedGroupTimelinePlaying => obj != null && LayoutInstanceDiagnostics.IsAnyTimelinePlaying(((EventObject*)obj)->SharedGroupLayoutInstance);
     // No death-vs-presence distinction for event objects: kept while the slot is live.
     public virtual bool IsActive => IsAlive;
 
@@ -113,16 +155,40 @@ public unsafe class SimEventObject : ISimObject, IPositioned
     public Vector3 Position { get; private set; }
     public float Rotation { get; private set; }
 
+    // Sampled for peers alongside CurrentState.
+    public ushort VisibleState => visibleState;
+
+    // Sampled for peers; 0 would attach the wrong SharedGroup.
+    public uint LayoutId => layoutId;
+
+    // Sampled for peers: the state write at actor+0x1B2 has no other observable signal.
+    public ushort CurrentState { get; private set; }
+
     private float lifetimeElapsed { get; set; } = 0;
 
-    protected SimEventObject(int slot, GameObject* obj, Coordinates coordinates, uint eObjRowId, ushort visibleState, float lifetime)
+    // Settable: the colossus is muted while its state history is caught up and unmuted once it
+    // stands, so its real collapse sounds play.
+    public bool MuteSound { get; set; }
+    private readonly bool forceSharedGroupActive;
+    private bool forceActiveLogged;
+    // Delayed SG dumps after PlayAnimation (-1 = none pending); the synchronous one only shows
+    // the timeline's first frame.
+    private int animCheckFrames = -1;
+
+    protected SimEventObject(int slot, GameObject* obj, Coordinates coordinates, uint eObjRowId, ushort visibleState, float lifetime, uint layoutId, bool muteSound = false, bool forceSharedGroupActive = false)
     {
         this.slot = slot;
         this.obj = obj;
         this.coordinates = coordinates;
         this.visibleState = visibleState;
         this.lifetime = lifetime;
+        this.layoutId = layoutId;
+        MuteSound = muteSound;
+        this.forceSharedGroupActive = forceSharedGroupActive;
         EObjRowId = eObjRowId;
+        // Without a LayoutId the checkpoints read the actor's own attached SharedGroup; a bare
+        // EObj (no LayoutId, state 0) has nothing state-gated to check.
+        loadCheckDone = layoutId == 0 && visibleState == 0;
     }
 
     internal static SimEventObject? Spawn(EventObjectSpawnConfig config, Coordinates coordinates, EventScheduler events)
@@ -131,17 +197,23 @@ public unsafe class SimEventObject : ISimObject, IPositioned
 
         if (!EventObjectHelper.Create(&packet, out var slot, out var eObjPtr))
         {
+            // A full 40-slot EventObjectManager pool (EObjs left over from an earlier run, or
+            // the zone's own) is the usual cause.
+            DiagnosticLog.Warn($"[SimEventObject.Create] Failed to spawn EObjId 0x{config.EObjId:X} at ({packet.PositionX:F2}, {packet.PositionY:F2}, {packet.PositionZ:F2}) -- EventObjectManager's 40-slot pool is likely full.");
             return null;
         }
 
-        var eObj = new SimEventObject(slot, eObjPtr, coordinates, config.EObjId, config.TimelineState, config.Lifetime);
+        var eObj = new SimEventObject(slot, eObjPtr, coordinates, config.EObjId, config.TimelineState, config.Lifetime, config.LayoutId, config.MuteSound, config.ForceSharedGroupActive)
+        {
+            SpawnConfig = config,
+        };
 
         if (!config.SpawnVisible && config.TimelineState != 0)
         {
             eObj.SetVisible(false);
         }
 
-        Plugin.Log.Info($"[SimEventObject.Create] Spawned EObj with EObjId 0x{config.EObjId:X} at Slot: {slot} ({packet.PositionX:F2}, {packet.PositionY:F2}, {packet.PositionZ:F2})");
+        DiagnosticLog.Info($"[SimEventObject.Create] Spawned EObj with EObjId 0x{config.EObjId:X} at Slot: {slot} ({packet.PositionX:F2}, {packet.PositionY:F2}, {packet.PositionZ:F2})");
         return eObj;
     }
 
@@ -172,6 +244,7 @@ public unsafe class SimEventObject : ISimObject, IPositioned
     public void SetState(ushort state)
     {
         if (obj == null) return;
+        CurrentState = state;
         EventObjectHelper.SetState(obj, state);
     }
 
@@ -179,6 +252,114 @@ public unsafe class SimEventObject : ISimObject, IPositioned
     // ACT 261|Change ModelStatus events. Flips between the configured
     // VisibleState and 0 (the engine default / "hidden" for gated SGs).
     public void SetVisible(bool visible) => SetState(visible ? visibleState : (ushort)0);
+
+    // Edge-tracked like SimEnemy.AnimationState, and sampled for peers: LastBeatMode so a peer
+    // delivers the beat the same way the host chose to.
+    public (uint State, uint Bitmask)? LastAnimation { get; private set; }
+    public int AnimationSeq { get; private set; }
+    public PropBeatMode LastBeatMode { get; private set; } = PropBeatMode.ActorControl;
+
+    // ActorControl 607 has no state of its own to sample, so peers follow the counter.
+    public int FadeOutSeq { get; private set; }
+
+    // Client-side equivalent of ActorControl 413 (EObjAnimation): `state` becomes the new
+    // SharedTimelineState, `bitmask` picks which SG timelines play. No-ops before the SG
+    // instance is attached; the engine re-applies once it loads.
+    public void PlayAnimation(uint state, uint bitmask) => PlayBeat(state, bitmask, PropBeatMode.PlayAnimation);
+
+    // ActorControl 607 (self, 1, 0, 100): the prop fades out, as sent to spent boulders and
+    // resolved crystals.
+    public void FadeOut()
+    {
+        FadeOutSeq++;
+        if (obj == null) return;
+        PacketDispatcher.HandleActorControlPacket(obj->EntityId, 607, obj->EntityId, 1, 0, 100, 0, 0, 0, 0, 0xE0000000, false);
+    }
+
+    public uint LastDirectorState { get; private set; }
+    public int DirectorModSeq { get; private set; }
+
+    public void DirectorEObjMod(uint state)
+    {
+        LastDirectorState = state;
+        DirectorModSeq++;
+        if (obj == null) return;
+        var eo = (EventObject*)obj;
+        var before = eo->SharedTimelineState;
+        PacketDispatcher.HandleActorControlPacket(obj->EntityId, 106, state, 0, 0, 0, 0, 0, 0, 0, 0xE0000000, false);
+        animCheckFrames = 0;
+        if (MuteSound) Native.LayoutInstanceDiagnostics.SilenceSounds(eo->SharedGroupLayoutInstance);
+        DiagnosticLog.Info(
+            $"[SimEventObject] {DisplayName} DirectorEObjMod({state}) entity=0x{obj->EntityId:X} EventId=0x{(uint)obj->EventId:X}: "
+            + $"SharedTimelineState 0x{before:X} -> 0x{eo->SharedTimelineState:X} -- SG: {LayoutInstanceDiagnostics.Describe(eo->SharedGroupLayoutInstance)}");
+    }
+
+    public void PlayBeat(uint state, uint bitmask, PropBeatMode mode)
+    {
+        LastAnimation = (state, bitmask);
+        LastBeatMode = mode;
+        AnimationSeq++;
+        if (obj == null) return;
+        CurrentState = (ushort)state;
+        var eo = (EventObject*)obj;
+        try
+        {
+            switch (mode)
+            {
+                case PropBeatMode.ActorControl:
+                    // Category 413 through the client's own dispatcher.
+                    PacketDispatcher.HandleActorControlPacket(obj->EntityId, 413, state, bitmask, 0, 0, 0, 0, 0, 0, 0xE0000000, false);
+                    break;
+                case PropBeatMode.SetSharedTimelineState:
+                    // Diff-based: plays the SGB timelines mapped to whichever state bits change.
+                    eo->SetSharedTimelineState((ushort)state, true, 0);
+                    break;
+                default:
+                    eo->PlayAnimation(state, bitmask, 0);
+                    break;
+            }
+            if (forceSharedGroupActive) EnsureSharedGroupActive("beat");
+            animCheckFrames = 0;
+        }
+        catch (System.Exception e)
+        {
+            // A stale FFXIVClientStructs signature must not take down the framework thread.
+            DiagnosticLog.Warn($"[SimEventObject.PlayAnimation] {DisplayName} {mode}(0x{state:X},0x{bitmask:X}) threw ({e.GetType().Name}); falling back to SetState.");
+            EventObjectHelper.SetState(obj, (ushort)state);
+        }
+        var hidden = SpawnConfig is { HideAtState: > 0 } config && config.HideAtState == state
+            && Native.LayoutInstanceDiagnostics.Deactivate(eo->SharedGroupLayoutInstance);
+        // The SGB timeline turns the Sound children back on; mute them again right after.
+        if (MuteSound) Native.LayoutInstanceDiagnostics.SilenceSounds(eo->SharedGroupLayoutInstance);
+        DiagnosticLog.Info(
+            $"[SimEventObject.PlayAnimation] {DisplayName} {mode}(0x{state:X},0x{bitmask:X}) entity=0x{obj->EntityId:X} -> "
+            + $"SharedTimelineState=0x{eo->SharedTimelineState:X}{(hidden ? " (SharedGroup switched off)" : "")} -- SG: {LayoutInstanceDiagnostics.Describe(eo->SharedGroupLayoutInstance)}");
+    }
+
+    private void EnsureSharedGroupActive(string when)
+    {
+        if (obj == null) return;
+        var sg = ((EventObject*)obj)->SharedGroupLayoutInstance;
+        if (!Native.LayoutInstanceDiagnostics.ForceActive(sg)) return;
+        if (MuteSound) Native.LayoutInstanceDiagnostics.SilenceSounds(sg);
+        if (forceActiveLogged) return;
+        forceActiveLogged = true;
+        DiagnosticLog.Info($"[SimEventObject] {DisplayName} SharedGroup forced active ({when}): {LayoutInstanceDiagnostics.Describe(sg)}");
+    }
+
+    // Native load state at each checkpoint: the attached SharedGroup, the fields that gate
+    // rendering, and whether an instance under LayoutId exists at all.
+    private void LogLoadState(string label)
+    {
+        if (obj == null) { DiagnosticLog.Info($"[SimEventObject.LogLoadState] {DisplayName} {label}: actor gone."); return; }
+        var eo = (EventObject*)obj;
+        var sgDesc = LayoutInstanceDiagnostics.Describe(eo->SharedGroupLayoutInstance);
+        var layoutNote = layoutId != 0 ? $" layoutIdInstance={(LayoutInstanceDiagnostics.Exists(layoutId) ? "found" : "none")}" : "";
+        DiagnosticLog.Info(
+            $"[SimEventObject.LogLoadState] {DisplayName} (LayoutId 0x{layoutId:X}) {label}: "
+            + $"SharedTimelineState=0x{eo->SharedTimelineState:X} Flags=0x{eo->Flags:X} Arg=0x{eo->Arg:X} EventId=0x{(uint)obj->EventId:X} EntityId=0x{obj->EntityId:X} "
+            + $"DrawObject=0x{(nint)obj->DrawObject:X} RenderFlags={obj->RenderFlags} IsReadyToDraw={obj->IsReadyToDraw()}{layoutNote} -- SG: {sgDesc}.");
+    }
 
     public virtual void Tick(float deltaSeconds)
     {
@@ -193,6 +374,32 @@ public unsafe class SimEventObject : ISimObject, IPositioned
 
         Position = coordinates.ToLocal(obj->Position);
         Rotation = obj->Rotation;
+
+        // The SGB timeline re-arms the Sound children as it advances, not just on the beat.
+        if (MuteSound)
+            Native.LayoutInstanceDiagnostics.SilenceSounds(((EventObject*)obj)->SharedGroupLayoutInstance);
+        if (forceSharedGroupActive)
+            EnsureSharedGroupActive("tick");
+
+        if (animCheckFrames >= 0)
+        {
+            animCheckFrames++;
+            if (animCheckFrames == 30 || animCheckFrames == 90)
+                DiagnosticLog.Info($"[SimEventObject.PlayAnimation] {DisplayName} +{animCheckFrames} frames: state=0x{((EventObject*)obj)->SharedTimelineState:X} -- SG: {LayoutInstanceDiagnostics.Describe(((EventObject*)obj)->SharedGroupLayoutInstance)}");
+            if (animCheckFrames >= 90) animCheckFrames = -1;
+        }
+
+        if (!loadCheckDone)
+        {
+            loadCheckFrames++;
+            if (loadCheckFrames == 1) LogLoadState("+1 frame");
+            else if (loadCheckFrames == 5) LogLoadState("+5 frames");
+            else if (loadCheckFrames == 210)
+            {
+                LogLoadState("+210 frames (~3.5s)");
+                loadCheckDone = true;
+            }
+        }
 
         if (lifetime > 0)
         {
@@ -220,6 +427,6 @@ public unsafe class SimEventObject : ISimObject, IPositioned
             PacketDispatcherPointers.HandleDespawnObjectPacket(0, packetPtr);
         }
 
-        Plugin.Log.Info($"SimEventObject: despawned slot {releasedSlot}");
+        DiagnosticLog.Info($"[SimEventObject] Despawned slot {releasedSlot}.");
     }
 }

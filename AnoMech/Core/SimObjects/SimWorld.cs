@@ -7,6 +7,8 @@ using AnoMech.Core.Game;
 using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
+using Dalamud.Game.Text;
+using Dalamud.Game.Text.SeStringHandling;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -141,14 +143,35 @@ public sealed class SimWorld : ISimObject, IDisposable
         reset.Record(index, offFlags);
     }
 
+    // Mirrored to peers by MultiplayerManager (host only, so a replayed SpawnOmen doesn't loop):
+    // an omen isn't a SimObject the snapshot sync walks.
+    public event Action<string, Placement, Vector3, float>? OmenSpawned;
+
+    // A scenario message the whole party should see (which arrow was missed, why everyone just
+    // died). Printed here and mirrored to peers, which have no other channel for mid-run text.
+    public event Action<string>? Announced;
+
+    public void Announce(string text)
+    {
+        Plugin.ChatGui.Print(new XivChatEntry
+        {
+            Type = XivChatType.SystemMessage,
+            Message = new SeStringBuilder().AddText($"[AnoMech] {text}").Build(),
+        });
+        Announced?.Invoke(text);
+    }
+
     // Spawns a standalone AOE telegraph (omen StaticVfx) that auto-expires after
     // `durationSeconds` and is cleaned up on world reset. `placement` is scenario-local
     // (like the rest of the SimXxx API); SimOmen lifts it to world coords. `scale`
     // follows SimOmen's convention: scale.X = halfWidth, scale.Z = length for rect omens.
+    public bool CanSpawnOmen => children.Count(c => c is SimOmen) < Multiplayer.NetGuard.MaxLiveOmens;
+
     public SimOmen SpawnOmen(string path, Placement placement, Vector3 scale, float durationSeconds)
     {
         var omen = new SimOmen(Coordinates, path, placement, scale, durationSeconds);
         children.Add(omen);
+        OmenSpawned?.Invoke(path, placement, scale, durationSeconds);
         return omen;
     }
 
@@ -169,10 +192,12 @@ public sealed class SimWorld : ISimObject, IDisposable
     // Spawns the eight party slots and wires in the local player. Must be called
     // after ScenarioOrigin is set. Party is added first so it despawns last in
     // Reset's reverse-order teardown (tethers and enemies reference slot positions).
-    public void CreateParty(uint playerJob, PartyRole? roleOverride = null, bool solo = false)
+    // networkRoles: multiplayer slots claimed by other real participants — see
+    // PartyCreator.Populate.
+    public void CreateParty(uint playerJob, uint? tankMaxHealth = null, PartyRole? roleOverride = null, bool solo = false, IReadOnlySet<PartyRole>? networkRoles = null, IReadOnlyDictionary<PartyRole, NetworkSeat>? networkSeats = null)
     {
         var party = new SimParty();
-        PartyCreator.Populate(party, new SimPlayer(Coordinates), playerJob, this, roleOverride, solo);
+        PartyCreator.Populate(party, new SimPlayer(Coordinates), playerJob, this, tankMaxHealth, roleOverride, solo, networkRoles, networkSeats);
         children.Add(party);
         Party = party;
     }
@@ -180,6 +205,8 @@ public sealed class SimWorld : ISimObject, IDisposable
     public void Tick(float deltaSeconds)
     {
         Map.Tick();
+        AnoMech.Core.Native.VfxSpawnLog.Tick();
+        AnoMech.Helpers.CharacterManagerHelper.SweepOrphans();
         children.Update(deltaSeconds);
         enmityHud.Refresh(children.OfType<SimEnemy>(), deltaSeconds);
         partyHud.Refresh(Party);

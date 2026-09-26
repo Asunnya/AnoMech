@@ -28,6 +28,15 @@ public interface IZone
     // Scenario-local positions whose BG SharedGroup colliders are dropped at start.
     IReadOnlyList<Vector3> ColliderRemovalPoints => Array.Empty<Vector3>();
 
-    // Zone-wide setup, first in the cascade. Default no-op.
+    // Zone-wide setup, first in the cascade. Default no-op. Host/solo only -- may create
+    // host-only simulation state (arena boundaries, scheduled MapEffect broadcasts) that
+    // would conflict if a peer ran it too.
     void Run(SimWorld world) { }
+
+    // Peer-safe subset of zone setup: pure client-side asset/table registration with no
+    // simulation side effects (no SimArenaBoundary, no MapEffect broadcasts). Called for
+    // BOTH host and peer, same reasoning as IScenario.RunInstanceEvents -- a peer's own
+    // client needs this data (e.g. replay-derived RSV/RSF resource paths the server would
+    // normally deliver for real duty content) just as much as the host's does. Default no-op.
+    void RunClientSetup(SimWorld world) { }
 }

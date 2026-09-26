@@ -6,17 +6,20 @@ using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
+using AnoMech.Multiplayer;
 using static AnoMech.Scenarios.Top.TopConstants;
 
 namespace AnoMech.Scenarios.Top.P2PartySynergy;
 
-public sealed class TopP2PartySynergyScenario : IScenario
+public sealed class TopP2PartySynergyScenario : IMultiplayerReplayable
 {
     public string Name => "Party Synergy";
     public IPhase Phase => TopZone.P2;
     public bool SupportsSolo => true;
+    public bool SupportsMultiplayer => true;
 
     public void DrawSettings() => settingsWindow.Draw();
+    public object SettingsOverrides => settingsWindow.Overrides;
     private readonly TopP2PartySynergySettingsWindow settingsWindow = new();
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new TopP2PartySynergyAi()];
@@ -27,11 +30,16 @@ public sealed class TopP2PartySynergyScenario : IScenario
     private TopUtils topUtils = null!;
     private DamageSolver damage = null!;
 
+    // Exposed so MultiplayerManager can read the AI-relevant subset after a host Start and
+    // broadcast it -- see UmadP3BlackHoleScenario.LastState for the pattern.
+    public TopP2PartySynergyState? LastState { get; private set; }
+
     public void Run(SimWorld worldParam, int? selectedAi)
     {
         world = worldParam;
         party = worldParam.Party;
         state = new TopP2PartySynergyState(world.Party, settingsWindow.Overrides);
+        LastState = state;
         topUtils = new TopUtils(world);
         damage = new DamageSolver(world.Party);
         damage.SetStatuses(DamageType.Any, StatusId.VulnerabilityUp);
@@ -60,10 +68,10 @@ public sealed class TopP2PartySynergyScenario : IScenario
     private void Run_InstanceEvents()
     {
         var index = (byte)(state.NewNorthA.Index() + 1);
-        world.Events.Add(7.93f, () => world.Map.AddEffect(packetFlags: 0x00020002U, index: index));
+        world.Events.Add(7.93f, () => world.Map.AddEffect(packetFlags: 0x00020001U, index: index));
         world.Events.Add(17.95f, () => world.Map.AddEffect(packetFlags: 0x00800040U, index: index));
         world.Events.Add(20.67f, () => world.Map.AddEffect(packetFlags: 0x10000001U, index: index));
-        world.Events.Add(26.82f, () => world.Map.AddEffect(packetFlags: 0x00080008U, index: index));
+        world.Events.Add(26.82f, () => world.Map.AddEffect(packetFlags: 0x00080004U, index: index));
     }
 
     private void Run_PlayerTethers(bool solo)
@@ -278,5 +286,21 @@ public sealed class TopP2PartySynergyScenario : IScenario
             world.Events.Add(33.25f, () => omega_M_4000A40B_3?.Cast(ActionId.Spotlight, castSeconds: 0f, targetId: character.GameObjectId));
             world.Events.Add(33.25f, () => damage.Resolve(character, ActionId.Spotlight, [DamageType.Magic], [(StatusId.MagicVulnerabilityUp, 1.96f)], stackMinTargets: 4));
         }
+    }
+
+    public MpMessage? BuildReplayStateMessage()
+        => LastState is { } s ? new TopP2PartySynergyAiReplayStateMessage(
+            s.Order.List, s.Stacks.List, s.NewNorthA.RadiansFromNorth, s.NewNorthB.RadiansFromNorth,
+            s.AttackDir.RadiansFromNorth, s.Glitch == GlitchType.Far, s.AttackM == OmegaAttack.Sword, s.AttackF == OmegaAttack.Staff)
+        : null;
+
+    public object? StartReplay(MpMessage message, int aiIndex, PartyRole myRole, SimWorld replayWorld)
+    {
+        if (message is not TopP2PartySynergyAiReplayStateMessage msg) return null;
+        var shadowState = TopP2PartySynergyState.FromNetworkReplay(
+            replayWorld.Party, msg.Order, msg.Stacks, msg.NewNorthARadians, msg.NewNorthBRadians,
+            msg.AttackDirRadians, msg.GlitchIsFar, msg.AttackMIsSword, msg.AttackFIsStaff);
+        ((IScenarioAi<TopP2PartySynergyState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
+        return shadowState;
     }
 }

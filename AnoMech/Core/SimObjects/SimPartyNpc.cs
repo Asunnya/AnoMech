@@ -3,6 +3,7 @@ using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Native;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 
 namespace AnoMech.Core.SimObjects;
@@ -22,6 +23,10 @@ public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
     }
 
     public void Knockback(Vector3 source, float distance, float speed) => Movement.Knockback(source, distance, speed);
+
+    public void PushInDirection(float heading, float distance, float speed) => Movement.PushInDirection(heading, distance, speed);
+
+    public void PushInDirectionEased(float heading, float distance, float durationSeconds) => Movement.PushInDirectionEased(heading, distance, durationSeconds);
 
     public override void Despawn()
     {

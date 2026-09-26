@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game.Party;
@@ -20,8 +21,10 @@ using AnoMech.Scenarios.Top.P5Omega;
 using AnoMech.Scenarios.Top.P5Sigma;
 using AnoMech.Scenarios.Top.P6WaveCannon2;
 using AnoMech.Scenarios.Umad;
+using AnoMech.Scenarios.Umad.P1TeleTrouncing;
 using AnoMech.Scenarios.Umad.P2Forsaken;
 using AnoMech.Scenarios.Umad.P3BlackHole;
+using AnoMech.Scenarios.Umad.P3LimitCut;
 using AnoMech.Scenarios.Umad.P4KefkaSays;
 using AnoMech.Scenarios.Ucob.P5Exaflares;
 using AnoMech.Scenarios.Umad.P5Celestriad;
@@ -29,10 +32,12 @@ using AnoMech.Scenarios.Umad.P5Exaflares;
 using AnoMech.Scenarios.Uwu.P1Garuda;
 using AnoMech.Scenarios.Uwu.P2Ifrit;
 using AnoMech.Scenarios.Uwu.P3Titan;
+using AnoMech.Scenarios.Umad.P5Flood;
 using AnoMech.Scenarios.Uwu.UltimatePredation;
 using AnoMech.Scenarios.Uwu.UltimateSuppression;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI;
 
 namespace AnoMech.Core.Game;
@@ -48,6 +53,9 @@ public sealed class Game : IDisposable
     public EventScheduler Events { get; } = new();
     public SimWorld World { get; }
     public SimPlayer? Player => World.Party.Player;
+    // Null once Reset/Leave clears it -- MultiplayerManager's host-side tick reads
+    // this to stop broadcasting once the multiplayer run has ended locally.
+    public IScenario? ActiveScenario => activeScenario;
     // Flat registry; the zone -> phase -> scenario tree is derived from it in
     // first-appearance order.
     public IReadOnlyList<IScenario> Scenarios { get; }
@@ -119,9 +127,26 @@ public sealed class Game : IDisposable
 
     private IScenario? activeScenario;
     private float scenarioElapsed;
+    private long lastEventTick;
+    public long LastEventTick => lastEventTick;
+
+    // Events only advances once per frame, by that frame's whole delta; this is its value between
+    // frames, which a peer's clock is lined up against.
+    public float EventClockNow => Paused || lastEventTick == 0
+        ? Events.Elapsed
+        : Events.Elapsed + (float)Stopwatch.GetElapsedTime(lastEventTick).TotalSeconds * EventTimeScale;
+    // The phase of the last run in the loaded zone, host and peer alike (activeScenario is
+    // host-only and cleared by a Reset).
+    private IPhase? lastPhase;
     private bool firstDeathScheduled;
     private bool firstFreezeScheduled;
     private readonly OpcodeUpdater opcodeUpdater;
+
+#if DEBUG
+    // A run where nobody dies but something went wrong needs the same trace as the auto-freeze.
+    private const float PeriodicDumpInterval = 3f;
+    private float periodicDumpTimer;
+#endif
 
     public Game()
     {
@@ -129,9 +154,12 @@ public sealed class Game : IDisposable
         opcodeUpdater = new OpcodeUpdater();
         Scenarios = new IScenario[]
         {
+            new UmadP1TeleTrouncingScenario(),
             new UmadP2ForsakenScenario(),
+            new UmadP3LimitCutScenario(),
             new UmadP3BlackHoleScenario(),
             new UmadP4KefkaSaysScenario(),
+            new UmadP5FloodScenario(),
             new UmadP5ExaflaresScenario(),
             new UmadP5CelestriadScenario(),
             new UmadP5ForsakenNull(),
@@ -189,11 +217,83 @@ public sealed class Game : IDisposable
     public void RunScenario(IScenario scenario, PartyRole? roleOverride = null, int? selectedAi = 0, int selectedWaymark = 0)
         => RunScenario(new RunScenarioParams(scenario, roleOverride, selectedAi, selectedWaymark));
 
+    // What a solo Start is waiting to settle before it runs.
+    public string? StartWaitingOn { get; private set; }
+    private RunScenarioParams? waitingStart;
+
     private void RunScenario(RunScenarioParams p)
     {
+        if (ZoneSession.StartBlockedReason(out var settling) != null && settling != null)
+        {
+            if (waitingStart == null) AnoMech.Core.DiagnosticLog.Info($"[Game] Start waiting for {settling} to settle.");
+            waitingStart = p;
+            StartWaitingOn = settling;
+            return;
+        }
+        waitingStart = null;
+        StartWaitingOn = null;
         lastRun = p;
-        Plugin.Framework.Run(() => RunScenarioInternal(p.Scenario, p.RoleOverride, p.SelectedAi, p.SelectedWaymark));
+        Plugin.Framework.Run(() => { RunScenarioInternal(p.Scenario, p.RoleOverride, p.SelectedAi, p.SelectedWaymark, null, null, isPeer: false); });
     }
+
+    private void RetryWaitingStart()
+    {
+        if (waitingStart is not { } waiting) return;
+        if (ZoneSession.StartBlockedReason(out var settling) != null && settling != null)
+        {
+            StartWaitingOn = settling;
+            return;
+        }
+        RunScenario(waiting);
+    }
+
+    private void CancelWaitingStart()
+    {
+        waitingStart = null;
+        StartWaitingOn = null;
+    }
+
+    // Multiplayer host: RunScenario with `networkRoles` spawned as SimNetworkPuppet, wearing
+    // their players' names and jobs (`networkSeats`).
+    public void RunScenarioAsHost(IScenario scenario, PartyRole roleOverride, int selectedAi, int selectedWaymark, IReadOnlySet<PartyRole> networkRoles, IReadOnlyDictionary<PartyRole, NetworkSeat> networkSeats, Action<string?> resolved)
+    {
+        // Auto-restart is a solo affordance: a host silently rerunning would desync the session,
+        // and a stale lastRun would rerun the wrong scenario entirely.
+        lastRun = null;
+        RunResolved(() => RunScenarioInternal(scenario, roleOverride, selectedAi, selectedWaymark, networkRoles, networkSeats, isPeer: false), resolved);
+    }
+
+    // Multiplayer peer: same zone/party/waymarks, but never zone/phase/scenario.Run; every
+    // other slot is a puppet driven by the host's snapshots.
+    public void RunScenarioAsPeer(IScenario scenario, PartyRole roleOverride, int selectedWaymark, IReadOnlySet<PartyRole> networkRoles, IReadOnlyDictionary<PartyRole, NetworkSeat> networkSeats, Action<string?> resolved)
+    {
+        lastRun = null;
+        RunResolved(() => RunScenarioInternal(scenario, roleOverride, null, selectedWaymark, networkRoles, networkSeats, isPeer: true), resolved);
+    }
+
+    // `resolved` runs in the same deferred callback as the start, with why it was refused, or
+    // null once the run is up; an exception counts as a refusal.
+    private static void RunResolved(Func<string?> start, Action<string?> resolved)
+    {
+        Plugin.Framework.Run(() =>
+        {
+            string? refusal;
+            try
+            {
+                refusal = start();
+            }
+            catch (Exception e)
+            {
+                resolved($"the scenario threw {e.GetType().Name} while loading");
+                throw;
+            }
+            resolved(refusal);
+        });
+    }
+
+    // Raised when Kill actually takes a slot down; the host broadcasts RoleKilled from it. A
+    // peer's own Kill calls are reactions to a received RoleKilled, so nothing echoes.
+    public event Action<PartyRole, string>? PartyMemberKilled;
 
     // The selected preset, or [0] as the default.
     private static IReadOnlyList<Waymark> ResolveWaymarks(IZone zone, int selectedWaymark)
@@ -204,18 +304,30 @@ public sealed class Game : IDisposable
         return presets[0].Markers;
     }
 
-    private void RunScenarioInternal(IScenario scenario, PartyRole? roleOverride, int? selectedAi, int selectedWaymark)
+    // Null once the run is up, else why it was refused.
+    private string? RunScenarioInternal(IScenario scenario, PartyRole? roleOverride, int? selectedAi, int selectedWaymark, IReadOnlySet<PartyRole>? networkRoles, IReadOnlyDictionary<PartyRole, NetworkSeat>? networkSeats, bool isPeer)
     {
         var solo = selectedAi is null;
         var phase = scenario.Phase;
         var zone = phase.Zone;
-        // Hard gate: scenarios are only ever run from an inn. Everything
-        // downstream (CharacterManager registration, zone load, doppel spawn)
-        // assumes that invariant.
-        if (!ZoneSession.IsInInn())
+        // Hard gate: scenarios only ever run from an inn, and only from a state the server
+        // isn't about to act on. Everything downstream (CharacterManager registration, zone
+        // load, doppel spawn) assumes the inn; the deferred start may land in a state the click
+        // didn't see, and ZoneSession.Enter asks once more before the firewall goes up.
+        if (ZoneSession.StartBlockedReason() is { } blocked)
         {
-            Plugin.Log.Warning("Game: scenarios can only run from an inn; aborting.");
-            return;
+            Plugin.Log.Warning($"Game: refusing to start {scenario.Name} -- {blocked}.");
+            return blocked;
+        }
+
+        // Per-player settings the fight can't produce together. Empty for a peer and for solo,
+        // so only a host's own setup is refused here; this is the funnel every entry point
+        // (both windows, /ano start) passes through.
+        if (scenario.SettingsConflicts is { Count: > 0 } conflicts)
+        {
+            foreach (var conflict in conflicts)
+                Plugin.Log.Warning($"Game: refusing to start {scenario.Name} -- {conflict}");
+            return "impossible scenario settings";
         }
 
         // Captured before ResetInternal clears activeScenario, so restarting the same
@@ -227,30 +339,60 @@ public sealed class Game : IDisposable
         if (player == null)
         {
             Plugin.Log.Warning("Game: no local player; aborting scenario start");
-            return;
+            return "no local player";
         }
+
+#if DEBUG
+        // Here rather than in scenario.Run (which peers skip), and before TryLoad so its
+        // freshLoad line survives into the dump.
+        AnoMech.Core.DiagnosticLog.Clear();
+#endif
 
         // Captured before TryLoad: false only on the first start from the inn (a true
         // zone entry), true for any restart/switch within the already-loaded zone.
         var freshLoad = !World.Map.IsZoneLoaded;
+        if (!freshLoad && lastPhase != phase) World.Map.RestoreSuppressedArenaSlots();
 
+        if (!World.Map.TryLoad(
+                new TargetInstance(zone.TerritoryId, zone.Origin, zone.Origin + PlayerSpawnLocal, phase.Weather, phase.FogHold),
+                zone.Level, zone.ItemLevel))
+        {
+            Plugin.Log.Warning($"Game: {scenario.Name} did not enter its zone; aborting.");
+            return "the zone was not entered (see the log)";
+        }
         // Snapshot the player's pristine job gauge once per session, before any action mutates
         // it, so Leave can restore it. Only on a true zone entry — a restart must keep the
         // original snapshot, not re-capture the already-simulated gauge.
         if (freshLoad) Plugin.UserActions.OnSessionStart();
 
         World.HideObject(ExitObjectBaseId);
-        World.Map.TryLoad(
-            new TargetInstance(zone.TerritoryId, zone.Origin, zone.Origin + PlayerSpawnLocal, phase.Weather),
-            zone.Level, zone.ItemLevel);
+        lastPhase = phase;
         World.ScenarioOrigin = zone.Origin;
         World.Map.ArmColliderDrops(zone.ColliderRemovalPoints.Select(World.Coordinates.ToGlobal));
         World.PlaceWaymarks(ResolveWaymarks(zone, selectedWaymark));
-        World.CreateParty(player.ClassJob.RowId, roleOverride, solo);
-        // zone.Run creates the SimArenaBoundary the out-of-arena check below reads.
-        zone.Run(World);
-        phase.Run(World);
-        scenario.Run(World, selectedAi);
+        World.CreateParty(player.ClassJob.RowId, scenario.TankMaxHealth, roleOverride, solo, networkRoles, networkSeats);
+        // Client-asset setup a peer needs too (see IZone.RunClientSetup).
+        zone.RunClientSetup(World);
+        phase.RunClientSetup(World);
+        // A peer runs no scenario logic; zone.Run also creates the arena boundary the
+        // out-of-arena check below reads, so that check no-ops for a peer too.
+        if (!isPeer)
+        {
+            // Log-and-rethrow, so the exception reaches our own log too.
+            try
+            {
+                zone.Run(World);
+                phase.Run(World);
+                scenario.Run(World, selectedAi);
+            }
+            catch (Exception e)
+            {
+                AnoMech.Core.DiagnosticLog.Warn($"[Game.RunScenarioInternal] zone/phase/scenario.Run threw -- scenario load aborted here: {e}");
+                throw;
+            }
+        }
+        // Both host and peer: RunInstanceEvents carries no RNG/AI/DamageSolver dependency.
+        scenario.RunInstanceEvents(World);
         // Entering the zone always starts at spawn; a restart only recenters the player
         // if they're standing outside the arena ring (otherwise they keep their position).
         if (freshLoad)
@@ -260,35 +402,81 @@ public sealed class Game : IDisposable
         if (previousScenario != scenario)
             MechanicStreak = 0;
         Plugin.UserActions.OnScenarioStart();
-        activeScenario = scenario;
-        scenarioElapsed = 0f;
+        if (!isPeer)
+        {
+            activeScenario = scenario;
+            scenarioElapsed = 0f;
+        }
 
         // Reconcile BGM to the new scenario. Bgm.Play is idempotent, so switching
         // between same-track scenarios (e.g. the P5 phases) keeps playing without
         // restarting the song; a different track swaps; suppressed/no-track reverts.
+        AnoMech.Core.DiagnosticLog.Info($"[Bgm] Suppress scenario BGM: {(Plugin.Config.SuppressBgm ? "on" : "off")}.");
         if (Plugin.Config.SuppressBgm || phase.Bgm == 0)
             Bgm.Reset();
         else
-            Bgm.Play(phase.Bgm);
+            Bgm.Play(phase.Bgm, scenario.BgmSecondsAtStart);
 
         Plugin.ChatGui.Print(new XivChatEntry
         {
             Type = XivChatType.SystemMessage,
-            Message = new SeStringBuilder().AddText($"[AnoMech] Starting: {FullName(scenario)}{(solo ? " (Solo)" : "")}").Build(),
+            // networkRoles null, not solo: a peer passes selectedAi null too.
+            Message = new SeStringBuilder().AddText($"[AnoMech] Starting: {FullName(scenario)}{(networkRoles is null ? " (Solo)" : "")}").Build(),
         });
+        return null;
+    }
+
+    // Undoes LocalPlayerInputHooks.ForceRecastSweep's fake cooldown display on every
+    // intercepted mitigation -- the real recast group never actually started, so this just
+    // clears our own fake sweep.
+    private static unsafe void ClearFakedTankMitigationCooldowns()
+    {
+        var am = ActionManager.Instance();
+        if (am == null) return;
+        foreach (var ability in TankMitigation.ByActionId.Values)
+        {
+            var group = am->GetRecastGroup((int)ActionType.Action, ability.ActionId);
+            if (group < 0) continue;
+            var detail = am->GetRecastGroupDetail(group);
+            if (detail == null) continue;
+            detail->IsActive = false;
+            detail->Elapsed = 0f;
+        }
     }
 
     public void Tick(float deltaSeconds)
     {
+        Bgm.Tick(deltaSeconds);
+        RetryWaitingStart();
         if (Paused) return;
+        lastEventTick = Stopwatch.GetTimestamp();
         Events.Tick(deltaSeconds * EventTimeScale);
         World.Tick(deltaSeconds);
+        // A peer's own tick would fight OnRolesSnapshotReceived's HP writes.
+        if (Plugin.MultiplayerInstance is not { IsHost: false })
+            TankHpRegen.Tick(World.Party, deltaSeconds);
         if (activeScenario != null)
         {
             scenarioElapsed += deltaSeconds;
             activeScenario.Tick(deltaSeconds, scenarioElapsed);
             UpdateMechanicResult(deltaSeconds);
         }
+#if DEBUG
+        // Gated so an idle client doesn't spam empty snapshots into the size-capped log.
+        if (activeScenario != null || (Plugin.MultiplayerInstance?.IsRunning ?? false))
+        {
+            periodicDumpTimer += deltaSeconds;
+            if (periodicDumpTimer >= PeriodicDumpInterval)
+            {
+                periodicDumpTimer = 0f;
+                AnoMech.Windows.DamageDebugWindow.Instance?.DumpToFile();
+            }
+        }
+        else
+        {
+            periodicDumpTimer = 0f;
+        }
+#endif
     }
 
     // Infers a clean run from IScenario.IsFinished going true and staying true, rather than
@@ -337,12 +525,16 @@ public sealed class Game : IDisposable
     {
         if (target == null) return false;
         if (target.Dead) return false;
-        if (target is SimCharacter sc && sc.HasStatus(SimParty.InvulnStatusId))
+        // ActiveStatusSnapshot, not the native StatusManager: AddStatus writes through our list.
+        if (target is SimCharacter sc && sc.ActiveStatusSnapshot.Any(s => TankMitigation.IsInvuln(s.StatusId)))
         {
             Plugin.Log.Info($"[Invuln] {DescribeName(target)} survived: {cause}");
+            AnoMech.Core.DiagnosticLog.Info($"[Game] Kill: {target.Role} survived via Invuln -- {cause}");
             return false;
         }
 
+        AnoMech.Core.DiagnosticLog.Warn(
+            $"[Game] Kill: {target.Role} died at ({(target as IPositioned)?.Position.X:F1},{(target as IPositioned)?.Position.Z:F1}) -- {cause}");
         PrintDeath(target, cause);
         if (!firstDeathScheduled)
         {
@@ -360,9 +552,7 @@ public sealed class Game : IDisposable
 
         if (GodMode)
         {
-            // Godmode swallows the death but still previews it: drop the player's bar and heal it
-            // back a beat later. Done here rather than OnKilled (which godmode skips) so every
-            // scenario gets it. Rides Game.Events; the ~1.2s restore is cosmetic, so scaling is moot.
+            // Godmode still previews the death: drop the player's bar and heal it back a beat later.
             if (target is SimPlayer player)
             {
                 player.DropHpBar();
@@ -371,6 +561,7 @@ public sealed class Game : IDisposable
             return false;
         }
         target.OnKilled();
+        PartyMemberKilled?.Invoke(target.Role, cause);
         MechanicStreak = 0;
         deathOccurredThisRun = true;
         AutoRestart = false;
@@ -398,6 +589,7 @@ public sealed class Game : IDisposable
     {
         SimPlayer => "You",
         SimPartyNpc pm => pm.DisplayName,
+        SimNetworkPuppet pm => pm.DisplayName,
         _ => "Character",
     };
 
@@ -410,6 +602,7 @@ public sealed class Game : IDisposable
 
     public void Reset() => Plugin.Framework.Run(() =>
     {
+        CancelWaitingStart();
         if (activeScenario is not null)
             TeleportPlayerToSpawnIfOutsideArena();
         ResetInternal();
@@ -447,8 +640,11 @@ public sealed class Game : IDisposable
     // Resets the encounter first, then reverts the zone — Reset stays in-zone.
     public void Leave()
     {
+        // Leaving always finalizes its own log segment.
+        AnoMech.Core.DiagnosticLog.RotateNow();
         Plugin.Framework.Run(() =>
         {
+            CancelWaitingStart();
             ResetInternal();
             Plugin.UserActions.OnSessionEnd();   // restore the job gauge captured at session start
             Bgm.Reset();
@@ -462,9 +658,16 @@ public sealed class Game : IDisposable
         scenarioElapsed = 0f;
         Events.Clear();
         World.Despawn();
-        // BGM is owned by the callers: a scenario start reconciles it to the new
-        // track (keeping it playing when unchanged); Reset/Leave stop it. Resetting
-        // here would force a same-track restart on every scenario switch.
+        // A wipe or Leave never reaches the scenario's own cleanup.
+        Core.Native.VfxSpawnLog.Disable();
+        // Sim-only bookkeeping; ClearAllVisuals also undoes the native ShieldValue byte.
+        TankMitigationTracker.Reset();
+        ClearFakedTankMitigationCooldowns();
+        Plugin.PlayerInputHooks.RestoreGaugeIllusion();
+        TankShieldTracker.Reset();
+        TankShieldTracker.ClearAllVisuals(World.Party);
+        TankHpRegen.Reset();
+        // BGM is the callers': resetting here would restart a same-track scenario switch.
 
         Paused = false;
         firstDeathScheduled = false;
@@ -474,16 +677,13 @@ public sealed class Game : IDisposable
         deathOccurredThisRun = false;
         lastMistakeElapsed = null;
 #if DEBUG
+        periodicDumpTimer = 0f;
         AnoMech.Windows.DamageDebugWindow.Instance?.ResetFreeze();
 #endif
-        // Input-lock flags are owned by SimPlayer (reconciled each tick, cleared on
-        // its Despawn during World.Reset above) — nothing to clear here.
     }
 
-    // Plugin.Dispose is invoked on the framework thread during unload — run
-    // teardown synchronously here. The previous Framework.Run wrapper queued
-    // the lambda for the *next* tick, which never fired during shutdown and
-    // leaked all six LocalPlayerInputHooks hooks.
+    // Synchronous: Plugin.Dispose runs on the framework thread during unload, and a
+    // Framework.Run wrapper would never fire.
     public void Dispose()
     {
         activeScenario = null;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using static AnoMech.Scenarios.Umad.UmadConstants;
@@ -64,6 +65,9 @@ public sealed class UmadP5CelestriadState
     private static readonly CelestriadElement[] Elements =
         { CelestriadElement.Fire, CelestriadElement.Lightning, CelestriadElement.Ice };
 
+    private const int SetCount = 3;
+    private const int SubTowersPerElement = 3;
+
     public IReadOnlyDictionary<PartyRole, CelestriadElement?> PlayerDebuffElement { get; }
     public IReadOnlyList<CelestriadElement> DoubleElement { get; }
     public IReadOnlyList<CelestriadTower> AllTowers { get; }
@@ -82,36 +86,20 @@ public sealed class UmadP5CelestriadState
     {
         // Each element doubles exactly once across the 3 sets: a shuffled permutation
         // guarantees that instead of leaving it to independent per-set coin flips.
-        DoubleElement = rng.Shuffle(CelestriadElement.Fire, CelestriadElement.Ice, CelestriadElement.Lightning);
-
-        var roles = RoleList.Random(party).List;
-        var buckets = new CelestriadElement?[]
+        DoubleElement = overrides.DoubleOrder switch
         {
-            CelestriadElement.Fire, CelestriadElement.Fire,
-            CelestriadElement.Ice, CelestriadElement.Ice,
-            CelestriadElement.Lightning, CelestriadElement.Lightning,
-            null, null,
+            CelestriadDoubleOrder.FireIceLightning => [CelestriadElement.Fire, CelestriadElement.Ice, CelestriadElement.Lightning],
+            CelestriadDoubleOrder.FireLightningIce => [CelestriadElement.Fire, CelestriadElement.Lightning, CelestriadElement.Ice],
+            CelestriadDoubleOrder.IceFireLightning => [CelestriadElement.Ice, CelestriadElement.Fire, CelestriadElement.Lightning],
+            CelestriadDoubleOrder.IceLightningFire => [CelestriadElement.Ice, CelestriadElement.Lightning, CelestriadElement.Fire],
+            CelestriadDoubleOrder.LightningFireIce => [CelestriadElement.Lightning, CelestriadElement.Fire, CelestriadElement.Ice],
+            CelestriadDoubleOrder.LightningIceFire => [CelestriadElement.Lightning, CelestriadElement.Ice, CelestriadElement.Fire],
+            _ => rng.Shuffle(CelestriadElement.Fire, CelestriadElement.Ice, CelestriadElement.Lightning),
         };
-        if (overrides.PlayerElement != CelestriadElementOverride.Random)
-        {
-            CelestriadElement? wanted = overrides.PlayerElement switch
-            {
-                CelestriadElementOverride.Fire => CelestriadElement.Fire,
-                CelestriadElementOverride.Ice => CelestriadElement.Ice,
-                CelestriadElementOverride.Lightning => CelestriadElement.Lightning,
-                _ => null, // Free
-            };
-            var playerIdx = Array.IndexOf(roles, party.PlayerRole);
-            var wantedIdx = Array.FindIndex(buckets, b => b == wanted);
-            (roles[playerIdx], roles[wantedIdx]) = (roles[wantedIdx], roles[playerIdx]);
-        }
-        PlayerDebuffElement = Enumerable.Range(0, 8).ToDictionary(i => roles[i], i => buckets[i]);
 
-        var allTowers = new List<CelestriadTower>(9);
-        foreach (var element in Elements)
-            for (var sub = 0; sub < 3; sub++)
-                allTowers.Add(new CelestriadTower(element, sub, TowerPosition(element, sub)));
-        AllTowers = allTowers;
+        PlayerDebuffElement = AssignDebuffs(party, overrides);
+
+        AllTowers = BuildAllTowers();
 
         var setActive = new List<IReadOnlyList<int>>(3);
         var aero = new List<CatastrophicChoice?>(3);
@@ -134,6 +122,102 @@ public sealed class UmadP5CelestriadState
         SetActiveTowers = setActive;
         AeroVariant = aero;
     }
+
+    // Elements and the choice arrive as indices into Elements / (Aero, Earth); -1 means free/none.
+    public static UmadP5CelestriadState? FromNetworkReplay(
+        IReadOnlyList<int> doubleElement, IReadOnlyDictionary<PartyRole, int> playerDebuffElement,
+        IReadOnlyList<int[]> setActiveTowers, IReadOnlyList<int> aeroVariant)
+    {
+        var towerCount = Elements.Length * SubTowersPerElement;
+        if (doubleElement.Count != SetCount || setActiveTowers.Count != SetCount || aeroVariant.Count != SetCount) return null;
+        if (doubleElement.Any(i => i < 0 || i >= Elements.Length)) return null;
+        if (playerDebuffElement.Values.Any(i => i < -1 || i >= Elements.Length)) return null;
+        if (setActiveTowers.Any(set => set.Any(i => i < 0 || i >= towerCount))) return null;
+        if (aeroVariant.Any(i => i is < -1 or > 1)) return null;
+
+        return new UmadP5CelestriadState(
+            doubleElement.Select(i => Elements[i]).ToList(),
+            playerDebuffElement.ToDictionary(kv => kv.Key, kv => kv.Value < 0 ? null : Elements[kv.Value]),
+            setActiveTowers.Select(set => (IReadOnlyList<int>)set.ToList()).ToList(),
+            aeroVariant.Select(Choice).ToList());
+    }
+
+    // -1 none, 0 Aero, 1 Earth -- the wire form of AeroVariant, both ways.
+    public static int ChoiceIndex(CatastrophicChoice? choice)
+        => choice is null ? -1 : choice == CatastrophicChoice.Aero ? 0 : 1;
+
+    private static CatastrophicChoice? Choice(int index)
+        => index < 0 ? null : index == 0 ? CatastrophicChoice.Aero : CatastrophicChoice.Earth;
+
+    // The element's own index in the fixed clockwise order, or -1 for a free player.
+    public static int ElementIndex(CelestriadElement? element)
+        => element is null ? -1 : Array.IndexOf(Elements, element);
+
+    private UmadP5CelestriadState(
+        IReadOnlyList<CelestriadElement> doubleElement,
+        IReadOnlyDictionary<PartyRole, CelestriadElement?> playerDebuffElement,
+        IReadOnlyList<IReadOnlyList<int>> setActiveTowers,
+        IReadOnlyList<CatastrophicChoice?> aeroVariant)
+    {
+        DoubleElement = doubleElement;
+        PlayerDebuffElement = playerDebuffElement;
+        AllTowers = BuildAllTowers();
+        SetActiveTowers = setActiveTowers;
+        AeroVariant = aeroVariant;
+    }
+
+    private static IReadOnlyList<CelestriadTower> BuildAllTowers()
+    {
+        var towers = new List<CelestriadTower>(Elements.Length * SubTowersPerElement);
+        foreach (var element in Elements)
+            for (var sub = 0; sub < SubTowersPerElement; sub++)
+                towers.Add(new CelestriadTower(element, sub, TowerPosition(element, sub)));
+        return towers;
+    }
+
+    // Two seats carry each element and two carry none. Forced seats draw from that pool first;
+    // one asking for a debuff the pool has run out of keeps the roll rather than displacing
+    // someone.
+    private IReadOnlyDictionary<PartyRole, CelestriadElement?> AssignDebuffs(SimParty party, UmadP5CelestriadStateOverrides overrides)
+    {
+        var pool = new List<CelestriadElement?>
+        {
+            CelestriadElement.Fire, CelestriadElement.Fire,
+            CelestriadElement.Ice, CelestriadElement.Ice,
+            CelestriadElement.Lightning, CelestriadElement.Lightning,
+            null, null,
+        };
+        var assigned = new Dictionary<PartyRole, CelestriadElement?>();
+        foreach (var (role, wanted) in overrides.Debuff.Resolve(party.PlayerRole))
+        {
+            var element = ElementFor(wanted);
+            var index = pool.FindIndex(e => e == element);
+            if (index < 0)
+            {
+                DiagnosticLog.Warn($"[UmadP5Celestriad] {role} asked for {UmadP5CelestriadStateOverrides.Label(wanted)}, "
+                    + $"already held by {UmadP5CelestriadStateOverrides.SeatsPerDebuff} seats -- leaving {role} to the roll.");
+                continue;
+            }
+            pool.RemoveAt(index);
+            assigned[role] = element;
+        }
+
+        var next = 0;
+        foreach (var role in RoleList.Random(party).List)
+        {
+            if (assigned.ContainsKey(role) || next >= pool.Count) continue;
+            assigned[role] = pool[next++];
+        }
+        return assigned;
+    }
+
+    private static CelestriadElement? ElementFor(CelestriadDebuff debuff) => debuff switch
+    {
+        CelestriadDebuff.Fire => CelestriadElement.Fire,
+        CelestriadDebuff.Ice => CelestriadElement.Ice,
+        CelestriadDebuff.Lightning => CelestriadElement.Lightning,
+        _ => null,
+    };
 
     private CatastrophicChoice? ResolveAero(int set, UmadP5CelestriadStateOverrides overrides) => set switch
     {

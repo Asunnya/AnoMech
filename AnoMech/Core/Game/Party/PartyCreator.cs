@@ -6,6 +6,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace AnoMech.Core.Game.Party;
@@ -35,13 +36,20 @@ internal static unsafe class PartyCreator
     private const float LalafellVfxScale = 0.4f;
     private const float LalafellHeight = 0.6f;
 
+    // Fallback for every role, and for tank roles when IScenario.TankMaxHealth is null (see
+    // Populate's tankMaxHealth param).
+    private const uint DoppelMaxHealth = 100_000;
+
     private const float RingRadius = 2.5f;
     private const float RadiusJitter = 0.6f;
     private const float AngleJitter = 0.4f;
 
     private static readonly Random Rng = new();
 
-    public static void Populate(SimParty party, SimPlayer player, uint playerJob, SimWorld world, PartyRole? roleOverride = null, bool solo = false)
+    // networkRoles: slots held by other real participants, spawned as SimNetworkPuppet (position
+    // from the network, not AiManager); takes priority over `solo`. networkSeats: their lobby
+    // name and job for the nameplate and party list, each falling back to the role preset's.
+    public static void Populate(SimParty party, SimPlayer player, uint playerJob, SimWorld world, uint? tankMaxHealth = null, PartyRole? roleOverride = null, bool solo = false, IReadOnlySet<PartyRole>? networkRoles = null, IReadOnlyDictionary<PartyRole, NetworkSeat>? networkSeats = null)
     {
         var presets = roleOverride is { } skip
             ? PartyPresets.ForRole(skip)
@@ -51,15 +59,33 @@ internal static unsafe class PartyCreator
         for (int i = 0; i < presets.Count; i++)
         {
             var preset = presets[i];
+            var role = (PartyRole)i;
             if (preset == null)
             {
                 // Player's own job slot — wire the SimPlayer in directly so
                 // Party.Get(role) returns a uniform SimCharacter.
-                party.SetSlot((PartyRole)i, player);
+                party.SetSlot(role, player);
+                if (role.IsTank() && tankMaxHealth is { } realHp) player.OverrideMaxHealthForTankRole(realHp);
                 continue;
             }
 
-            // Solo mode: only the player's own slot is filled — skip every doppel.
+            if (networkRoles != null && networkRoles.Contains(role))
+            {
+                var angle0 = (i / (float)presets.Count) * MathF.Tau;
+                var localPos0 = new Vector3(MathF.Sin(angle0) * RingRadius, 0f, MathF.Cos(angle0) * RingRadius);
+                var puppetPreset = networkSeats?.GetValueOrDefault(role) is { } seat
+                    ? preset with
+                    {
+                        Name = seat.Name.Length > 0 ? seat.Name : preset.Name,
+                        ClassJob = seat.ClassJob != 0 ? seat.ClassJob : preset.ClassJob,
+                    }
+                    : preset;
+                var puppet = SpawnPuppet(puppetPreset, world, role, new Placement(localPos0, MathF.Atan2(-localPos0.X, -localPos0.Z)), itemSheet, tankMaxHealth);
+                if (puppet != null) party.SetSlot(role, puppet);
+                continue;
+            }
+
+            // Solo mode: only the player's own slot (and any network puppets) is filled.
             if (solo) continue;
 
             var angle = (i / (float)presets.Count) * MathF.Tau
@@ -70,14 +96,44 @@ internal static unsafe class PartyCreator
             var localPos = new Vector3(MathF.Sin(angle) * distance, 0f, MathF.Cos(angle) * distance);
             var facingPlayer = MathF.Atan2(-localPos.X, -localPos.Z);
 
-            var member = Spawn(preset, world, (PartyRole)i, new Placement(localPos, facingPlayer), itemSheet);
-            if (member != null) party.SetSlot((PartyRole)i, member);
+            var member = Spawn(preset, world, role, new Placement(localPos, facingPlayer), itemSheet, tankMaxHealth);
+            if (member != null) party.SetSlot(role, member);
         }
     }
 
-    private static SimPartyNpc? Spawn(PartyMemberPreset preset, SimWorld world, PartyRole role, Placement placement, ExcelSheet<Item> itemSheet)
+    private static SimPartyNpc? Spawn(PartyMemberPreset preset, SimWorld world, PartyRole role, Placement placement, ExcelSheet<Item> itemSheet, uint? tankMaxHealth)
     {
-        if (!CharacterManagerHelper.CreateCharacter(out var idx, out var obj)) return null;
+        if (!SpawnNative(preset, world, role, placement, itemSheet, tankMaxHealth, out var idx)) return null;
+
+        Plugin.Log.Info($"PartyCreator: spawned {preset.Name} ({role}, job {preset.ClassJob}) at index {idx}");
+        var member = new SimPartyNpc(idx, world.Coordinates, role, preset.ClassJob, preset.Name);
+        // Bots steer around the scenario's geometry; only doppels get the live
+        // field (bosses/player/puppets keep ObstacleField.Empty and move in straight lines).
+        member.Obstacles = world.Obstacles;
+        // Seed the stored Position/Rotation to match the spawn placement so
+        // anything reading SimCharacter.Position before the first Tick sees
+        // the correct value (the Tick re-sync only kicks in next frame).
+        member.SetPosition(placement);
+        return member;
+    }
+
+    // Same visuals as a bot, but excluded from the Obstacles field only steering doppels need.
+    private static SimNetworkPuppet? SpawnPuppet(PartyMemberPreset preset, SimWorld world, PartyRole role, Placement placement, ExcelSheet<Item> itemSheet, uint? tankMaxHealth)
+    {
+        if (!SpawnNative(preset, world, role, placement, itemSheet, tankMaxHealth, out var idx)) return null;
+
+        Plugin.Log.Info($"PartyCreator: spawned network puppet {preset.Name} ({role}, job {preset.ClassJob}) at index {idx}");
+        var puppet = new SimNetworkPuppet(idx, world.Coordinates, role, preset.ClassJob, preset.Name);
+        puppet.SetPosition(placement);
+        return puppet;
+    }
+
+    // Shared native BattleChara setup for both a bot doppel and a network puppet
+    // — identical visuals, only the wrapper type and movement behaviour differ.
+    private static bool SpawnNative(PartyMemberPreset preset, SimWorld world, PartyRole role, Placement placement, ExcelSheet<Item> itemSheet, uint? tankMaxHealth, out int idx)
+    {
+        idx = -1;
+        if (!CharacterManagerHelper.CreateCharacter(out idx, out var obj)) return false;
 
         var gameObj = (GameObject*)obj;
         var chara = (BattleChara*)obj;
@@ -97,8 +153,9 @@ internal static unsafe class PartyCreator
 
         chara->TargetableStatus = ObjectTargetableFlags.IsTargetable;
         chara->HitboxRadius = 0.5f;
-        chara->MaxHealth = 100_000;
-        chara->Health = 100_000;
+        var maxHealth = role.IsTank() && tankMaxHealth is { } real ? real : DoppelMaxHealth;
+        chara->MaxHealth = maxHealth;
+        chara->Health = maxHealth;
         chara->MaxMana = 10_000;
         chara->Mana = 10_000;
         chara->Battalion = 0;
@@ -123,16 +180,7 @@ internal static unsafe class PartyCreator
             chara->CurrentWorld = localChara->CurrentWorld;
         }
 
-        Plugin.Log.Info($"PartyCreator: spawned {preset.Name} ({role}, job {preset.ClassJob}) at index {idx}");
-        var member = new SimPartyNpc(idx, world.Coordinates, role, preset.ClassJob, preset.Name);
-        // Bots steer around the scenario's geometry; only doppels get the live
-        // field (bosses/player keep ObstacleField.Empty and move in straight lines).
-        member.Obstacles = world.Obstacles;
-        // Seed the stored Position/Rotation to match the spawn placement so
-        // anything reading SimCharacter.Position before the first Tick sees
-        // the correct value (the Tick re-sync only kicks in next frame).
-        member.SetPosition(placement);
-        return member;
+        return true;
     }
 
     private static void WriteCustomize(BattleChara* chara)

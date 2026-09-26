@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using AnoMech.Core;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.SimObjects;
 
@@ -33,9 +34,15 @@ namespace AnoMech.Scenarios.Umad.P4KefkaSays;
 // That covers every positional mechanic through to the LightOfJudgment enrage
 // (~120s). Mana Charge and Ultima Upsurge are raidwides that need no movement. See
 // UmadP2ForsakenRinonAiHelper for the fuller pattern.
-public sealed class UmadP4KefkaSaysAi : IScenarioAi<UmadP4KefkaSaysState>
+public sealed class UmadP4KefkaSaysAi(UmadP4KefkaSaysAi.GazeLayout gazeLayout) : IScenarioAi<UmadP4KefkaSaysState>
 {
-    public string Name => "Kefka Says (WIP)";
+    public enum GazeLayout { CentreLane, SupportsNorthDpsSouth }
+
+    public string Name => gazeLayout switch
+    {
+        GazeLayout.SupportsNorthDpsSouth => "Kefka Says, gazes: supports N / DPS S",
+        _ => "Kefka Says",
+    };
 
     public void Run(UmadP4KefkaSaysState state, SimWorld world)
     {
@@ -49,28 +56,131 @@ public sealed class UmadP4KefkaSaysAi : IScenarioAi<UmadP4KefkaSaysState>
 
         ai.Move(57.6f, () => FloodOfNaught(state), jitter: 2.5f, arrivalTime: 62.2f);
         ai.Move(63, () => ResolveElements(state.ElemRoles[0], state.ElemTrue[0]), arrivalTime: 70.5f);
-        ai.Move(72, () => ResolveGaze(state.Wave1, state.Mystery[3]), jitter: 0, arrivalTime: 76f);
-        ai.Move(78.5f, () => ResolveGazeLook(world, state.Mystery[3], state.Wave1True), jitter: 0);
+        ScheduleWave1Gaze(ai, state, world);
 
         // Stray Flames: bait the fire stacked in the middle (scenario locks each bait
         // at ~87.3s), then react to the resolved shape, which lands ~92.4s.
         ai.Move(81f, () => Stack(new Vector2(0f, 0f)), jitter: 1f, arrivalTime: 86.5f);
         ai.Move(88f, () => StrayFlames(state.InfernoMystery), jitter: 0.5f, arrivalTime: 92f);
 
-        // Elemental wave 2 (~96.5s) folded into Mystery[3]'s Blizzard-safe wedges (~97.4s).
-        ai.Move(92.5f, () => ResolveElementsUnderBlizzard(state.ElemRoles[1], state.ElemTrue[1], state.Mystery[3]), arrivalTime: 96.3f);
+        // Elemental wave 2 (~96.5s) folded into Mystery[3]'s Blizzard-safe wedges (~97.4s);
+        // arrival at 96.0 also clears the Acceleration Bomb check at 96.28.
+        ai.Move(92.5f, () => ResolveElementsUnderBlizzard(state.ElemRoles[1], state.ElemTrue[1], state.Mystery[3]), arrivalTime: 96.0f);
 
         // Wave2 Death Shriek (~104.4s): a pure positioning+facing solve in the middle,
         // nothing else live. Position the pair, then nudge to set the gaze facing.
-        ai.Move(98f, () => ResolveGazeCentre(state.Wave2), jitter: 0, arrivalTime: 101.5f);
-        ai.Move(102.5f, () => ResolveGazeCentreLook(world, state.Wave2True), jitter: 0);
+        ScheduleWave2Gaze(ai, state, world);
 
         // Water bait (~109.98 lock) + last Mystery Magic (Mystery[4], ~115.6s): bait
         // Stray Spray stacked in the middle, then one final move that clears the water
         // (in for the real Donut / out for the fake Chariot) and solves Mystery[4].
         ai.Move(106f, () => Stack(new Vector2(0f, 0f)), jitter: 0.8f, arrivalTime: 109.5f);
         ai.Move(111f, () => StraySprayAndMystery(state.TsunamiMystery, state.Mystery[4]), jitter: 0.3f, arrivalTime: 114.5f);
+
+        ScheduleAccelerationBombDodge(state, world);
     }
+
+    // Acceleration Bomb checks party.Player.IsActing at one instant (same wave/slot mapping as
+    // the scenario). Fake (must move): a tiny slow in-place wiggle that brackets the check
+    // without crossing any hazard. Real (must stand still): every possible resolve time already
+    // falls in a gap between moves.
+    private static void ScheduleAccelerationBombDodge(UmadP4KefkaSaysState state, SimWorld world)
+    {
+        var role = world.Party.PlayerRole;
+        var w1 = Array.IndexOf(state.Wave1.List, role) % 4;
+        var w2 = Array.IndexOf(state.Wave2.List, role) % 4;
+
+        (float resolveTime, bool real)? bomb =
+            w2 == 0 ? (96.28f, state.Wave2True) :
+            w2 == 1 ? (71.28f, state.Wave2True) :
+            w1 == 0 ? (71.36f, state.Wave1True) :
+            w1 == 1 ? (96.36f, state.Wave1True) :
+            null;
+
+        DiagnosticLog.Info($"[AccelerationBombDodge] role={role} w1={w1} w2={w2} bomb={(bomb is { } b ? $"resolve={b.resolveTime:F2} real={b.real}" : "none")}.");
+
+        if (bomb is not ({ } resolveTime, false)) return; // no bomb this run, or a real one -- already handled
+
+        world.Events.Add(resolveTime - 0.6f, () =>
+        {
+            var member = world.Party.Get(role);
+            if (member == null || !member.IsAlive())
+            {
+                DiagnosticLog.Info($"[AccelerationBombDodge] wiggle skipped (member null or dead) at scheduled t={resolveTime - 0.6f:F2}.");
+                return;
+            }
+            DiagnosticLog.Info($"[AccelerationBombDodge] wiggle firing at t={resolveTime - 0.6f:F2} (resolve at {resolveTime:F2}) from ({member.Position.X:F1},{member.Position.Z:F1}).");
+            member.MoveTo(member.Position + new Vector3(0.3f, 0f, 0f), speed: 0.4f);
+        });
+    }
+
+    private void ScheduleWave1Gaze(AiManager ai, UmadP4KefkaSaysState state, SimWorld world)
+    {
+        if (gazeLayout == GazeLayout.SupportsNorthDpsSouth)
+        {
+            ai.Move(72, () => SupportsNorthAlongThunderEdge(state.Wave1, state.Mystery[3], 0f), jitter: 0, arrivalTime: 76f);
+            ai.Move(78.5f, () => SupportsNorthAlongThunderEdge(state.Wave1, state.Mystery[3], GazeFacingStep(state.Wave1True)), jitter: 0);
+            return;
+        }
+        ai.Move(72, () => ResolveGaze(state.Wave1, state.Mystery[3]), jitter: 0, arrivalTime: 76f);
+        ai.Move(78.5f, () => ResolveGazeLook(world, state.Mystery[3], state.Wave1True), jitter: 0);
+    }
+
+    private void ScheduleWave2Gaze(AiManager ai, UmadP4KefkaSaysState state, SimWorld world)
+    {
+        if (gazeLayout == GazeLayout.SupportsNorthDpsSouth)
+        {
+            ai.Move(98f, () => SupportsNorthAroundBoss(state.Wave2, 0f), jitter: 0, arrivalTime: 101.5f);
+            ai.Move(102.5f, () => SupportsNorthAroundBoss(state.Wave2, GazeFacingStep(state.Wave2True)), jitter: 0);
+            return;
+        }
+        ai.Move(98f, () => ResolveGazeCentre(state.Wave2), jitter: 0, arrivalTime: 101.5f);
+        ai.Move(102.5f, () => ResolveGazeCentreLook(world, state.Wave2True), jitter: 0);
+    }
+
+    private const float ThunderEdgeInset = 1.25f;
+    private const float ThunderEdgeProbe = 2f;
+    private const float GazeHolderAlongEdge = 2.2f;
+    private static readonly float[] NonGazeAlongEdge = [7.5f, 8.7f, 9.9f];
+    private static readonly Vector2[] NorthNonGazeAroundBoss = [new(-1.3f, -7.5f), new(1.3f, -7.5f), new(0f, -9f)];
+    private const float FacingStep = 0.6f;
+
+    private static float GazeFacingStep(bool lookAway) => lookAway ? FacingStep : -FacingStep;
+
+    private static IAiMove SupportsNorthAlongThunderEdge(RoleList wave, MysteryCast thunder, float outwardStep)
+    {
+        var rot = LineBaseRotation * thunder.LightningOrientation;
+        var lane = new Vector2(MathF.Sin(rot), MathF.Cos(rot));
+        var north = lane.Y > 0f ? -lane : lane;
+        var across = new Vector2(north.Y, -north.X);
+        var safeSide = LineClearance(across * ThunderEdgeProbe, thunder) > LineClearance(-across * ThunderEdgeProbe, thunder) ? across : -across;
+        var edge = safeSide * ThunderEdgeInset;
+
+        var coords = new Vector2?[8];
+        coords[(int)wave[0]] = edge + north * (GazeHolderAlongEdge + outwardStep);
+        coords[(int)wave[4]] = edge - north * (GazeHolderAlongEdge + outwardStep);
+        for (var k = 0; k < NonGazeAlongEdge.Length; k++)
+        {
+            coords[(int)wave[1 + k]] = edge + north * (NonGazeAlongEdge[k] + outwardStep);
+            coords[(int)wave[5 + k]] = edge - north * (NonGazeAlongEdge[k] + outwardStep);
+        }
+        return AiMove.Create(coords).NaturalOrder();
+    }
+
+    private static IAiMove SupportsNorthAroundBoss(RoleList wave, float outwardStep)
+    {
+        var coords = new Vector2?[8];
+        coords[(int)wave[0]] = StepFromBoss(new Vector2(0f, -GazePairOffset), outwardStep);
+        coords[(int)wave[4]] = StepFromBoss(new Vector2(0f, GazePairOffset), outwardStep);
+        for (var k = 0; k < NorthNonGazeAroundBoss.Length; k++)
+        {
+            coords[(int)wave[1 + k]] = StepFromBoss(NorthNonGazeAroundBoss[k], outwardStep);
+            coords[(int)wave[5 + k]] = StepFromBoss(-NorthNonGazeAroundBoss[k], outwardStep);
+        }
+        return AiMove.Create(coords).NaturalOrder();
+    }
+
+    private static Vector2 StepFromBoss(Vector2 p, float outwardStep) => p + Vector2.Normalize(p) * outwardStep;
 
     // The two gaze sources (Wave1[0]/Wave1[4]) stack 0.5y apart and opposite, just off
     // centre toward Mystery[3]'s Thunder-safe lane (arena centre itself is on a line

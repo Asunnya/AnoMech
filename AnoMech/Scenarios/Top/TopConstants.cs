@@ -287,6 +287,13 @@ public static class TopConstants
         public const uint Discharger = 72;
     }
 
+    public static class VfxPath
+    {
+        public const string OpticalLaserRect = "vfx/omen/eff/general02f.avfx";
+        // A rocket punch's spawn burst (P5 Delta).
+        public const string RocketPunchSpawn = "vfx/monster/m0114/eff/m0114cbbm_sp_pop_c0i.avfx";
+    }
+
     public static class Geometry
     {
         public const float ArenaRadius = 20f;                       // TOP arena ring
@@ -309,7 +316,12 @@ public static class TopConstants
         public const float HyperPulseLength = 100f;
         public const float OpticalLaserHalfWidth = 8f;   // sheet XAxisModifier=16 -> half-width 8
         public const float OpticalLaserLength = 100f;
-        public const float MidGlitchMinDistance = 21f;
+        // 20, not 21: BossMod's P2PartySynergy DistanceRange is (20, 26) for Mid glitch. The
+        // AI's Mid-glitch stacks sit 90 degrees apart at radius 15 = 21.21y, which is inside the
+        // real window with 1.2y to spare but was only 0.21y above the old 21 -- AiManager's 0.3y
+        // placement jitter then pushed pairs under it at random, the tether's conditional
+        // Vulnerability Up came on, and Spotlight (magic) killed them.
+        public const float MidGlitchMinDistance = 20f;
         public const float MidGlitchMaxDistance = 26f;
         public const float FarGlitchMinDistance = 34f;
         public const float TowerRadius = 3f;

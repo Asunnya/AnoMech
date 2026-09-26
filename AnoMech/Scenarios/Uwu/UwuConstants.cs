@@ -174,6 +174,12 @@ public class UwuConstants
         public const ushort SpinyFixate = 17;
     }
 
+    public class EObjId
+    {
+        public const uint Arena = 2007457;
+        public const uint ArenaLayoutId = 7538913;
+    }
+
     public class LockonId
     {
         public const ushort MistralSong = 16;

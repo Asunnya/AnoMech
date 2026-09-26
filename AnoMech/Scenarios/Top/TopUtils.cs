@@ -190,7 +190,7 @@ public record TopUtils(SimWorld World)
         // flash a synthetic rectangle omen over the lethal zone so the AOE is visible.
         // Same placement + (halfWidth, 1, length) scale InsideRect uses, so it overlaps 1:1.
         World.SpawnOmen(
-            "vfx/omen/eff/general02f.avfx",
+            VfxPath.OpticalLaserRect,
             new Placement(new (0, 0, 0), opticalUnit.Rotation)
                 .MoveForward(-20),
             new Vector3(Geometry.OpticalLaserHalfWidth, 1f, 40),

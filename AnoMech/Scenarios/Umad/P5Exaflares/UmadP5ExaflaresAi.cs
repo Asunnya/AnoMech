@@ -10,10 +10,14 @@ using static AnoMech.Scenarios.Umad.UmadConstants;
 
 namespace AnoMech.Scenarios.Umad.P5Exaflares;
 
-// Bots for UMAD P5 exaflares: the 7 doppels weave the rolling walls, then spread for the final
-// ExaflareSpread (the local player dodges themselves). Scheduled on the scenario's unscaled
-// `timeline`, not the stock AiManager (which rides EventTimeScale), so they stay frame-locked to the
-// fire; spread relaxation runs per-frame from the scenario's Tick via state.SpreadTick.
+// Bots for UMAD P5 exaflares: all 8 party slots weave the rolling walls, then spread for the final
+// ExaflareSpread. Addresses every slot uniformly, including whichever holds the real player --
+// PlayerMovement.MoveTo is what decides whether that one actually moves (no-op for a real human,
+// forwarded to MoveTo under DebugBotControl), so a real human dodging themselves works exactly as
+// before and debug-bot testing now also drives that slot instead of leaving it standing still.
+// Scheduled on the scenario's unscaled `timeline`, not the stock AiManager (which rides
+// EventTimeScale), so they stay frame-locked to the fire; spread relaxation runs per-frame from the
+// scenario's Tick via state.SpreadTick.
 //
 // DODGE GEOMETRY. The fire is two perpendicular diagonal families: left line k burns X-Z = -35+10k,
 // right line k burns X+Z = -35+10k. Each wave fires a {1,4}/{2,5}/{3,6} pair, leaving a wide central
@@ -45,7 +49,7 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
     private static readonly float StripInset = FireClearU + 1.5f; // keep bots clear of a fired locus
     private const float OuterReach = 19f;                         // outer-lane reach in X±Z space (arena-bounded)
     private const float DistFill = 0.8f;                          // keep bots off a lane's edges (extra fire margin)
-    private const float DodgeSpeed = 7f;                          // sprint-ish, so the back-solve makes the snapshot
+    private const float DodgeSpeed = 8.3f;                        // sprint-ish, so the back-solve makes the snapshot
 
     // --- dodge placement ---
     private const float MeleeComfort = 2.5f;                      // melee happily stack this close
@@ -56,7 +60,7 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
 
     // --- opening fan-out ---
     private const float FanOutAt = 0.1f;                          // after SpawnKefka (t=0), so the boss radius reads
-    private const float FanSpeed = 6f;                            // settle well before wave 0's dodge at t=2.0
+    private const float FanSpeed = 6.5f;                          // settle well before wave 0's dodge at t=2.0
     private const float FanInnerMargin = 0.75f;                   // inner fan radius = NoGoRadius + this
     private const float FanAngleJitter = 0.5f;                    // rad, so the wheel isn't rigid (< ring spacing)
 
@@ -67,7 +71,7 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
     private const float InnerFallback = 6.5f;                     // max-melee (inner annulus outer edge) if the boss can't be read
     private const float NoGoRadius = 3.5f;                        // 7y-diameter hard no-go at the boss
     private const float ArenaMax = 19f;
-    private const float RelaxSpeed = 6f;
+    private const float RelaxSpeed = 6.5f;
     private const float DeadZone = 0.25f;                         // below this desired step, leave the bot be
     private const float WRepel = 1.0f, WArena = 1.5f;
     // Radial spring weights: inner roles pull harder so the wider spacing doesn't shove tanks/melee
@@ -128,12 +132,14 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
         bool leftWave = (n % 2) == 0;
         var lanes = UsableBands(n);                                  // safe crit lanes (central + maybe outer)
         if (lanes.Count == 0) return;
-        int playerSlot = (int)world.Party.PlayerRole;
 
-        var picks = new List<Pick>(7);
+        // Addresses all 8 slots uniformly, including whichever holds the real player --
+        // PlayerMovement.MoveTo is the one place that decides whether that's safe (no-op
+        // outside DebugBotControl, forwarded to a real MoveTo under it), so this doesn't
+        // need its own player exclusion. See PlayerMovement's own doc comment.
+        var picks = new List<Pick>(8);
         for (int slot = 0; slot < 8; slot++)
         {
-            if (slot == playerSlot) continue;                       // the player dodges themselves
             var bot = world.Party.Get(slot);
             if (bot is null || !bot.IsAlive()) continue;
 
@@ -162,13 +168,13 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
     {
         timeline.Add(FanOutAt, () =>
         {
-            int playerSlot = (int)world.Party.PlayerRole;
             float outer = ResolveInnerRing();                       // max-melee around the boss
             float inner = MathF.Min(NoGoRadius + FanInnerMargin, outer - 0.5f);
 
+            // Uniform over all 8 slots, same reasoning as PlaceWave -- PlayerMovement.MoveTo
+            // is the actual gate on whether the real player's slot moves.
             for (int slot = 0; slot < 8; slot++)
             {
-                if (slot == playerSlot) continue;                   // the player isn't ours to move
                 var bot = world.Party.Get(slot);
                 if (bot is null || !bot.IsAlive()) continue;
 
@@ -261,7 +267,8 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
         Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
 
     // Force-relaxation step, driven every frame from the scenario's Tick during the spread window.
-    // Moves only the doppels; the player is read as a repulsor but never moved.
+    // Moves all 8 slots uniformly, including whichever holds the real player -- see PlaceWave's
+    // comment on why that slot doesn't need its own exclusion here.
     private void RelaxStep(float dt)
     {
         if (!spreadPhase) return;
@@ -271,10 +278,8 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
             if (world.Party.Get(i) is { } m && m.IsAlive())
                 agents.Add((m, new Vector2(m.Position.X, m.Position.Z)));
 
-        int playerSlot = (int)world.Party.PlayerRole;
         for (int slot = 0; slot < 8; slot++)
         {
-            if (slot == playerSlot) continue;
             var bot = world.Party.Get(slot);
             if (bot is null || !bot.IsAlive()) continue;
             var p = new Vector2(bot.Position.X, bot.Position.Z);

@@ -1,12 +1,16 @@
 #if DEBUG
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Numerics;
+using System.Text;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Windowing;
+using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.SimObjects;
 using AnoMech.Scenarios.Top;
@@ -52,6 +56,10 @@ internal sealed class DamageDebugWindow : Window, IDisposable
     private float sourceRemaining;
     private IDalamudTextureWrap? tex;
 
+    // Captured regardless of IsOpen/frozen, so Freeze()'s dump works without the window ever
+    // having been opened.
+    private AoeQuery? lastRecordedQuery;
+
     public DamageDebugWindow(Plugin plugin)
         : base("Damage Debug##AnoMechDamageDebug")
     {
@@ -74,6 +82,7 @@ internal sealed class DamageDebugWindow : Window, IDisposable
     // Draw on the same (main) thread.
     internal void Record(AoeQuery query)
     {
+        lastRecordedQuery = query;
         if (!IsOpen || frozen) return;
         EnsureGrid();
         var hits = query.Run(gridFind!);
@@ -158,11 +167,114 @@ internal sealed class DamageDebugWindow : Window, IDisposable
     }
 
     // Auto-freeze hook for the wipe sequence (Game.Kill). Snapshots the heatmap as-is
-    // so the killing AOE — recorded moments earlier in the same Resolve — stays visible.
-    internal void Freeze() { frozen = true; freezeRebuildPending = true; }
+    // so the killing AOE — recorded moments earlier in the same Resolve — stays visible,
+    // and dumps that query whether or not the window was ever opened.
+    internal void Freeze()
+    {
+        frozen = true;
+        freezeRebuildPending = true;
+        DumpToFile();
+    }
+
+    // A party/AOE state snapshot into DiagnosticLog; the last query is re-run against every
+    // party member (dead ones included) to show who was inside the shape. Also called
+    // periodically by Game.Tick.
+    internal void DumpToFile()
+    {
+        try
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"AnoMech damage debug dump -- {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine();
+
+            CharacterFind<SimCharacter>? hitFind = null;
+            AoeQuery? query = lastRecordedQuery;
+            if (query is { } q)
+            {
+                var name = ActionLookup.Name(q.ActionId);
+                var actionSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
+                sb.AppendLine($"Most recent AOE -- Action: {q.ActionId} (0x{q.ActionId:X}) \"{name}\"");
+                if (actionSheet.TryGetRow(q.ActionId, out var action))
+                    sb.AppendLine($"  CastType={action.CastType}  EffectRange={action.EffectRange}  XAxisModifier={action.XAxisModifier}");
+                else
+                    sb.AppendLine("  (row not found in Action sheet)");
+                sb.AppendLine($"  OmenRotate={q.OmenRotate:F3}  SizeOverride={(q.Size is { } sz ? sz.ToString("F3") : "(none)")}");
+                sb.AppendLine();
+
+                var src = q.Source;
+                sb.AppendLine($"Source position: ({src.Position.X:F2}, {src.Position.Y:F2}, {src.Position.Z:F2})  Rotation: {src.Rotation:F3} rad (forward = (sin, cos) of this)");
+                sb.AppendLine();
+                hitFind = new CharacterFind<SimCharacter>(() => plugin.Game.World.Party.AllMembers());
+            }
+            else
+            {
+                sb.AppendLine("(no AOE resolved yet this run)");
+                sb.AppendLine();
+            }
+
+            var hits = query is { } qq && hitFind is { } hf ? qq.Run(hf) : [];
+            sb.AppendLine("Party members at this moment:");
+            foreach (var member in plugin.Game.World.Party.AllMembers())
+            {
+                var role = (member as ISimPartyMember)?.Role.ToString() ?? member.GetType().Name;
+                var alive = member.IsAlive() ? "ALIVE" : "DEAD ";
+                var hitLabel = query is null ? "  -  " : hits.Contains(member) ? "HIT  " : "clear";
+                var distLabel = query is { } q2
+                    ? $"  dist from source={MathF.Sqrt(MathF.Pow(member.Position.X - q2.Source.Position.X, 2) + MathF.Pow(member.Position.Z - q2.Source.Position.Z, 2)):F2}"
+                    : "";
+                var statuses = member.ActiveStatusSnapshot;
+                var statusLabel = statuses.Count == 0
+                    ? ""
+                    : "  statuses=[" + string.Join(", ", statuses.Select(s => s.Stacks > 1 ? $"{s.StatusId}x{s.Stacks}" : $"{s.StatusId}")) + "]";
+                // Who drives this slot on this client, for comparing a host dump with a guest's.
+                var driver = member switch
+                {
+                    SimPlayer => DebugBotControl.Enabled ? "YOU(bot)" : "YOU",
+                    SimNetworkPuppet => "PEER",
+                    _ => "BOT",
+                };
+                sb.AppendLine($"  {role,-14} [{driver,-8}] {alive}  {hitLabel}  pos=({member.Position.X:F2}, {member.Position.Z:F2}){distLabel}{statusLabel}");
+            }
+            sb.AppendLine();
+
+            sb.AppendLine("Enemies currently in world:");
+            var enemies = plugin.Game.World.Children.OfType<SimEnemy>().Where(e => e.IsActive).ToList();
+            if (enemies.Count == 0)
+                sb.AppendLine("  (none)");
+            else
+                foreach (var enemy in enemies)
+                    sb.AppendLine($"  {enemy.DisplayName,-20} pos=({enemy.Position.X:F2}, {enemy.Position.Z:F2})  rot={enemy.Rotation:F3}");
+            sb.AppendLine();
+
+            sb.AppendLine("Tethers currently active:");
+            var tethers = plugin.Game.World.Children.OfType<SimTether>().Where(t => t.IsActive).ToList();
+            if (tethers.Count == 0)
+                sb.AppendLine("  (none)");
+            else
+                foreach (var t in tethers)
+                {
+                    var aLabel = t.A is { } a ? DescribeParticipant(a) : "(none)";
+                    var bLabel = t.B is { } b ? DescribeParticipant(b) : "(none)";
+                    sb.AppendLine($"  TetherId={t.TetherId}  {aLabel} -> {bLabel}");
+                }
+            sb.AppendLine();
+
+            // Into the diagnostic log rather than a second file, so a bug report is one file.
+            AnoMech.Core.DiagnosticLog.LogSnapshot("Damage Debug Snapshot", sb.ToString());
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Warning($"[DamageDebugWindow] Failed to write damage debug dump: {ex.Message}");
+        }
+    }
 
     // Cleared at the start of each run so a new scenario records from a blank, live map.
     internal void ResetFreeze() { frozen = false; freezeRebuildPending = false; Clear(); }
+
+    // Labels a tether endpoint as its party role if it's a party member, else its
+    // enemy display name -- tethers can end on either.
+    private static string DescribeParticipant(SimCharacter c) =>
+        (c as ISimPartyMember)?.Role.ToString() ?? (c as SimEnemy)?.DisplayName ?? c.GetType().Name;
 
     // Snapshot of every party dot's position (alive or dead), taken on the first
     // frozen frame — AllMembers, not Find, so the just-killed member is included.

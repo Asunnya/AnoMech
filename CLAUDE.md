@@ -27,7 +27,8 @@ Write a comment only for what the code cannot say itself — rationale, a non-ob
 - restate literals or contract visible at a glance (`// TerritoryId 1363` beside `TerritoryId => 1363`);
 - narrate what an edit changed (git records that);
 - re-explain what an interface member's own doc already says;
-- pile on examples for something trivial.
+- pile on examples for something trivial;
+- cite where a value came from — log filenames, pull numbers, capture dates, sample sizes, tool invocations (`// Confirmed against 3 real pulls (Network_30208_*.log, pulls 2/3/5)`). State what the game does, not how it was measured. Provenance belongs in the session notes, not the source. The exception is a caveat that changes how the code should be trusted: mark a value that was never observed as UNVERIFIED, and keep a note that an approach was tried and found inert so nobody retries it.
 
 When unsure, cut it — sparse and load-bearing beats thorough. Scenario AI strats (`*Ai.cs`) go stricter: no comments, intent carried entirely by descriptive method names.
 

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using AnoMech.Core;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
@@ -13,10 +12,8 @@ public class TopP5OmegaAi : IScenarioAi<TopP5OmegaState>
     public string Name => "Standard";
 
     private TopP5OmegaState state = null!;
-    private readonly Random rng = new Random();
 
     private RoleList? helloWorld1;
-    private RoleList? helloWorld2;
 
     public void Run(TopP5OmegaState s, SimWorld world)
     {
@@ -26,10 +23,13 @@ public class TopP5OmegaAi : IScenarioAi<TopP5OmegaState>
         ai.Move(0f, InitialPositions);
         ai.Move(20f, Dodge(0), arrivalTime: 24f);
         ai.Move(24f, Dodge(1), arrivalTime: 28f);
-        ai.Automarker(28f, () => HelloWorldMarkers(helloWorld1));
+        ai.Automarker(28f, () => HelloWorldMarkers(helloWorld1?.List));
         ai.Move(32f, HelloWorld1Pos, jitter: 0.1f, arrivalTime: 41f);
-        world.Events.Add(46f, () => helloWorld2 = solveHelloWorld2(world.Party));
-        ai.Automarker(47f, () => HelloWorldMarkers(helloWorld2));
+        // state.HelloWorld2 is resolved host-only by TopP5OmegaScenario (see its own doc
+        // comment) and broadcast, not rolled here -- this Ai runs identically for the host's
+        // bots and a peer's own replay, and a live status read + shuffle would let the two
+        // diverge on who stands where.
+        ai.Automarker(47f, () => HelloWorldMarkers(state.HelloWorld2));
         ai.Move(48f, GatherMiddle);
         ai.Move(53f, HelloWorld2Pos, arrivalTime: 57f);
         ai.Move(62f, InitialPositions);
@@ -59,7 +59,7 @@ public class TopP5OmegaAi : IScenarioAi<TopP5OmegaState>
                            );
     }
 
-    private Dictionary<PartyRole, Sign> HelloWorldMarkers(RoleList? list)
+    private Dictionary<PartyRole, Sign> HelloWorldMarkers(IReadOnlyList<PartyRole>? list)
     {
         if (list == null) return [];
         return new Dictionary<PartyRole, Sign>() {
@@ -102,7 +102,7 @@ public class TopP5OmegaAi : IScenarioAi<TopP5OmegaState>
             new (0, 0),
             new (0, 0)
         )
-        .Assignments(helloWorld2?.List)
+        .Assignments(state.HelloWorld2)
         .ApplyPositions(state.BettleSpawnDirection.Apply);
     }
 
@@ -118,7 +118,7 @@ public class TopP5OmegaAi : IScenarioAi<TopP5OmegaState>
             new (4, 19f),
             new (19f, 0)
         )
-        .Assignments(helloWorld2?.List)
+        .Assignments(state.HelloWorld2)
         .ApplyPositions(state.BettleSpawnDirection.Apply);
     }
 
@@ -151,64 +151,12 @@ public class TopP5OmegaAi : IScenarioAi<TopP5OmegaState>
 
     private RoleList solveHelloWorld1(SimParty party)
     {
-        var monitorTarget = monitorTargets();
-        var jumpTargets = RoleList.AllExcept(party, monitorTarget[0], monitorTarget[1], state.HelloWorldTargets[0],
-                                             state.HelloWorldTargets[1]);
+        var jumpTargets = state.HelloWorld1JumpOrder;
         return new RoleList(party,
             [
-                state.HelloWorldTargets[0], state.HelloWorldTargets[1], monitorTarget[0], monitorTarget[1],
+                state.HelloWorldTargets[0], state.HelloWorldTargets[1], state.MonitorTargets[0], state.MonitorTargets[1],
                 jumpTargets[0], jumpTargets[1], jumpTargets[2], jumpTargets[3]
             ]
         );
-    }
-
-    private RoleList solveHelloWorld2(SimParty party)
-    {
-        List<PartyRole> freeAgents = [];
-        List<PartyRole> tethers = [];
-        foreach (var role in Enum.GetValues<PartyRole>())
-        {
-           if  (role == state.HelloWorldTargets[2] || role == state.HelloWorldTargets[3])
-               continue;
-           if (party.Get(role)?.FindStatus(TopConstants.StatusId.QuickeningDynamis) is { Stacks: 3 })
-               tethers.Add(role);
-           else
-               freeAgents.Add(role);
-        }
-        freeAgents = freeAgents.Shuffle().ToList();
-        tethers = tethers.Shuffle().ToList();
-        return new RoleList(party,
-            [
-                state.HelloWorldTargets[2], state.HelloWorldTargets[3], tethers[0], tethers[1],
-                freeAgents[0], freeAgents[1], freeAgents[2], freeAgents[3]
-            ]);
-    }
-
-
-    private List<PartyRole> monitorTargets()
-    {
-        List<PartyRole> mustTakeMonitor = [];
-        List<PartyRole> canTakeMonitor = [];
-        foreach (var role in Enum.GetValues<PartyRole>())
-        {
-            if (state.HelloWorldTargets[0] == role || state.HelloWorldTargets[1] == role)
-                continue;
-            if (!state.DoubleDynamicTargets.Contains(role))
-                continue;
-
-            if (state.HelloWorldTargets[2] == role || state.HelloWorldTargets[3] == role)
-                mustTakeMonitor.Add(role);
-            else
-                canTakeMonitor.Add(role);
-        }
-
-        while (mustTakeMonitor.Count < 2)
-        {
-            var selected = canTakeMonitor[rng.Next(canTakeMonitor.Count)];
-            canTakeMonitor.Remove(selected);
-            mustTakeMonitor.Add(selected);
-        }
-
-        return mustTakeMonitor.Shuffle().ToList();
     }
 }

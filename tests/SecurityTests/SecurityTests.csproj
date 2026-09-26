@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <StartupObject>SecurityTests</StartupObject>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Shared/RelayWire.cs" Link="Source/RelayWire.cs" />
+    <Compile Include="../../Relay/AnoMech.Relay/Program.cs" Link="Source/Relay.cs" />
+    <Compile Include="../../AnoMech/Multiplayer/RelayClient.cs" Link="Source/RelayClient.cs" />
+    <Compile Include="../../AnoMech/Multiplayer/RelayStats.cs" Link="Source/RelayStats.cs" />
+    <Compile Include="../../AnoMech/Multiplayer/Protocol.cs" Link="Source/Protocol.cs" />
+    <Compile Include="../../AnoMech/Core/Game/Party/PartyRole.cs" Link="Source/PartyRole.cs" />
+    <Compile Include="../../AnoMech/Configuration.cs" Link="Source/Configuration.cs" />
+  </ItemGroup>
+</Project>

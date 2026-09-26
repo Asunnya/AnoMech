@@ -13,6 +13,26 @@ public sealed class EventScheduler
     private readonly List<Entry> entries = new();
     private float elapsed;
 
+    public float Elapsed => elapsed;
+
+    // Moves the clock without firing; whatever falls due fires on the next Tick.
+    public void Advance(float seconds) => elapsed += MathF.Max(0f, seconds);
+
+    // Add offsets inside `schedule` count from t=0, not now: an Ai started late still means its
+    // times as run times. Entries already past fire on the next Tick.
+    public T FromRunStart<T>(Func<T> schedule)
+    {
+        var now = elapsed;
+        elapsed = 0f;
+        try
+        {
+            return schedule();
+        }
+        finally
+        {
+            elapsed = now;
+        }
+    }
     // No more scheduled work. A scenario's whole timeline lives in this queue, so this
     // doubles as a generic "reached its declared end" signal for whoever's watching (Game
     // uses it to infer a clean run for the mechanic-streak counter) without needing scenarios
@@ -33,9 +53,25 @@ public sealed class EventScheduler
         elapsed += deltaSeconds;
         while (entries.Count > 0 && entries[0].Time <= elapsed)
         {
-            var action = entries[0].Action;
+            var due = entries[0];
             entries.RemoveAt(0);
-            action();
+            // An unhandled exception here previously took down every remaining
+            // entry, not just this one: the exception unwinds straight out of
+            // Tick, so the next call from a later frame resumes at whatever's
+            // now first in the queue -- but if that one throws too (a scenario
+            // bug that fires on every subsequent tick, e.g. stale replicated
+            // state one specific scenario's Ai reads), the whole rest of the run
+            // silently stops progressing, one discarded entry at a time, with
+            // nothing but a log line to show for it. Isolating each entry means
+            // one broken callback loses only itself.
+            try
+            {
+                due.Action();
+            }
+            catch (Exception e)
+            {
+                DiagnosticLog.Warn($"[EventScheduler] Scheduled action at t={due.Time:F2} threw and was skipped: {e}");
+            }
         }
     }
 

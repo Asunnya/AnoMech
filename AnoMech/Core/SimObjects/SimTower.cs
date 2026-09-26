@@ -18,8 +18,8 @@ public sealed unsafe class SimTower : SimEventObject
     private int? lastCount;
 
     private SimTower(int slot, GameObject* obj, Coordinates coordinates, uint eObjRowId,
-                     ushort[] states, float radius, SimParty party, float lifetime)
-        : base(slot, obj, coordinates, eObjRowId, states[0], lifetime)
+                     ushort[] states, float radius, SimParty party, float lifetime, uint layoutId)
+        : base(slot, obj, coordinates, eObjRowId, states[0], lifetime, layoutId)
     {
         this.party = party;
         this.radius = radius;
@@ -45,7 +45,7 @@ public sealed unsafe class SimTower : SimEventObject
         obj->SetPosition(worldPos.X, worldPos.Y, worldPos.Z);
         obj->SetRotation(MathUtil.NormalizeRotation(config.Placement.Rotation));
 
-        var tower = new SimTower(slot, obj, coordinates, config.EObjId, states, radius, party, config.Lifetime);
+        var tower = new SimTower(slot, obj, coordinates, config.EObjId, states, radius, party, config.Lifetime, config.LayoutId);
 
         Plugin.Log.Info($"SimTower: spawned EObj 0x{config.EObjId:X} at slot {slot} ({worldPos.X:F2},{worldPos.Y:F2},{worldPos.Z:F2}) radius={radius:F1} states=[{string.Join(",", states)}]");
         return tower;

@@ -63,7 +63,7 @@ public unsafe class UwuUtils(SimWorld world)
     public void Awaken(SimEnemy? enemy, bool isUltima)
     {
         enemy?.AddStatusParam(StatusId.Woken, isUltima ? 97 : 0);
-        TimelineContainerPointers.SetAnimationState(&enemy!.BattleCharaPtr->Timeline, 0, 1);
+        enemy?.SetAnimationState(0, 1);
     }
 
     public void ResolveSnapshot(IReadOnlyList<SimCharacter> snapshot, string dieCause)
