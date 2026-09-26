@@ -198,6 +198,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(119.88f, () => TankBuster(PartyRole.OffTank, ActionId.RockBuster, RockBusterLength, 0.28f));
         world.Events.Add(123.98f, () => TankBuster(PartyRole.OffTank, ActionId.MountainBuster, MountainBusterLength, 0.6f));
         world.Events.Add(125.50f, () => busterTank = null);
+        world.Events.Add(125.60f, () => titan?.MoveTo(AtBearing(state.SecondJumpBearing, 7.5f), 3f));
 
         world.Events.Add(126.08f, ForewarnLateBombs);
         world.Events.Add(128.00f, () => SpawnBomb(lateBombs, 0, state.LateBomb(0), 129.10f));
