@@ -665,7 +665,9 @@ public sealed class UwuP3TitanScenario : IScenario
         titan.SetPosition(new Placement(titan.Position, rotation));
         CastSelf(titan, secondHitAt == null ? ActionId.LandslideTitanNormal : ActionId.LandslideTitan, 1.9f);
         CastLandslideLines(rotation, LandslideOffsets, ActionId.LandslideLine, 1.9f, hitAt);
-        if (secondHitAt is { } at) RegisterLandslideHazards(rotation, AwakenedLandslideOffsets, at);
+        if (secondHitAt is not { } at) return;
+        RegisterLandslideHazards(rotation, AwakenedLandslideOffsets, at);
+        state.AwakenedLandslide = new AwakenedLandslideCast(Flat(titan.Position), rotation, at);
     }
 
     private void CastLandslideLines(float rotation, float[] offsets, uint actionId, float castSeconds, float hitAt)

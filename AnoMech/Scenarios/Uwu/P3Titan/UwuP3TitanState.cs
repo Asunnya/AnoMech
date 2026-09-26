@@ -23,6 +23,8 @@ public sealed class UwuP3TitanState
 
     public readonly record struct Hazard(Vector2 Origin, float Bearing, float Size, float At, bool IsLane);
 
+    public readonly record struct AwakenedLandslideCast(Vector2 Origin, float Rotation, float SecondHitAt);
+
     public float FirstJumpBearing { get; }
     public float SecondJumpBearing { get; }
     public int SafeSide { get; }
@@ -36,6 +38,7 @@ public sealed class UwuP3TitanState
 
     public List<Hazard> Hazards { get; } = [];
     public Vector3 TitanPosition { get; set; }
+    public AwakenedLandslideCast? AwakenedLandslide { get; set; }
     public HashSet<PartyRole> Jailed { get; } = [];
 
     public UwuP3TitanState()

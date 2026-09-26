@@ -28,12 +28,14 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
 
     private UwuP3TitanState state = null!;
     private Vector2? groupTarget;
+    private (float SecondHitAt, Vector2 Spot)? wedgeSpot;
     private SimWorld world = null!;
 
     public void Run(UwuP3TitanState stateParam, SimWorld worldParam)
     {
         state = stateParam;
         groupTarget = null;
+        wedgeSpot = null;
         world = worldParam;
         var ai = new AiManager(world);
 
@@ -218,6 +220,8 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
 
     private IAiMove GroupDodgesKnownHazards(float now, int[] excluded)
     {
+        if (state.AwakenedLandslide is { } landslide && now < landslide.SecondHitAt)
+            return EveryoneIntoTheWedgeSafeFromBothHits(landslide, now, excluded);
         var holder = (int)state.Holder;
         var members = Enumerable.Range(0, 8)
             .Where(slot => slot != holder && !excluded.Contains(slot) && !state.Jailed.Contains((PartyRole)slot))
@@ -239,6 +243,51 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
                 ? NearestSpotClearOfUpcomingHazards(Flat(tank.Position), now, Margin)
                 : BesideTitanAwayFrom(target, now);
         return AiMove.Create(spots).NaturalOrder();
+    }
+
+    private IAiMove EveryoneIntoTheWedgeSafeFromBothHits(UwuP3TitanState.AwakenedLandslideCast landslide, float now, int[] excluded)
+    {
+        var members = Enumerable.Range(0, 8)
+            .Where(slot => !excluded.Contains(slot) && !state.Jailed.Contains((PartyRole)slot))
+            .Select(slot => (slot, member: world.Party.Get(slot)))
+            .Where(x => x.member is { } m && m.IsAlive())
+            .ToList();
+        var spots = new Vector2?[8];
+        if (members.Count == 0) return AiMove.Create(spots).NaturalOrder();
+        if (wedgeSpot is not { } kept || kept.SecondHitAt != landslide.SecondHitAt)
+        {
+            var anchor = members.Aggregate(Vector2.Zero, (sum, x) => sum + Flat(x.member!.Position)) / members.Count;
+            var spot = NearestWedgeSpot(landslide, anchor, now) ?? NearestSpotClearOfUpcomingHazards(anchor, now, Margin + TightSpread);
+            wedgeSpot = kept = (landslide.SecondHitAt, spot);
+        }
+        groupTarget = null;
+        foreach (var (slot, _) in members) spots[slot] = kept.Spot + SpreadOffset(slot, TightSpread);
+        return AiMove.Create(spots).NaturalOrder();
+    }
+
+    // Both hits leave the four wedges at 67.5 degrees either side of the first lines untouched, far enough out.
+    private Vector2? NearestWedgeSpot(UwuP3TitanState.AwakenedLandslideCast landslide, Vector2 from, float now)
+    {
+        var upcoming = state.Hazards.Where(h => h.At > now).ToList();
+        var reach = ArenaRadiusAt(now) - 1f - TightSpread;
+        Vector2? best = null;
+        var bestDistance = float.MaxValue;
+        foreach (var degrees in new[] { 67.5f, -67.5f, 112.5f, -112.5f })
+        {
+            var rotation = landslide.Rotation + degrees * MathF.PI / 180f;
+            var direction = new Vector2(MathF.Sin(rotation), MathF.Cos(rotation));
+            for (var radius = 8.5f; radius <= 14f; radius += 0.5f)
+            {
+                var spot = landslide.Origin + direction * radius;
+                if (spot.Length() > reach) break;
+                var distance = Vector2.Distance(from, spot);
+                if (distance >= bestDistance || !ClearOfHazardsOnTheWay(spot, spot, now, upcoming, TightSpread + 0.3f)) continue;
+                best = spot;
+                bestDistance = distance;
+                break;
+            }
+        }
+        return best;
     }
 
     private Vector2 BesideTitanAwayFrom(Vector2 party, float now)
