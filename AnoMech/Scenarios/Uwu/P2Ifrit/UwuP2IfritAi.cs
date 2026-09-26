@@ -20,6 +20,7 @@ public sealed class UwuP2IfritAi : IScenarioAi<UwuP2IfritState>
     private const float PartyCornerRadius = 15.8f;
     private const float MainTankCornerRadius = 17.5f;
     private const float RimRadius = 16.5f;
+    private const float OppositeTheClosePairOfNails = 112.5f;
 
     private static readonly Vector2 FinalMainTankSpot = new(-12.5f, 0f);
     private static readonly Vector2 FinalPartySpot = new(-4f, 5f);
@@ -35,14 +36,14 @@ public sealed class UwuP2IfritAi : IScenarioAi<UwuP2IfritState>
 
         ai.Move(0.5f, () => AiMove.Create(SpreadAround(Vector2.Zero, 1.2f)).NaturalOrder());
         ai.Move(5.3f, RunToOpenerSafeSpot);
-        ai.Move(10.3f, TankIfritWestPartyNorth);
+        ai.Move(10.3f, TankIfritSouthPartyNorth);
 
         ai.Move(40.9f, SurroundNailsWithIfritPulledBetweenTheClosePair);
-        ai.Move(48.3f, () => BaitersSplitTo(RimReference(63.5f), RimReference(96.5f)));
-        ai.Move(51.2f, () => BaitersSplitTo(RimReference(30f), RimReference(130f)));
-        ai.Move(48.5f, () => Only(state.HowlFirst, Reference(-16f, 3f)));
-        ai.Move(53.2f, () => BaitersSplitTo(RimReference(-3.5f), RimReference(163.5f)));
-        ai.Move(55.2f, () => BaitersSplitTo(RimReference(-37f), RimReference(197f)));
+        ai.Move(48.3f, () => BaitersSplitTo(RimReference(60f), RimReference(160f)));
+        ai.Move(48.5f, () => Only(state.HowlFirst, RimReference(OppositeTheClosePairOfNails)));
+        ai.Move(51.2f, () => BaitersSplitTo(RimReference(26.5f), RimReference(193.5f)));
+        ai.Move(53.2f, () => BaitersSplitTo(RimReference(-7f), RimReference(227f)));
+        ai.Move(55.2f, () => BaitersSplitTo(RimReference(-40.5f), RimReference(260.5f)));
         ai.Move(58.3f, () => BaitersTo(NailPhasePartySpot()));
         ai.Move(67.0f, () => Only(state.HowlFirst, NailPhasePartySpot()));
 
@@ -83,9 +84,9 @@ public sealed class UwuP2IfritAi : IScenarioAi<UwuP2IfritState>
         return AiMove.Create(spots).NaturalOrder();
     }
 
-    private static IAiMove TankIfritWestPartyNorth() => AiMove.Create(
-        new(-6.5f, 0f),
-        new(0f, 5f),
+    private static IAiMove TankIfritSouthPartyNorth() => AiMove.Create(
+        new(0f, 6.5f),
+        new(0f, -3.5f),
         new(-2f, -5.5f),
         new(2f, -5.5f),
         new(-1f, -4.5f),

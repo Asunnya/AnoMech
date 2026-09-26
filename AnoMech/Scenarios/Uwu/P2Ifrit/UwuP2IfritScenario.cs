@@ -46,6 +46,8 @@ public sealed class UwuP2IfritScenario : IScenario
     private UwuP2IfritState state = null!;
 
     private SimEnemy? ifrit;
+    private bool ifritTanked;
+    private Vector3? ifritFaces;
     private readonly List<SimEnemy> helpers = [];
     private readonly List<SimEnemy> radiantPlumeCasters = [];
     private readonly Dictionary<float, SimEnemy?> nails = [];
@@ -72,21 +74,25 @@ public sealed class UwuP2IfritScenario : IScenario
         Array.Clear(eruptionSpots);
         Array.Clear(crossCasters);
         eruptionBaits = [];
+        ifritTanked = false;
+        ifritFaces = null;
 
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UwuP2IfritState>)AiStrats[idx]).Run(state, world);
 
-        world.Events.Add(0f, utils.SpawnArenaFloor);
+        world.Events.Add(0f, () => utils.SpawnArenaFloor());
         world.Events.Add(0f, SpawnIfrit);
+        world.Events.Add(0f, StartPartyInTheMiddle);
         world.Events.Add(2.93f, () => Arrive(ifrit));
         world.Events.Add(5.12f, () => CastSelf(ifrit, ActionId.CrimsonCyclone, 2.7f));
         world.Events.Add(5.16f, CastRadiantPlumes);
         world.Events.Add(8.10f, () => ResolveCrimsonCyclone(ifrit, state.OpenerBearing, ActionId.CrimsonCyclone, CrimsonCycloneHalfWidth));
         world.Events.Add(9.13f, ResolveRadiantPlumes);
         world.Events.Add(9.10f, () => ifrit?.SetVisible(false));
-        world.Events.Add(10.15f, () => PlaceIfrit(Vector3.Zero, Get(PartyRole.MainTank)));
+        world.Events.Add(10.15f, PlaceIfritFacingSouth);
+        world.Events.Add(10.15f, () => ifritFaces = MarkerC);
         world.Events.Add(10.24f, () => Arrive(ifrit));
-        world.Events.Add(12.29f, () => ifrit?.SetTargetable(true));
+        world.Events.Add(12.29f, () => TankIfrit(true));
         world.Events.Add(12.38f, () => CastSelf(ifrit, ActionId.Hellfire, 2.7f));
         world.Events.Add(15.37f, Hellfire);
 
@@ -97,6 +103,7 @@ public sealed class UwuP2IfritScenario : IScenario
 
         world.Events.Add(39.89f, SpawnNails);
         world.Events.Add(40.82f, () => SetNailsTargetable(true));
+        world.Events.Add(41.50f, () => ifritFaces = null);
         world.Events.Add(41.50f, () => MoveIfrit(state.FromReference(IfritAtNailsReference)));
         world.Events.Add(45.76f, TetherInfernalFetters);
         world.Events.Add(46.03f, () => CastInfernoHowl(state.HowlFirst));
@@ -122,11 +129,12 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(66.03f, () => KillNail(state.NailKillBearings[2]));
         world.Events.Add(69.46f, () => KillNail(state.NailKillBearings[3]));
 
+        world.Events.Add(71.02f, () => TankIfrit(false));
         world.Events.Add(71.02f, () => Leave(ifrit));
         world.Events.Add(72.20f, () => ifrit?.SetVisible(false));
-        world.Events.Add(75.25f, () => PlaceIfrit(Vector3.Zero, Get(PartyRole.MainTank)));
+        world.Events.Add(75.25f, PlaceIfritFacingSouth);
         world.Events.Add(75.30f, () => Arrive(ifrit));
-        world.Events.Add(75.30f, () => ifrit?.SetTargetable(true));
+        world.Events.Add(75.30f, () => TankIfrit(true));
         world.Events.Add(75.38f, () => CastSelf(ifrit, ActionId.Hellfire, 2.7f));
         world.Events.Add(78.37f, Hellfire);
         world.Events.Add(79.50f, () => MoveIfrit(state.FromReference(IfritAtCornerReference)));
@@ -165,6 +173,7 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(116.74f, () => SearingWind(state.HowlSecond));
         world.Events.Add(116.78f, () => SearingWind(state.HowlFirst));
 
+        world.Events.Add(119.02f, () => TankIfrit(false));
         world.Events.Add(119.02f, () => Leave(ifrit));
         world.Events.Add(120.30f, () => ifrit?.SetVisible(false));
         world.Events.Add(122.53f, () => SpawnDashClone(state.NailKillBearings[0], awakened: state.AwakenedDash == 0));
@@ -190,10 +199,10 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(131.84f, () => DespawnDashClone(state.NailKillBearings[3]));
         world.Events.Add(132.79f, () => AwakenedCross(3));
 
-        world.Events.Add(134.00f, () => PlaceIfrit(Vector3.Zero, Get(PartyRole.MainTank)));
+        world.Events.Add(134.00f, PlaceIfritFacingSouth);
         world.Events.Add(134.05f, () => Arrive(ifrit));
         world.Events.Add(134.83f, () => SearingWind(state.HowlFirst));
-        world.Events.Add(134.83f, () => ifrit?.SetTargetable(true));
+        world.Events.Add(134.83f, () => TankIfrit(true));
         world.Events.Add(135.50f, () => MoveIfrit(new Vector3(-8f, 0f, 0f)));
         world.Events.Add(138.98f, Incinerate);
         world.Events.Add(142.10f, Incinerate);
@@ -214,6 +223,25 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(164.27f, () => FlamingCrush(state.FlamingCrushTargets[1]));
         world.Events.Add(166.50f, KillIfrit);
         world.Events.Add(168.00f, DespawnAll);
+    }
+
+    // Ifrit keeps his back to the party by facing his tank (the C marker until the nails, where he
+    // is tanked from); targeted casts like Inferno Howl would otherwise turn him toward their target.
+    public void Tick(float delta, float elapsed)
+    {
+        if (ifritTanked && ifrit is { IsMoving: false } boss && FacingTarget() is { } at)
+            boss.Face(at);
+    }
+
+    private static readonly Vector3 MarkerC = new(0f, 0f, 6.699f);
+
+    private Vector3? FacingTarget() =>
+        ifritFaces ?? (Get(PartyRole.MainTank) is { } tank && tank.IsAlive() ? tank.Position : null);
+
+    private void TankIfrit(bool tanked)
+    {
+        ifritTanked = tanked;
+        ifrit?.SetTargetable(tanked);
     }
 
     private SimCharacter? Get(PartyRole role) => party.Get(role);
@@ -256,8 +284,17 @@ public sealed class UwuP2IfritScenario : IScenario
         enemy?.PlayActionTimeline(ActionTimelineId.WarpStart);
     }
 
-    private void PlaceIfrit(Vector3 at, SimCharacter? facing) =>
-        ifrit?.SetPosition(new Placement(at, facing == null ? MathF.PI : Facing(at, facing.Position)));
+    // Ifrit always lands in the middle facing south; the tank picks him up from there.
+    private void PlaceIfritFacingSouth() => ifrit?.SetPosition(new Placement(Vector3.Zero, 0f));
+
+    private void StartPartyInTheMiddle()
+    {
+        for (var slot = 0; slot < 8; slot++)
+        {
+            var angle = slot * MathF.PI / 4f;
+            party.Get(slot)?.SetPosition(new Placement(new Vector3(MathF.Cos(angle) * 1.2f, 0f, MathF.Sin(angle) * 1.2f), MathF.PI));
+        }
+    }
 
     private void MoveIfrit(Vector2 to) => MoveIfrit(new Vector3(to.X, 0f, to.Y));
 
@@ -265,11 +302,6 @@ public sealed class UwuP2IfritScenario : IScenario
     {
         var mainTank = Get(PartyRole.MainTank);
         ifrit?.MoveTo(to, 4f, mainTank == null ? null : Facing(to, mainTank.Position));
-    }
-
-    private void FaceMainTank()
-    {
-        if (ifrit != null && Get(PartyRole.MainTank) is { } mainTank) ifrit.Face(mainTank);
     }
 
     private void CastRadiantPlumes()
@@ -316,9 +348,9 @@ public sealed class UwuP2IfritScenario : IScenario
 
     private void Incinerate()
     {
-        if (ifrit == null || Get(PartyRole.MainTank) is not { } mainTank) return;
-        FaceMainTank();
-        var rotation = Facing(ifrit.Position, mainTank.Position);
+        if (ifrit == null || Get(PartyRole.MainTank) is not { } mainTank || FacingTarget() is not { } facing) return;
+        var rotation = Facing(ifrit.Position, facing);
+        ifrit.SetPosition(new Placement(ifrit.Position, rotation));
         PlayEffect(ifrit, ActionId.Incinerate, 1.1f, rotation, mainTank.GameObjectId);
         foreach (var hit in party.Find.InsideCone(new Placement(ifrit.Position, rotation), IncinerateHalfAngle, IncinerateLength).ToList())
         {
@@ -420,11 +452,17 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(1.5f, () => DespawnHelper(caster));
     }
 
-    // The two players farthest from Ifrit when the set starts bait all four pairs of puddles.
+    // The two players farthest from Ifrit when the set starts bait all four pairs of puddles. The
+    // healer holding Searing Wind never did in the logs, however far out.
     private void MarkEruptionBaits()
     {
         if (ifrit == null) return;
-        eruptionBaits = party.Find.FarestN(ifrit.Position, 2);
+        var ifritAt = new Vector2(ifrit.Position.X, ifrit.Position.Z);
+        eruptionBaits = AliveMembers()
+            .Where(m => !m.HasStatus(StatusId.SearingWind))
+            .OrderByDescending(m => Vector2.DistanceSquared(new Vector2(m.Position.X, m.Position.Z), ifritAt))
+            .Take(2)
+            .ToList();
     }
 
     private void CastEruptions(int pair)
@@ -448,7 +486,11 @@ public sealed class UwuP2IfritScenario : IScenario
             var slot = pair * 2 + i;
             if (eruptionSpots[slot] is not { } at) continue;
             PlayEffect(eruptionCasters[slot], ActionId.EruptionPuddle, 0.1f, at: at);
-            utils.ResolveSnapshot(party.Find.InsideCircle(at, EruptionRadius).ToList(), "Eruption");
+            foreach (var hit in party.Find.InsideCircle(at, EruptionRadius).ToList())
+            {
+                if (IsTank(hit)) damage.ApplyDamage(hit, 0.5f, ActionId.EruptionPuddle, "Eruption", false);
+                else hit.Die("Died to Eruption");
+            }
             eruptionSpots[slot] = null;
         }
     }

@@ -100,6 +100,7 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
     }
     
     public void Face(Vector3? target) => Movement.Face(target);
+    public bool IsMoving => Movement.IsMoving;
     public void Face(IPositioned? target) => Face(target?.Position);
     public void MoveTo(Vector3 target, float speed = 6f, float? finalRotation = null)
         => Movement.MoveTo(target, speed, finalRotation);
