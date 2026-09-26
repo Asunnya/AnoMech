@@ -21,6 +21,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     private const float TankStandOff = 2.5f;
     private const float PlanStep = 0.3f;
     private const float TightSpread = 0.3f;
+    private const float ReactionDelay = 0.3f;
 
     private static readonly Vector2 TitansLeftSide = new(12f, -5.8f);
     private static readonly Vector2 TitansRightSide = new(12f, 5.8f);
@@ -46,10 +47,10 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         ai.Move(40.1f, () => Group(UpheavalStandingSpot(), 0.1f), jitter: 0f);
         ai.Move(46.8f, JailedBesideTheirGaolSpotsOutOfTheLandslide, jitter: 0f);
         ai.Move(46.8f, () => PartyTo(new Vector2(-0.8f, -6.1f), withGaolTargets: false), jitter: 0f);
-        ai.Move(48.6f, () => HolderTo(new Vector2(-8f, -5f * state.SafeSide)));
+        ai.Move(48.6f, () => HolderTo(new Vector2(-11f, -5f * state.SafeSide)));
         ai.Move(50.70f, JailedIntoTheChain, jitter: 0f);
         ai.Move(50.75f, () => PartyTo(new Vector2(9.5f, -10.2f), withGaolTargets: false), jitter: 0f);
-        ai.Move(50.8f, () => HolderTo(new Vector2(-8f, 0f)));
+        ai.Move(50.8f, () => HolderTo(new Vector2(-11f, 0f)));
         ai.Move(53.05f, () => HolderTo(new Vector2(-8f, -6f * state.SafeSide)));
         ai.Move(57.0f, () => HolderTo(new Vector2(8f, 0f)), jitter: 0f);
         ai.Move(57.8f, () => PartyTo(TitansLeftSide, withGaolTargets: true), jitter: 0f);
@@ -193,7 +194,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     {
         var spots = new Vector2?[8];
         for (var i = 0; i < state.GaolTargets.Count; i++) spots[(int)state.GaolTargets[i]] = BesideGaolSpot(i);
-        if (!state.GaolTargets.Contains(state.Holder)) spots[(int)state.Holder] = state.FromJumpFrame(new Vector2(-8f, 0f));
+        if (!state.GaolTargets.Contains(state.Holder)) spots[(int)state.Holder] = state.FromJumpFrame(new Vector2(-11f, 0f));
         return AiMove.Create(spots).NaturalOrder();
     }
 
@@ -252,8 +253,9 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     {
         var upcoming = state.Hazards.Where(h => h.At > now).OrderBy(h => h.At).ToList();
         var reach = ArenaRadiusAt(now) - 1f - GroupSpread;
-        if (NearestClearSpot(from, now, upcoming, margin, reach) is { } clearOfAll)
-            return clearOfAll;
+        foreach (var tighter in new[] { margin, GroupSpread + 0.25f })
+            if (NearestClearSpot(from, now, upcoming, tighter, reach) is { } clearOfAll)
+                return clearOfAll;
         for (var count = upcoming.Count - 1; count >= 0; count--)
             if (NearestClearSpot(from, now, upcoming.Take(count).ToList(), margin, reach) is { } found)
                 return found;
@@ -283,7 +285,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         var direction = distance > 0.01f ? (to - from) / distance : Vector2.Zero;
         foreach (var hazard in hazards)
         {
-            var whenItHits = from + direction * MathF.Min(distance, RunSpeed * (hazard.At - now));
+            var whenItHits = from + direction * MathF.Min(distance, RunSpeed * MathF.Max(0f, hazard.At - now - ReactionDelay));
             if (IsInside(whenItHits, hazard, margin)) return false;
         }
         return true;
