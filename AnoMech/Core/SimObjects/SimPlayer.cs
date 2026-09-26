@@ -91,8 +91,8 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
     }
 
     // The client's own prediction runs the whole cast -- bar, animations, lock, cancel-on-move.
-    // All the sim does is watch it, to refund the faked gauge when it doesn't land and to count
-    // the cast as activity for stillness mechanics.
+    // All the sim does is watch it, to spend the faked gauge once it lands and to count the cast
+    // as activity for stillness mechanics.
     private uint limitBreakActionId;
     private LimitBreakWatch limitBreakWatch;
     private float limitBreakGrace;
@@ -111,7 +111,6 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
 
     public bool IsLimitBreaking => limitBreakWatch != LimitBreakWatch.Idle;
 
-    // An instant limit break (every tank LB3) has no cast to lose, so there is nothing to watch.
     public void WatchLimitBreak(uint actionId, float castSeconds)
     {
         limitBreakActionId = actionId;
@@ -119,12 +118,6 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
         limitBreakWatched = 0f;
         limitBreakRemaining = castSeconds;
         limitBreakSample = LimitBreakSampleSeconds;
-        if (castSeconds <= 0f)
-        {
-            limitBreakWatch = LimitBreakWatch.Idle;
-            DiagnosticLog.Info($"[LimitBreak] {ActionLookup.Name(actionId)} ({actionId}) is instant -- the gauge stays spent. Timeline slots {SimEnemy.DescribeActionTimeline(BattleCharaPtr)}.");
-            return;
-        }
         limitBreakWatch = LimitBreakWatch.Starting;
         limitBreakGrace = LimitBreakStartGrace;
         DiagnosticLog.Info($"[LimitBreak] {ActionLookup.Name(actionId)} ({actionId}) accepted, {castSeconds:F1}s cast -- watching the client's own bar. {DescribeCast()}.");
@@ -134,7 +127,7 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
     {
         if (limitBreakWatch == LimitBreakWatch.Idle) return;
         var bc = BattleCharaPtr;
-        if (bc == null) { DropLimitBreakWatch("there is no character to watch", refund: true); return; }
+        if (bc == null) { DropLimitBreakWatch("there is no character to watch", landed: false); return; }
 
         limitBreakWatched += deltaSeconds;
         var casting = bc->CastInfo.IsCasting && bc->CastInfo.ActionId == limitBreakActionId;
@@ -142,10 +135,10 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
         {
             limitBreakWatch = LimitBreakWatch.Casting;
             limitBreakRemaining = bc->CastInfo.TotalCastTime - bc->CastInfo.CurrentCastTime;
-            // An overstaying bar means the client is holding out for a reply the firewall ate;
-            // pinning IsActing true for the rest of the run is worse.
+            // An overstaying bar ran its whole cast and the client is holding out for a reply the
+            // firewall ate; pinning IsActing true for the rest of the run is worse.
             if (limitBreakWatched > limitBreakTotal + LimitBreakOverstaySeconds)
-                DropLimitBreakWatch($"the client's bar never cleared ({limitBreakWatched:F1}s for a {limitBreakTotal:F1}s cast)", refund: false);
+                DropLimitBreakWatch($"the client's bar never cleared ({limitBreakWatched:F1}s for a {limitBreakTotal:F1}s cast)", landed: true);
             else
                 SampleLimitBreak(deltaSeconds);
             return;
@@ -155,7 +148,7 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
         {
             limitBreakGrace -= deltaSeconds;
             if (limitBreakGrace <= 0f)
-                DropLimitBreakWatch("the client never opened a cast bar for it", refund: true);
+                DropLimitBreakWatch("the client never opened a cast bar for it", landed: false);
             return;
         }
 
@@ -164,14 +157,14 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
         var landed = limitBreakRemaining <= Plugin.Config.CastInterruptThreshold;
         DropLimitBreakWatch(landed
             ? $"it landed (bar cleared with {limitBreakRemaining:F2}s left)"
-            : $"it was interrupted with {limitBreakRemaining:F2}s left", refund: !landed);
+            : $"it was interrupted with {limitBreakRemaining:F2}s left", landed);
     }
 
-    private void DropLimitBreakWatch(string why, bool refund)
+    private void DropLimitBreakWatch(string why, bool landed)
     {
         limitBreakWatch = LimitBreakWatch.Idle;
-        if (refund) Plugin.PlayerInputHooks.RefundLimitBreak();
-        DiagnosticLog.Info($"[LimitBreak] {ActionLookup.Name(limitBreakActionId)}: {why}{(refund ? " -- the gauge is refunded" : "")}. Timeline slots {SimEnemy.DescribeActionTimeline(BattleCharaPtr)}.");
+        if (landed) Plugin.PlayerInputHooks.SpendLimitBreak();
+        DiagnosticLog.Info($"[LimitBreak] {ActionLookup.Name(limitBreakActionId)}: {why} -- the gauge is {(landed ? "spent" : "kept")}. Timeline slots {SimEnemy.DescribeActionTimeline(BattleCharaPtr)}.");
     }
 
     private void SampleLimitBreak(float deltaSeconds)
@@ -214,7 +207,7 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
 
     private void CancelLimitBreak(string why)
     {
-        if (IsLimitBreaking) DropLimitBreakWatch(why, refund: true);
+        if (IsLimitBreaking) DropLimitBreakWatch(why, landed: false);
     }
 
     public void OnKilled()
