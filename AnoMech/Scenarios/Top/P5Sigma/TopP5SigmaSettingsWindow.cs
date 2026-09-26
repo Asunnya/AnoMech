@@ -1,3 +1,4 @@
+using AnoMech.Core.Game.Party;
 using Dalamud.Bindings.ImGui;
 
 namespace AnoMech.Scenarios.Top.P5Sigma;
@@ -6,9 +7,12 @@ public sealed class TopP5SigmaSettingsWindow
 {
     public TopP5SigmaStateOverrides Overrides { get; } = new();
 
+    // Which seat the per-player rows are showing. UI state only; never broadcast.
+    private PartyRole editingSeat = PartyRole.MainTank;
+
     public void Draw()
     {
-        if (ImGui.Button("Auto")) ResetAll();
+        if (ImGui.Button("Auto")) ResetFight();
         if (SettingsGrid.Begin("##p5sigma"))
         {
 #if DEBUG
@@ -21,13 +25,26 @@ public sealed class TopP5SigmaSettingsWindow
 #endif
             DrawSpinnerRotation();
             DrawOmegaFForm();
-            DrawHelloWorld();
-            DrawDynamis();
             SettingsGrid.End();
         }
     }
 
-    private void ResetAll()
+    public void DrawPerPlayer()
+    {
+        if (ImGui.Button("Auto")) ResetPerPlayer();
+        if (SettingsGrid.Begin("##p5sigmaplayers"))
+        {
+            editingSeat = SettingsGrid.SeatRow("##sigmaseat", editingSeat);
+            DrawHelloWorld();
+            DrawDynamis();
+            SettingsGrid.ForcedRecapRow("Hello World set:", Overrides.HelloWorld);
+            SettingsGrid.ForcedRecapRow("Dynamis set:", Overrides.Dynamis);
+            SettingsGrid.End();
+        }
+        SettingsGrid.ConflictRows(Overrides.Validate());
+    }
+
+    private void ResetFight()
     {
 #if DEBUG
         Overrides.NewNorthA = null;
@@ -37,8 +54,12 @@ public sealed class TopP5SigmaSettingsWindow
         Overrides.TowerNorthFlip = null;
         Overrides.SpinnerRotation = null;
         Overrides.OmegaFForm = null;
-        Overrides.HelloWorld = HelloWorldOption.Auto;
-        Overrides.Dynamis = null;
+    }
+
+    private void ResetPerPlayer()
+    {
+        Overrides.HelloWorld.Clear();
+        Overrides.Dynamis.Clear();
     }
 
 #if DEBUG
@@ -111,27 +132,29 @@ public sealed class TopP5SigmaSettingsWindow
         if (ImGui.RadioButton("Staff##form",      v == OmegaAttack.Staff))      Overrides.OmegaFForm = OmegaAttack.Staff;
     }
 
+    private string Whose => PerRole.SeatsActive ? "" : "Your ";
+
     private void DrawHelloWorld()
     {
-        var h = Overrides.HelloWorld;
-        SettingsGrid.Row("Hello World:");
-        if (ImGui.RadioButton("Auto##hw", h == HelloWorldOption.Auto)) Overrides.HelloWorld = HelloWorldOption.Auto;
+        var h = Overrides.HelloWorld.Effective(editingSeat);
+        SettingsGrid.Row($"{Whose}Hello World:");
+        if (ImGui.RadioButton("Auto##hw", h == null)) Overrides.HelloWorld.Set(editingSeat, null);
         ImGui.SameLine();
-        if (ImGui.RadioButton("Near##hw", h == HelloWorldOption.Near)) Overrides.HelloWorld = HelloWorldOption.Near;
+        if (ImGui.RadioButton("Near##hw", h == HelloWorldOption.Near)) Overrides.HelloWorld.Set(editingSeat, HelloWorldOption.Near);
         ImGui.SameLine();
-        if (ImGui.RadioButton("Far##hw",  h == HelloWorldOption.Far))  Overrides.HelloWorld = HelloWorldOption.Far;
+        if (ImGui.RadioButton("Far##hw",  h == HelloWorldOption.Far))  Overrides.HelloWorld.Set(editingSeat, HelloWorldOption.Far);
         ImGui.SameLine();
-        if (ImGui.RadioButton("None##hw", h == HelloWorldOption.No))   Overrides.HelloWorld = HelloWorldOption.No;
+        if (ImGui.RadioButton("None##hw", h == HelloWorldOption.No))   Overrides.HelloWorld.Set(editingSeat, HelloWorldOption.No);
     }
 
     private void DrawDynamis()
     {
-        var d = Overrides.Dynamis;
-        SettingsGrid.Row("Start with Dynamis:");
-        if (ImGui.RadioButton("Auto##dyn", d == null))  Overrides.Dynamis = null;
+        var d = Overrides.Dynamis.Effective(editingSeat);
+        SettingsGrid.Row($"{Whose}start with Dynamis:");
+        if (ImGui.RadioButton("Auto##dyn", d == null))  Overrides.Dynamis.Set(editingSeat, null);
         ImGui.SameLine();
-        if (ImGui.RadioButton("Yes##dyn",  d == true))  Overrides.Dynamis = true;
+        if (ImGui.RadioButton("Yes##dyn",  d == true))  Overrides.Dynamis.Set(editingSeat, true);
         ImGui.SameLine();
-        if (ImGui.RadioButton("No##dyn",   d == false)) Overrides.Dynamis = false;
+        if (ImGui.RadioButton("No##dyn",   d == false)) Overrides.Dynamis.Set(editingSeat, false);
     }
 }

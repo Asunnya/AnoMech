@@ -7,7 +7,9 @@ using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Map;
+using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
+using AnoMech.Multiplayer;
 using static AnoMech.Scenarios.Umad.UmadConstants;
 
 namespace AnoMech.Scenarios.Umad.P5Exaflares;
@@ -21,11 +23,13 @@ namespace AnoMech.Scenarios.Umad.P5Exaflares;
 //
 // The timeline runs on a scenario-local Stopwatch (`timeline`), not the engine's ms-truncated
 // UpdateDelta, so events fire drift-free and ignore the Speed buttons.
-public sealed class UmadP5ExaflaresScenario : IScenario
+public sealed class UmadP5ExaflaresScenario : IMultiplayerReplayable
 {
     public string Name => "Exaflares";
     public IPhase Phase => UmadZone.P5;
     public bool SupportsSolo => true;
+    public bool SupportsMultiplayer => true;
+    public uint? TankMaxHealth => Tunables.RealTankMaxHealth;
 
     // Enemy spawn level.
     private const byte Level = 100;
@@ -33,6 +37,7 @@ public sealed class UmadP5ExaflaresScenario : IScenario
     public IReadOnlyList<IScenarioAi> AiStrats => [new UmadP5ExaflaresAi()];
 
     public void DrawSettings() => settingsWindow.Draw();
+    public object SettingsOverrides => settingsWindow.Overrides;
     private readonly UmadP5ExaflaresSettingsWindow settingsWindow = new();
 
     private UmadP5ExaflaresState state = null!;
@@ -72,11 +77,19 @@ public sealed class UmadP5ExaflaresScenario : IScenario
     // Despawn the arrow this far before completion to suppress its native release.
     private const float ArrowReleaseSuppressLead = 0.05f;
 
+    // The current run's randomized per-run assignments, exposed so
+    // MultiplayerManager can read them after a host Start and broadcast them --
+    // lets a peer's local "debug: bot controls my character" mode replay the
+    // same choreography a host-side bot in that role would produce. Mirrors
+    // UmadP3BlackHoleScenario.LastState.
+    public UmadP5ExaflaresState? LastState { get; private set; }
+
     public void Run(SimWorld worldParam, int? selectedAi)
     {
         world = worldParam;
         party = worldParam.Party;
         state = new UmadP5ExaflaresState(settingsWindow.Overrides, timeline);
+        LastState = state;
         damage = new DamageSolver(party); // ApplyDamage deals % of max HP; godmode drop/heal handled in Game.Kill
         spreadHelpers.Clear();
 
@@ -256,5 +269,35 @@ public sealed class UmadP5ExaflaresScenario : IScenario
         kefka?.Despawn();
         foreach (var h in spreadHelpers) h.Despawn();
         spreadHelpers.Clear();
+    }
+
+    public MpMessage? BuildReplayStateMessage()
+        => LastState is { } s ? new P5AiReplayStateMessage(s.LeftOrder.ToArray(), s.RightOrder.ToArray()) : null;
+
+    public object? StartReplay(MpMessage message, int aiIndex, PartyRole myRole, SimWorld replayWorld)
+    {
+        if (message is not P5AiReplayStateMessage msg) return null;
+        // A fresh, peer-owned EventScheduler that UmadP5ExaflaresAi schedules its dodges onto --
+        // TickReplay below ticks it every frame, mirroring this scenario's own Tick, which
+        // never runs on a peer.
+        var shadowState = UmadP5ExaflaresState.FromNetworkReplay(msg.LeftOrder, msg.RightOrder, new EventScheduler());
+        ((IScenarioAi<UmadP5ExaflaresState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
+        return shadowState;
+    }
+
+    public void TickReplay(object shadowStateObj, float deltaSeconds)
+    {
+        if (shadowStateObj is not UmadP5ExaflaresState shadowState) return;
+        if (deltaSeconds > FrameGapCapSeconds) return;
+        shadowState.Timeline.Tick(deltaSeconds);
+        shadowState.SpreadTick?.Invoke(deltaSeconds);
+    }
+
+    public float? ReplayClockSeconds => (float)(timeline.Elapsed + (wallClock.Elapsed.TotalSeconds - lastWall));
+
+    public void AdvanceReplayClockTo(object shadowStateObj, float seconds)
+    {
+        if (shadowStateObj is UmadP5ExaflaresState shadowState)
+            shadowState.Timeline.Advance(seconds - shadowState.Timeline.Elapsed);
     }
 }

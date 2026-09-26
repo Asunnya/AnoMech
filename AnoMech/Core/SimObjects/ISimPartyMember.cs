@@ -1,6 +1,8 @@
 using System;
 using System.Numerics;
+using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
+using AnoMech.Core.Native;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -37,6 +39,21 @@ public interface ISimPartyMember : ISimObject, IPositioned
     void Knockback(Vector3 source, float distance) => Knockback(source, distance, KnockbackSpeed);
 
     void Knockback(Vector3 source, float distance, float speed);
+
+    // Forced movement in a fixed direction (world heading, same convention as Placement.Rotation)
+    // rather than away from a point -- see Movement.PushInDirection's own doc comment.
+    void PushInDirection(float heading, float distance, float speed);
+
+    // Same as PushInDirection, but eased (ramp up, hold, ramp down) instead of constant-speed
+    // -- see Movement.PushInDirectionEased's own doc comment for why this exists separately.
+    void PushInDirectionEased(float heading, float distance, float durationSeconds);
+
+    // A scripted snap, as opposed to SetPosition's engine-side use; SimNetworkPuppet hands it to
+    // the owning peer.
+    void TeleportTo(Placement placement) => ((SimCharacter)this).SetPosition(placement);
+
+    // SimNetworkPuppet hands it to the owning peer.
+    void CarryTo(Vector3 destination, CarryMode mode = CarryMode.Native);
 }
 
 // Bridges the party-member death model onto SimCharacter-typed call sites. Party
@@ -45,6 +62,10 @@ public interface ISimPartyMember : ISimObject, IPositioned
 // ISimPartyMember concept for party members and to plain presence otherwise.
 public static class SimCharacterDeathExtensions
 {
+    // Public so SimAssets harvests them: the KO pose rides on RoleState to peers.
+    public const ushort KoTimelineId = 72;
+    public const ushort KoLoopTimelineId = 73;
+
     // A party member is alive while not KO'd; any other character is alive while
     // present. Null is not alive.
     public static bool IsAlive(this SimCharacter? c)
@@ -66,7 +87,7 @@ public static class SimCharacterDeathExtensions
 
         public void PlayKoActionTimeline()
         {
-            c.PlayActionTimeline(72, 73);
+            c.PlayActionTimeline(KoTimelineId, KoLoopTimelineId);
         }
     }
 }

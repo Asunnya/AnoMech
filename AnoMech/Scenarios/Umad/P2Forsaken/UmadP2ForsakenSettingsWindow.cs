@@ -28,6 +28,9 @@ public sealed class UmadP2ForsakenSettingsWindow
         if (ImGui.Button("Auto")) ResetAll();
         if (SettingsGrid.Begin("##umadp2forsaken"))
         {
+            // The two Stack rows name a seat, but the fight picks one player out of a group --
+            // there is no per-seat choice to make, the way a number or a tether is.
+            SettingsGrid.FightOnlyNote();
 #if DEBUG
             DrawFirstEndAttack();
             DrawNewNorth();

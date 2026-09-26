@@ -28,7 +28,7 @@ public class DamageSolver
         ushort[]? removeStatus = null,
         int stackMinTargets = 0, int wildChargeTargets = 0, DamageType[]? wildChargeDamageType = null,
         float? size = null, float? coneRotationDelta = null, SimCharacter[]? excludeTargets = null,
-        bool killTargets = true)
+        bool killTargets = true, float tankBusterRawDamage = 0f, SimEnemy? tankBusterSource = null)
     {
         if (source == null) return [];
         var placement = source.Placement();
@@ -39,6 +39,30 @@ public class DamageSolver
         AnoMech.Windows.DamageDebugWindow.Instance?.Record(query);
 #endif
         var targets = query.Run(party.Find);
+        DiagnosticLog.Info(
+            $"[DamageSolver] Resolve: {ActionLookup.Name(actionId)} from ({placement.Position.X:F1},{placement.Position.Z:F1}) rot={placement.Rotation:F3} -- {targets.Count} target(s): "
+            + string.Join(", ", targets.Select(t => (t as ISimPartyMember)?.Role.ToString() ?? "?")));
+        // Cone-shaped resolves (e.g. AllThingsEndHalfCone) only tell you who got hit --
+        // for a mostly-stacked group where a few survive and a few don't, that's not
+        // enough to tell whether a near-miss was a positioning bug or just an unlucky
+        // cone edge. Mirrors InsideCone's own cos-vs-cosHalf check so this is directly
+        // comparable to what actually decided each member's fate, not a separate guess.
+        if (size is { } halfAngle)
+        {
+            var forwardX = MathF.Sin(placement.Rotation);
+            var forwardZ = MathF.Cos(placement.Rotation);
+            var cosHalf = MathF.Cos(halfAngle);
+            var detail = string.Join(", ", party.ActiveMembers().Select(m =>
+            {
+                var dx = m.Position.X - placement.Position.X;
+                var dz = m.Position.Z - placement.Position.Z;
+                var dist = MathF.Sqrt(dx * dx + dz * dz);
+                var cos = dist < 0.01f ? 1f : (dx * forwardX + dz * forwardZ) / dist;
+                var role = (m as ISimPartyMember)?.Role.ToString() ?? "?";
+                return $"{role}@({m.Position.X:F1},{m.Position.Z:F1}) dist={dist:F1} cos={cos:F2}{(cos >= cosHalf ? " IN" : "")}";
+            }));
+            DiagnosticLog.Info($"[DamageSolver] Cone geometry (halfAngle={halfAngle:F2} cosHalf={cosHalf:F2}): {detail}");
+        }
         List<SimCharacter> deadTargets = [];
         if (excludeTargets is { Length: > 0 })
             targets = targets.Where(t => !excludeTargets.Contains(t)).ToList();
@@ -57,7 +81,7 @@ public class DamageSolver
                 if (killTargets)
                     target.Die($"Died to {ActionLookup.Name(actionId)} ({targets.Count}/{stackMinTargets} players in stack)");
             }
-            else if (CheckLethal(actionId, target, wildCharge ? damageTypeWildCharge : damageTypeBase, killTargets))
+            else if (CheckLethal(actionId, target, wildCharge ? damageTypeWildCharge : damageTypeBase, killTargets, tankBusterRawDamage, tankBusterSource))
             {
                 deadTargets.Add(target);
             }
@@ -107,7 +131,7 @@ public class DamageSolver
         return killed;
     }
 
-    private bool CheckLethal(uint actionId, SimCharacter target, HashSet<DamageType> damageTypes, bool killTarget)
+    private bool CheckLethal(uint actionId, SimCharacter target, HashSet<DamageType> damageTypes, bool killTarget, float tankBusterRawDamage, SimEnemy? tankBusterSource)
     {
         if (damageTypes.Contains(DamageType.Lethal))
         {
@@ -119,9 +143,17 @@ public class DamageSolver
             if (killTarget) target.Die($"Died to {ActionLookup.Name(actionId)} (had vuln up debuff)");
             return true;
         }
-        else if (damageTypes.Contains(DamageType.TankBuster) && target is not ISimPartyMember { Role: PartyRole.OffTank or PartyRole.MainTank })
+        else if (damageTypes.Contains(DamageType.TankBuster))
         {
-            if(killTarget) target.Die($"Died to {ActionLookup.Name(actionId)} (tank buster)");
+            // Not a tank at all -- always lethal, no mitigation check needed.
+            if (target is not ISimPartyMember { Role: PartyRole.OffTank or PartyRole.MainTank })
+            {
+                if (killTarget) target.Die($"Died to {ActionLookup.Name(actionId)} (tank buster)");
+                return true;
+            }
+            var role = ((ISimPartyMember)target).Role;
+            if (TankMitigation.ApplyTankBusterDamage(party, role, tankBusterRawDamage, tankBusterSource, standInPartyMitigation: true)) return false;
+            if (killTarget) target.Die($"Died to {ActionLookup.Name(actionId)} (tank buster, not enough mitigation)");
             return true;
         }
         else

@@ -10,14 +10,24 @@ namespace AnoMech.Helpers;
 
 internal static unsafe class InstanceContentDirectorHelper
 {
-    public static void ProcessDirectorUpdate(uint category, uint arg1 = 0, uint arg2 = 0, uint arg3 = 0, uint arg4 = 0, uint arg5 = 0, uint arg6 = 0)
+    // Returns false when the zone/director isn't ready yet (async load still in
+    // flight) so MapController can retry instead of silently losing the call.
+    public static bool ProcessDirectorUpdate(uint category, uint arg1 = 0, uint arg2 = 0, uint arg3 = 0, uint arg4 = 0, uint arg5 = 0, uint arg6 = 0)
     {
+        // Outside a sim this resolves the director of whatever instance the player is really
+        // in -- a live duty -- and drives its state machine. Nothing here may run there.
+        if (Plugin.GameInstance?.World.Map.IsInInstance != true)
+        {
+            Plugin.Log.Debug("[EventFrameworkHelper.ProcessDirectorUpdate] no sim in progress -- ignoring.");
+            return false;
+        }
+
         var eventFramework = EventFramework.Instance();
 
         if (eventFramework == null)
         {
             Plugin.Log.Debug("[EventFrameworkHelper.Commence] EventFramework.Instance() was null");
-            return;
+            return false;
         }
 
         var director = eventFramework->GetInstanceContentDirector();
@@ -25,11 +35,12 @@ internal static unsafe class InstanceContentDirectorHelper
         if (director == null)
         {
             Plugin.Log.Debug("[EventFrameworkHelper.Commence] eventFramework->GetInstanceContentDirector() was null");
-            return;
+            return false;
         }
 
         var eventId = director->GetEventId();
         eventFramework->ProcessDirectorUpdate(eventId, category, arg1, arg2, arg3, arg4, arg5, arg6);
+        return true;
     }
 
     public static void SetDirectorData(byte sequence, byte unknown, byte* unionData, ulong length = 12)

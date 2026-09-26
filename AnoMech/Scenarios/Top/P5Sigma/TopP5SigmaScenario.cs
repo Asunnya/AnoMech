@@ -4,18 +4,25 @@ using System.Numerics;
 using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
+using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
+using AnoMech.Multiplayer;
 using static AnoMech.Scenarios.Top.TopConstants;
 
 namespace AnoMech.Scenarios.Top.P5Sigma;
 
-public sealed class TopP5SigmaScenario : IScenario
+public sealed class TopP5SigmaScenario : IMultiplayerReplayable
 {
     public string Name => "Sigma";
     public IPhase Phase => TopZone.P5;
+    public bool SupportsMultiplayer => true;
 
     public void DrawSettings() => settingsWindow.Draw();
+    public bool HasPerPlayerSettings => true;
+    public void DrawPerPlayerSettings() => settingsWindow.DrawPerPlayer();
+    public object SettingsOverrides => settingsWindow.Overrides;
+    public IReadOnlyList<string> SettingsConflicts => settingsWindow.Overrides.Validate().Problems;
     private readonly TopP5SigmaSettingsWindow settingsWindow = new();
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new TopP5SigmaAi()];
@@ -26,11 +33,16 @@ public sealed class TopP5SigmaScenario : IScenario
     private SimWorld world = null!;
     private SimParty party = null!;
 
+    // Exposed so MultiplayerManager can read the AI-relevant subset after a host Start and
+    // broadcast it -- see UmadP3BlackHoleScenario.LastState for the pattern.
+    public TopP5SigmaState? LastState { get; private set; }
+
     public void Run(SimWorld worldParam, int? selectedAi)
     {
         world = worldParam;
         party = worldParam.Party;
         state = new TopP5SigmaState(party, settingsWindow.Overrides);
+        LastState = state;
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<TopP5SigmaState>)AiStrats[idx]).Run(state, world);
         topUtils = new TopUtils(world);
@@ -144,10 +156,10 @@ public sealed class TopP5SigmaScenario : IScenario
     {
         SimEnemy? omega_4000A68F = null;
         world.Events.Add(3.94f, () => omega_4000A68F = world.SpawnEnemy(new EnemySpawnConfig(BNpcBaseId: BNpcBaseId.BeetleHelper, NameId: BNpcNameId.OmegaBeetle, Level: 90, Targetable: false, EnemyList: EnemyListMode.OnlyWhenVisible, IsVisible: false, Placement: state.NewNorthA.Apply(new Placement(new Vector3(0f, 0f, 20f), MathF.PI)))));
-        world.Events.Add(19.93f, () => omega_4000A68F?.PlayActionTimeline(TimelineId.Spawn));
+        world.Events.Add(19.93f, () => omega_4000A68F?.PlayAnimationTimeline(TimelineId.Spawn));
         world.Events.Add(20.04f, () => omega_4000A68F?.SetVisible(true));
         world.Events.Add(27.63f, () => omega_4000A68F?.Cast(ActionId.ProgramLoop, castSeconds: 0f, targetId: omega_4000A68F?.GameObjectId));
-        world.Events.Add(30.75f, () => omega_4000A68F?.PlayActionTimeline(TimelineId.WarpOut));
+        world.Events.Add(30.75f, () => omega_4000A68F?.PlayAnimationTimeline(TimelineId.WarpOut));
         world.Events.Add(45.27f, () => omega_4000A68F?.Despawn());
     }
 
@@ -367,5 +379,24 @@ public sealed class TopP5SigmaScenario : IScenario
             world.Events.Add(59.62f, () => omega_F_4000A40C_2 = world.SpawnEnemy(new EnemySpawnConfig(BNpcBaseId: BNpcBaseId.OmegaHelper, NameId: BNpcNameId.OmegaFDynamis, Level: 1, Targetable: false, EnemyList: EnemyListMode.Never, IsVisible: false, Placement: state.NewNorthB.Apply(Geometry.SuperliminalSteelOmenPlacement))));
             world.Events.Add(59.66f, () => omega_F_4000A40C_2?.Cast(ActionId.SuperliminalSteelOmenL, targetLocation: state.NewNorthB.Apply(Geometry.SuperliminalSteelOmenTargetL), castSeconds: 1.200f, targetId: omega_F_4000A40C_2?.GameObjectId, omenDelay: Duration.OmegaAttackOmenDelay));
         }
+    }
+
+    public MpMessage? BuildReplayStateMessage()
+        => LastState is { } s ? new TopP5SigmaAiReplayStateMessage(
+            s.Order.List, s.DynamisTargets.List, s.HelloWorldTargets.List, s.HandBait.List, s.HelloWorldJumpOrder.List,
+            s.NewNorthA.RadiansFromNorth, s.NewNorthB.RadiansFromNorth, s.TowerNorthFlipped,
+            s.GlitchType == GlitchType.Far, s.SpinnerRotation == Rotation.Clockwise, s.OmegaFAttack == OmegaAttack.Staff,
+            s.FirstMissing, s.SecondMissing)
+        : null;
+
+    public object? StartReplay(MpMessage message, int aiIndex, PartyRole myRole, SimWorld replayWorld)
+    {
+        if (message is not TopP5SigmaAiReplayStateMessage msg) return null;
+        var shadowState = TopP5SigmaState.FromNetworkReplay(
+            replayWorld.Party, msg.Order, msg.DynamisTargets, msg.HelloWorldTargets, msg.HandBait, msg.HelloWorldJumpOrder,
+            msg.NewNorthARadians, msg.NewNorthBRadians, msg.TowerNorthFlipped,
+            msg.GlitchIsFar, msg.SpinnerIsClockwise, msg.OmegaFIsStaff, msg.FirstMissing, msg.SecondMissing);
+        ((IScenarioAi<TopP5SigmaState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
+        return shadowState;
     }
 }

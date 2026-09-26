@@ -57,6 +57,10 @@ public static class PartyPresets
     ];
 }
 
+// A seat a real player holds over the network; both override the role preset's, and ClassJob 0
+// leaves the preset's job.
+public sealed record NetworkSeat(string Name, byte ClassJob);
+
 public sealed record PartyMemberPreset(
     string Name,
     byte ClassJob,

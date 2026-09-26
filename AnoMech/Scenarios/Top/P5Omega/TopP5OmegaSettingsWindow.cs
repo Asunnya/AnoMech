@@ -1,4 +1,5 @@
 using System;
+using AnoMech.Core.Game.Party;
 using Dalamud.Bindings.ImGui;
 
 namespace AnoMech.Scenarios.Top.P5Omega;
@@ -7,9 +8,12 @@ public sealed class TopP5OmegaSettingsWindow
 {
     public TopP5OmegaStateOverrides Overrides { get; } = new();
 
+    // Which seat the per-player rows are showing. UI state only; never broadcast.
+    private PartyRole editingSeat = PartyRole.MainTank;
+
     public void Draw()
     {
-        if (ImGui.Button("Auto")) ResetAll();
+        if (ImGui.Button("Auto")) ResetFight();
         if (SettingsGrid.Begin("##p5omega"))
         {
             DrawAttack("First F attack:",  "1f", OmegaAttack.Legs,   "Legs",   OmegaAttack.Staff,  "Staff",
@@ -23,15 +27,28 @@ public sealed class TopP5OmegaSettingsWindow
             DrawWaveCannon();
             DrawMonitorSide();
             DrawBeetleSpawn();
+            SettingsGrid.End();
+        }
+    }
+
+    public void DrawPerPlayer()
+    {
+        if (ImGui.Button("Auto")) ResetPerPlayer();
+        if (SettingsGrid.Begin("##p5omegaplayers"))
+        {
+            editingSeat = SettingsGrid.SeatRow("##omegaseat", editingSeat);
             DrawExtraDynamis();
             DrawHelloWorldOrder();
             DrawHelloWorldType();
+            SettingsGrid.ForcedRecapRow("Hello World set:", Overrides.HelloWorldOrder);
+            SettingsGrid.ForcedRecapRow("Extra dynamis set:", Overrides.ExtraDynamis);
             SettingsGrid.End();
         }
+        SettingsGrid.ConflictRows(Overrides.Validate());
         DrawForceButtons();
     }
 
-    private void ResetAll()
+    private void ResetFight()
     {
         Overrides.FirstFAttack = null;
         Overrides.FirstMAttack = null;
@@ -40,9 +57,13 @@ public sealed class TopP5OmegaSettingsWindow
         Overrides.FirstWaveCannonFront = null;
         Overrides.MonitorSide = null;
         Overrides.BettleSpawnDirection = null;
-        Overrides.ExtraDynamis = null;
-        Overrides.HelloWorldOrder = HelloWorldOrderOption.Auto;
-        Overrides.HelloWorldType = HelloWorldTypeOption.Auto;
+    }
+
+    private void ResetPerPlayer()
+    {
+        Overrides.ExtraDynamis.Clear();
+        Overrides.HelloWorldOrder.Clear();
+        Overrides.HelloWorldType.Clear();
     }
 
     private static void DrawAttack(string label, string suffix,
@@ -92,55 +113,60 @@ public sealed class TopP5OmegaSettingsWindow
         }
     }
 
+    private string Whose => PerRole.SeatsActive ? "" : "Your ";
+
     private void DrawExtraDynamis()
     {
-        var v = Overrides.ExtraDynamis;
-        SettingsGrid.Row("Extra dynamis stack:");
-        if (ImGui.RadioButton("Auto##dyn", v == null))  Overrides.ExtraDynamis = null;
+        var v = Overrides.ExtraDynamis.Effective(editingSeat);
+        SettingsGrid.Row($"{Whose}extra dynamis stack:");
+        if (ImGui.RadioButton("Auto##dyn", v == null))  Overrides.ExtraDynamis.Set(editingSeat, null);
         ImGui.SameLine();
-        if (ImGui.RadioButton("No##dyn",   v == false)) Overrides.ExtraDynamis = false;
+        if (ImGui.RadioButton("No##dyn",   v == false)) Overrides.ExtraDynamis.Set(editingSeat, false);
         ImGui.SameLine();
-        if (ImGui.RadioButton("Yes##dyn",  v == true))  Overrides.ExtraDynamis = true;
+        if (ImGui.RadioButton("Yes##dyn",  v == true))  Overrides.ExtraDynamis.Set(editingSeat, true);
     }
 
     private void DrawHelloWorldOrder()
     {
-        var v = Overrides.HelloWorldOrder;
-        SettingsGrid.Row("Hello World order:");
-        if (ImGui.RadioButton("Auto##hwo",   v == HelloWorldOrderOption.Auto))   Overrides.HelloWorldOrder = HelloWorldOrderOption.Auto;
+        var v = Overrides.HelloWorldOrder.Effective(editingSeat);
+        SettingsGrid.Row($"{Whose}Hello World order:");
+        if (ImGui.RadioButton("Auto##hwo",   v == null))                          SetOrder(null);
         ImGui.SameLine();
-        if (ImGui.RadioButton("Any##hwo",    v == HelloWorldOrderOption.Any))    Overrides.HelloWorldOrder = HelloWorldOrderOption.Any;
+        if (ImGui.RadioButton("Any##hwo",    v == HelloWorldOrderOption.Any))     SetOrder(HelloWorldOrderOption.Any);
         ImGui.SameLine();
-        if (ImGui.RadioButton("First##hwo",  v == HelloWorldOrderOption.First))  Overrides.HelloWorldOrder = HelloWorldOrderOption.First;
+        if (ImGui.RadioButton("First##hwo",  v == HelloWorldOrderOption.First))   SetOrder(HelloWorldOrderOption.First);
         ImGui.SameLine();
-        if (ImGui.RadioButton("Second##hwo", v == HelloWorldOrderOption.Second)) Overrides.HelloWorldOrder = HelloWorldOrderOption.Second;
+        if (ImGui.RadioButton("Second##hwo", v == HelloWorldOrderOption.Second))  SetOrder(HelloWorldOrderOption.Second);
         ImGui.SameLine();
-        if (ImGui.RadioButton("None##hwo",   v == HelloWorldOrderOption.None))   Overrides.HelloWorldOrder = HelloWorldOrderOption.None;
+        if (ImGui.RadioButton("None##hwo",   v == HelloWorldOrderOption.None))    SetOrder(HelloWorldOrderOption.None);
     }
 
     private void DrawHelloWorldType()
     {
-        var v = Overrides.HelloWorldType;
-        SettingsGrid.Row("Hello World type:");
-        if (ImGui.RadioButton("Auto##hwt", v == HelloWorldTypeOption.Auto)) Overrides.HelloWorldType = HelloWorldTypeOption.Auto;
+        var v = Overrides.HelloWorldType.Effective(editingSeat);
+        SettingsGrid.Row($"{Whose}Hello World type:");
+        if (ImGui.RadioButton("Auto##hwt", v == null))                        Overrides.HelloWorldType.Set(editingSeat, null);
         ImGui.SameLine();
-        if (ImGui.RadioButton("Near##hwt", v == HelloWorldTypeOption.Near)) Overrides.HelloWorldType = HelloWorldTypeOption.Near;
+        if (ImGui.RadioButton("Near##hwt", v == HelloWorldTypeOption.Near))   Overrides.HelloWorldType.Set(editingSeat, HelloWorldTypeOption.Near);
         ImGui.SameLine();
-        if (ImGui.RadioButton("Far##hwt",  v == HelloWorldTypeOption.Far))  Overrides.HelloWorldType = HelloWorldTypeOption.Far;
+        if (ImGui.RadioButton("Far##hwt",  v == HelloWorldTypeOption.Far))    Overrides.HelloWorldType.Set(editingSeat, HelloWorldTypeOption.Far);
     }
+
+    private void SetOrder(HelloWorldOrderOption? option) => Overrides.HelloWorldOrder.Set(editingSeat, option);
 
     private void DrawForceButtons()
     {
-        if (ImGui.Button("Force take monitor"))
+        var who = PerRole.SeatsActive ? $" ({SettingsGrid.RoleLabel(editingSeat)})" : "";
+        if (ImGui.Button($"Force take monitor{who}"))
         {
-            Overrides.ExtraDynamis = true;
-            Overrides.HelloWorldOrder = HelloWorldOrderOption.Second;
+            Overrides.ExtraDynamis.Set(editingSeat, true);
+            SetOrder(HelloWorldOrderOption.Second);
         }
         ImGui.SameLine();
-        if (ImGui.Button("Force take tether"))
+        if (ImGui.Button($"Force take tether{who}"))
         {
-            Overrides.ExtraDynamis = true;
-            Overrides.HelloWorldOrder = HelloWorldOrderOption.First;
+            Overrides.ExtraDynamis.Set(editingSeat, true);
+            SetOrder(HelloWorldOrderOption.First);
         }
     }
 }

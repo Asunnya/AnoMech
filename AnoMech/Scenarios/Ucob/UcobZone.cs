@@ -25,6 +25,8 @@ public sealed class UcobZone : IZone
     // floor — dressing each phase correctly means switching whole native layout layers, which
     // needs engine support this codebase doesn't have yet. Known but not implemented here.
     //
+    // TODO: Spotted issue with rendering, arena appears dependent on inn the sim starts in
+    //
     // One layer is suppressed regardless: with no real duty director active, the client-side
     // load activates every layer at once, so LGB layer 0x1360 (f1b4_t2_jari1 gravel ground
     // clutter, confirmed live to overlap whatever floor is actually meant to be visible)

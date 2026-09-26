@@ -1,5 +1,7 @@
+using System;
 using System.Linq;
 using AnoMech.Core.SimObjects;
+using AnoMech.Scenarios;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Group;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -53,7 +55,8 @@ internal sealed unsafe class PartyHud
             var bc = member.BattleCharaPtr;
             if (bc == null) continue;
             var index = member is SimNpc ? slot++ : 0;
-            WriteSlot(ref grp.PartyMembers[index], bc);
+            var role = member is ISimPartyMember pm ? pm.Role : (PartyRole?)null;
+            WriteSlot(ref grp.PartyMembers[index], bc, role);
             // The local player's slot 0 must keep its real ContentId/AccountId so
             // AgentReadyCheck (matches incoming packets by ContentId) and other
             // engine-side party lookups still resolve the local player correctly.
@@ -99,7 +102,10 @@ internal sealed unsafe class PartyHud
         realPartySnapshot = null;
     }
 
-    private static void WriteSlot(ref GroupPartyMember slot, BattleChara* bc)
+    // DamageShield (0-100, like BattleChara.ShieldValue) is what _PartyList's gold shield
+    // overlay actually reads -- writing ShieldValue on the doppel itself is a no-op for this
+    // addon. role null (shouldn't happen today) just means no shield instead of throwing.
+    private static void WriteSlot(ref GroupPartyMember slot, BattleChara* bc, PartyRole? role)
     {
         var obj = (GameObject*)bc;
         slot.Position = obj->Position;
@@ -116,7 +122,7 @@ internal sealed unsafe class PartyHud
         slot.Level = bc->Level;
         slot.Sex = bc->DrawData.CustomizeData.Sex;
         slot.Flags = 0x5;
-        slot.DamageShield = 0;
+        slot.DamageShield = role is { } r ? (byte)Math.Clamp(TankShieldTracker.RemainingFraction(r) * 100f, 0f, 100f) : (byte)0;
         slot.StatusManager = bc->StatusManager;
 
         for (int i = 0; i < 64; i++)

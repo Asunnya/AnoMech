@@ -1,37 +1,50 @@
+using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
 using AnoMech.Helpers;
+using AnoMech.Multiplayer;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using static AnoMech.Scenarios.Top.TopConstants;
 
 namespace AnoMech.Scenarios.Top.P5Omega;
 
-public sealed class TopP5OmegaScenario : IScenario
+public sealed class TopP5OmegaScenario : IMultiplayerReplayable
 {
     public string Name => "Omega";
     public IPhase Phase => TopZone.P5;
     public bool SupportsSolo => true;
+    public bool SupportsMultiplayer => true;
 
     private SimWorld world = null!;
     private SimParty party = null!;
     private TopUtils topUtils = null!;
-    
+
     TopP5OmegaState state = null!;
     public void DrawSettings() => settingsWindow.Draw();
+    public bool HasPerPlayerSettings => true;
+    public void DrawPerPlayerSettings() => settingsWindow.DrawPerPlayer();
+    public object SettingsOverrides => settingsWindow.Overrides;
+    public IReadOnlyList<string> SettingsConflicts => settingsWindow.Overrides.Validate().Problems;
     private readonly TopP5OmegaSettingsWindow settingsWindow = new();
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new TopP5OmegaAi()];
+
+    // Exposed so MultiplayerManager can read the AI-relevant subset after a host Start and
+    // broadcast it -- see UmadP3BlackHoleScenario.LastState for the pattern.
+    public TopP5OmegaState? LastState { get; private set; }
 
     public void Run(SimWorld worldParam, int? selectedAi)
     {
         world = worldParam;
         party = worldParam.Party;
         state = new TopP5OmegaState(world.Party, settingsWindow.Overrides);
+        LastState = state;
         var solo = selectedAi is null;
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<TopP5OmegaState>)AiStrats[idx]).Run(state, world);
@@ -82,6 +95,42 @@ public sealed class TopP5OmegaScenario : IScenario
             state.HelloWorldTargets.Get(2)?.RemoveStatus(StatusId.SecondInLine);
             state.HelloWorldTargets.Get(3)?.RemoveStatus(StatusId.SecondInLine);
         });
+        // Host-only, resolved here (not in TopP5OmegaAi, which also runs for a peer's own
+        // replay) and broadcast via BuildMidRunUpdateMessage below -- a live status read +
+        // shuffle run independently on both sides could disagree on who stands where.
+        world.Events.Add(46f, () => state.HelloWorld2 ??= ResolveHelloWorld2());
+    }
+
+    private PartyRole[] ResolveHelloWorld2()
+    {
+        List<PartyRole> freeAgents = [];
+        List<PartyRole> tethers = [];
+        foreach (var role in Enum.GetValues<PartyRole>())
+        {
+            if (role == state.HelloWorldTargets[2] || role == state.HelloWorldTargets[3]) continue;
+            if (party.Get(role)?.FindStatus(StatusId.QuickeningDynamis) is { Stacks: 3 })
+                tethers.Add(role);
+            else
+                freeAgents.Add(role);
+        }
+        freeAgents = freeAgents.Shuffle().ToList();
+        tethers = tethers.Shuffle().ToList();
+        // Live soak count can land short of (or over) 2 by t=46s -- borrow from the other
+        // pool instead of assuming an exact 2/4 split.
+        while (tethers.Count < 2) tethers.Add(Pop(freeAgents));
+        while (freeAgents.Count < 4) freeAgents.Add(Pop(tethers));
+        return
+        [
+            state.HelloWorldTargets[2], state.HelloWorldTargets[3], tethers[0], tethers[1],
+            freeAgents[0], freeAgents[1], freeAgents[2], freeAgents[3]
+        ];
+    }
+
+    private static PartyRole Pop(List<PartyRole> list)
+    {
+        var last = list[^1];
+        list.RemoveAt(list.Count - 1);
+        return last;
     }
 
     public void Tick(float delta, float elapsed)
@@ -306,5 +355,40 @@ public sealed class TopP5OmegaScenario : IScenario
             world.Events.Add(59.26f + dynamisOffset, () => helper2.SetPosition(omega_F_4000A40B_2));
             world.Events.Add(59.27f + dynamisOffset, () => helper2.CastSpell(omega_F_4000A40B_2));
         }
+    }
+
+    public MpMessage? BuildReplayStateMessage()
+        => LastState is { } s ? new TopP5OmegaAiReplayStateMessage(
+            s.HelloWorldTargets.List, s.DoubleDynamicTargets.List, s.MonitorTargets.List, s.HelloWorld1JumpOrder.List,
+            s.AttackDirections.Select(d => d.RadiansFromNorth).ToArray(), s.OmegaAttacks.ToArray(),
+            s.BettleSpawnDirection.RadiansFromNorth, s.FirstWaveCannonFront, s.MonitorSide == MonitorSide.Left)
+        : null;
+
+    public object? StartReplay(MpMessage message, int aiIndex, PartyRole myRole, SimWorld replayWorld)
+    {
+        if (message is not TopP5OmegaAiReplayStateMessage msg) return null;
+        var shadowState = TopP5OmegaState.FromNetworkReplay(
+            replayWorld.Party, msg.HelloWorldTargets, msg.DoubleDynamicTargets, msg.MonitorTargets, msg.HelloWorld1JumpOrder,
+            msg.AttackDirectionsRadians,
+            msg.OmegaAttacks, msg.BettleSpawnDirectionRadians, msg.FirstWaveCannonFront, msg.MonitorIsLeft);
+        ((IScenarioAi<TopP5OmegaState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
+        return shadowState;
+    }
+
+    // Edge-triggers BuildMidRunUpdateMessage -- see IMultiplayerReplayable.BuildMidRunUpdateMessage.
+    private bool helloWorld2Broadcast;
+
+    public MpMessage? BuildMidRunUpdateMessage()
+    {
+        if (helloWorld2Broadcast || LastState?.HelloWorld2 is not { } roles) return null;
+        helloWorld2Broadcast = true;
+        DiagnosticLog.Info($"[Multiplayer] Host: broadcasting P5 Omega HelloWorld2 update -- [{string.Join(",", roles)}].");
+        return new TopP5OmegaHelloWorld2UpdateMessage(roles);
+    }
+
+    public void ApplyMidRunUpdate(object shadowStateObj, MpMessage message)
+    {
+        if (shadowStateObj is TopP5OmegaState shadowState && message is TopP5OmegaHelloWorld2UpdateMessage update)
+            shadowState.HelloWorld2 = update.Roles;
     }
 }

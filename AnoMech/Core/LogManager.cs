@@ -32,9 +32,9 @@ internal sealed class LogManager : IDisposable
         Process.Start(new ProcessStartInfo { FileName = LogsDir, UseShellExecute = true });
     }
 
-    internal void LogMapEffect(uint index, ushort state, ushort flags)
+    internal void LogMapEffect(uint index, ushort state, ushort timeline)
     {
-        writer?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] MapEffect index=0x{index:X} state=0x{state:X} flags=0x{flags:X}");
+        writer?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] MapEffect index=0x{index:X} state=0x{state:X} timeline=0x{timeline:X}");
     }
 
     internal void LogEnterInstance(uint territoryId, string territoryName)

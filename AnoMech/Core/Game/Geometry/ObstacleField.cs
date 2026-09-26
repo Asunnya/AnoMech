@@ -17,17 +17,18 @@ namespace AnoMech.Core.Game.Geometry;
 //
 // Steering is reactive and per-frame, not a planned path: it naturally copes
 // with obstacles that appear, drift, or vanish mid-move, and is intentionally
-// simple (single dominant obstacle per frame) rather than globally optimal —
-// good enough for sparse convex shapes, which is all this needs to be.
+// simple rather than globally optimal — good enough for sparse convex shapes,
+// which is all this needs to be.
 public sealed class ObstacleField
 {
     // Shared empty field for every non-bot character. Never mutated: only
     // world.Obstacles is exposed to scenarios, so this stays pristine.
     public static readonly ObstacleField Empty = new();
 
-    // How far ahead (local yalms) a bot looks to begin arcing around an obstacle
-    // before reaching it. Larger -> earlier, wider arcs.
-    private const float LookAhead = 2.5f;
+    // How far ahead (local yalms) a bot looks to begin arcing around an obstacle. 4.5 covers a
+    // full gap-to-gap span in Umad P1's 16-arrow ring (2y-radius obstacles 6y apart); Steer only
+    // avoids what is inside this window.
+    private const float LookAhead = 4.5f;
 
     // Depth (local yalms) over which a bot found *inside* an obstacle is pushed
     // back out. Only relevant when a bot ends up inside one (e.g. a circle that
@@ -52,14 +53,17 @@ public sealed class ObstacleField
     public void Clear() => obstacles.Clear();
 
     // Projects `p` out onto the boundary of the obstacle it is most deeply inside
-    // so a destination authored (or fallen) inside an obstacle becomes a
-    // reachable edge point instead of an unreachable center the bot orbits
-    // forever. Single-pass / single-obstacle: with overlapping obstacles the
-    // result may still sit inside another (acceptable; best-effort by design).
-    public Vector2 ClampOutside(Vector2 p)
+    // (or, with `margin` > 0, out to `margin` clear of it even if `p` was already
+    // outside) so a destination authored -- or computed, e.g. a tether pull spot
+    // that lands on/near an unrelated decorative obstacle -- becomes a reachable,
+    // comfortably-clear point instead of an unreachable center the bot orbits
+    // forever, or a boundary-grazing one Steer's tangent-glide can stall on.
+    // Single-pass / single-obstacle: with overlapping obstacles the result may
+    // still sit inside another (acceptable; best-effort by design).
+    public Vector2 ClampOutside(Vector2 p, float margin = 0f)
     {
-        if (Deepest(p, out var dist, out var normal) == null || dist >= 0f) return p;
-        return p - normal * dist;   // dist < 0, normal outward -> move out by |dist|
+        if (Deepest(p, out var dist, out var normal) == null || dist >= margin) return p;
+        return p - normal * (dist - margin);   // dist < margin, normal outward -> push out to margin clearance
     }
 
     // Nearest point to the projection `t0` on segment a->b (param clamped to
@@ -94,47 +98,78 @@ public sealed class ObstacleField
 
     // Returns the unit steering direction for a bot at `pos` heading in unit
     // `desired` toward a destination `dist` yalms away. With no obstacle in the way
-    // this is just `desired` (=> straight line). Otherwise the bot glides tangent to
-    // the nearest blocking obstacle, on the side that still makes progress toward
-    // `desired`, plus an outward push if it is currently inside.
+    // this is just `desired` (=> straight line).
+    //
+    // If the straight line isn't clear, candidate headings are scanned outward from `desired`
+    // (smallest deviation first, alternating sides) and the first whose whole look-ahead
+    // segment clears every obstacle wins; a bot inside an obstacle biases the search outward
+    // first. Gliding around the single nearest obstacle walked straight into the next one in a
+    // dense field. Reactive per frame, not path planning.
     internal Vector2 Steer(Vector2 pos, Vector2 desired, float dist)
     {
         if (obstacles.Count == 0) return desired;
 
-        // Look ahead along the path, but never past the destination — otherwise a
-        // bot settling just outside an obstacle keeps probing LookAhead into it and
-        // gets deflected tangentially every frame instead of arriving (the
-        // end-of-move twitch). On the final approach `reach` shrinks to `dist`.
+        // Look ahead along the path, but never past the destination — otherwise a bot settling
+        // just outside an obstacle keeps probing LookAhead into it and gets deflected every
+        // frame instead of arriving (the end-of-move twitch). On the final approach `reach`
+        // shrinks to `dist`.
         var reach = MathF.Min(LookAhead, dist);
-        var ahead = pos + desired * reach;
 
-        // The obstacle "in the way": the nearest one we are inside, or that the
-        // capped look-ahead path actually runs into.
-        IObstacle? blocking = null;
-        var blockingDist = float.MaxValue;
-        foreach (var o in obstacles)
+        var baseDir = desired;
+        if (Deepest(pos, out var deepestDist, out var deepestNormal) != null && deepestDist < 0f)
         {
-            var d = o.SignedDistance(pos);
-            var willEnter = o.SignedDistance(ahead) < 0f;   // path penetrates before the destination
-            if (d >= 0f && !willEnter) continue;            // outside it and not heading into it
-            if (d < blockingDist) { blockingDist = d; blocking = o; }
+            var push = Math.Clamp(-deepestDist / RecoveryBand, 0f, 1f);
+            var blended = desired + deepestNormal * push;
+            if (blended.LengthSquared() > 1e-8f) baseDir = Vector2.Normalize(blended);
         }
-        if (blocking == null) return desired;
 
-        var normal = blocking.Normal(pos);
+        if (IsPathClear(pos, baseDir, reach)) return baseDir;
 
-        // Already heading outward / around it — don't fight the desired direction.
-        if (Vector2.Dot(desired, normal) >= 0f) return desired;
+        for (var angleDeg = CandidateAngleStepDeg; angleDeg <= CandidateAngleMaxDeg; angleDeg += CandidateAngleStepDeg)
+        {
+            var angle = angleDeg * (MathF.PI / 180f);
+            var left = Rotate(baseDir, angle);
+            if (IsPathClear(pos, left, reach)) return left;
+            var right = Rotate(baseDir, -angle);
+            if (IsPathClear(pos, right, reach)) return right;
+        }
 
-        // Glide along the boundary, choosing the tangent that progresses toward
-        // the target; add an outward component only while actually inside.
-        var tangent = new Vector2(-normal.Y, normal.X);
-        if (Vector2.Dot(tangent, desired) < 0f) tangent = -tangent;
+        // Boxed in: best-effort fallback.
+        return baseDir;
+    }
 
-        var push = blockingDist < 0f ? Math.Clamp(-blockingDist / RecoveryBand, 0f, 1f) : 0f;
-        var heading = tangent + normal * push;
-        var len = heading.Length();
-        return len > 1e-4f ? heading / len : desired;
+    // 5 degrees resolves the ~19-degree gap between two arrows 6y apart at LookAhead range;
+    // a 15-degree step could straddle it.
+    private const float CandidateAngleStepDeg = 5f;
+    private const float CandidateAngleMaxDeg = 175f;
+
+    private static Vector2 Rotate(Vector2 v, float radians)
+    {
+        var cos = MathF.Cos(radians);
+        var sin = MathF.Sin(radians);
+        return new Vector2(v.X * cos - v.Y * sin, v.X * sin + v.Y * cos);
+    }
+
+    // Clearance beyond an obstacle's own radius, so a heading that grazes the exact boundary
+    // doesn't clip after one movement step. Steer only; ClampOutside/NearestClearOnSegment keep
+    // exact-boundary behaviour.
+    private const float SteerMargin = 0.3f;
+
+    private bool IsClearWithMargin(Vector2 p)
+    {
+        foreach (var o in obstacles)
+            if (o.SignedDistance(p) < SteerMargin) return false;
+        return true;
+    }
+
+    // Sampled in 0.5-yalm steps rather than a per-shape intersection test, so it works for any
+    // IObstacle shape.
+    private bool IsPathClear(Vector2 pos, Vector2 dir, float reach)
+    {
+        const float step = 0.5f;
+        for (var d = step; d < reach; d += step)
+            if (!IsClearWithMargin(pos + dir * d)) return false;
+        return IsClearWithMargin(pos + dir * reach);
     }
 
     // The obstacle with the smallest signed distance from `p` (most inside, or

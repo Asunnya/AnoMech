@@ -55,7 +55,7 @@ public static class UmadConstants
         public const uint ManaCharge                   = 0xBAA4U; // single-target, cast 3.0s
         public const uint ManaRelease                  = 0xBAA5U; // single-target, cast 7.0s
         public const uint TeleTrouncing                = 0xBABAU; // circle r=2, instant
-        public const uint LightOfJudgment_Enrage       = 0xBABBU; // circle r=100, cast 5.0s; P3 variant of LightOfJudgment (0xBABD)
+        public const uint LightOfJudgment_Enrage       = 0xBABBU; // circle r=100, cast 5.0s; BossMod LightOfJudgmentP1Enrage (BossP1->self): the lethal fail raidwide (P1 Tele-trouncing arrow soaks), also cast by P4 Kefka
         public const uint Forsaken                     = 0xBABCU; // circle r=100, cast 7.0s
         public const uint LightOfJudgment              = 0xBABDU; // circle r=100, cast 5.0s
         public const uint ThePathOfLight               = 0xBABEU; // circle r=4, instant
@@ -119,6 +119,10 @@ public static class UmadConstants
         public const uint ExaflareHit                  = 0xBB3DU; // P5 exaflare explosion, circle r~6; snapshot resolves on this
         public const uint ChaosEnd2                    = 0xBB3EU; // P5 second body cast
         public const uint ExaflareSpread               = 0xBB3FU; // P5 final spread, circle r~5
+        public const uint FloodCast                    = 0xC13FU; // P5 Flood boss windup, self-target, 5.0s cast, no AoE
+        public const uint FloodTelegraph               = 0xC183U; // P5 Flood line telegraph, rect 40x10, 1.5s cast, Omen=464
+        public const uint FloodAOE                     = 0xC269U; // P5 Flood line resolve, rect 40x10, instant
+        public const uint ChaoticFlood                 = 0xBB4FU; // P5 Flood stack call, circle r=6, centered on caster, instant
         public const uint BlackSpark                   = 0xBCCDU; // single-target, instant
         public const uint WhiteHole                    = 0xBD66U; // circle r=80, cast 5.0s
         public const uint UltimaUpsurge                = 0xC24AU; // circle r=100, cast 5.0s
@@ -197,6 +201,9 @@ public static class UmadConstants
     {
         public const ushort WarpOut = (ushort)0x1E39;
         public const ushort Spawn   = (ushort)0x1E43;
+        // Neo Exdeath's own appear (mon_sp/m0418/show/mon_sp001), which carries his warp sound and
+        // VFX; the generic Spawn has neither on his model.
+        public const ushort NeoExdeathShow = (ushort)0x11D1;
     }
 
     public static class TetherId
@@ -219,6 +226,15 @@ public static class UmadConstants
     public static class Geometry
     {
         public const float AllThingsEndHalfCone = MathF.PI / 2;
+    }
+
+    public static class Tunables
+    {
+        // A real level-100 tank's own max HP -- every Umad scenario's
+        // IScenario.TankMaxHealth points here so TankMitigation's fixed-HP tankbuster numbers
+        // (calibrated against this) land as intended, not against the generic doppel HP.
+        // Scoped to this namespace deliberately -- not a universal constant to reach for.
+        public const uint RealTankMaxHealth = 325_047;
     }
 
 }

@@ -56,7 +56,7 @@ public sealed class TopP5DeltaAi : IScenarioAi<TopP5DeltaState>
 
     private void BeyondDefence(IAiPositions move)
     {
-        move.AddX(state.BeyondDefenseTarget, 13f);
+        if (state.BeyondDefenseTarget is { } beyondDefenseTarget) move.AddX(beyondDefenseTarget, 13f);
     }
 
     private void PlayerMonitorOffset(IAiPositions move)

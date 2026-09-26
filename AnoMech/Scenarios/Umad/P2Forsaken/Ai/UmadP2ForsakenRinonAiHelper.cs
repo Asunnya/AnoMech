@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
@@ -49,32 +50,45 @@ public sealed class UmadP2ForsakenRinonAiHelper
         Init();
 
         ai.Move(1f, InitialLineup);
-        ai.Move(10.16f, TowerPositions(0), jitter: .0f, arrivalTime: 22.16f);
-        ai.Move(25.17f, TowerPositions(1), jitter: .0f, arrivalTime: 32.16f);
-        ai.Move(33f, AllThingsEndsBait(0), arrivalTime: 37f);
-        ai.Move(39.21f, TowerPositions(2), jitter: .0f, arrivalTime: 43.21f);
-        ai.Move(47.22f, TowerPositions(3), jitter: .0f, arrivalTime: 53.22f);
-        ai.Move(54f, AllThingsEndsBait(1), arrivalTime: 57f);
-        ai.Move(59.26f, TowerPositions(4), jitter: .0f, arrivalTime: 63.86f);
-        ai.Move(65.27f, TowerPositions(5), jitter: .0f, arrivalTime: 73.27f);
-        ai.Move(75f, AllThingsEndsBait(2), arrivalTime: 78f);
-        ai.Move(79.31f, TowerPositions(6), jitter: .0f, arrivalTime: 83.8f);
-        ai.Move(90.32f, TowerPositions(7), jitter: .0f, arrivalTime: 94.32f);
+        ai.Move(10.16f, TowerPositions(0), jitter: .0f, sprint: true);
+        ai.Move(25.17f, TowerPositions(1), jitter: .0f, sprint: true);
+        ai.Move(33f, AllThingsEndsBait(0, 2), sprint: true);
+        ai.Move(39.21f, TowerPositions(2), jitter: .0f, sprint: true);
+        ai.Move(47.22f, TowerPositions(3), jitter: .0f, sprint: true);
+        ai.Move(54f, AllThingsEndsBait(1, 4), sprint: true);
+        ai.Move(59.26f, TowerPositions(4), jitter: .0f, sprint: true);
+        ai.Move(65.27f, TowerPositions(5), jitter: .0f, sprint: true);
+        ai.Move(75f, AllThingsEndsBait(2, 6), sprint: true);
+        ai.Move(81.31f, TowerPositions(6), jitter: .0f, sprint: true);
+        ai.Move(90.32f, TowerPositions(7), jitter: .0f, sprint: true);
+        // Occurrence 3 has no upcoming tower to bisect against and nothing moves the party after
+        // it, so it gets the real two-step: gather between the last towers, then relocate once the
+        // castbar starts. The boss's facing locks at its Face() call, so moving during the cast is
+        // what makes Future's End safe; Past's End's second move is a same-spot no-op.
+        ai.Move(95.83f, BetweenLastTowers(), sprint: true);
+        ai.Move(101.16f, AllThingsEndsBait(3, 7), sprint: true);
     }
 
-    private Func<IAiMove> AllThingsEndsBait(int i)
+    // Future's End sits opposite the upcoming towers, Past's End between them, both on the
+    // NewNorthAt(2*i+2) bisector the tower pair straddles. Future's following tower transition
+    // is infeasible at any distance, so its spot is pushed out for range as well as angle (the
+    // cone tracks party.Player, who is in this stack); Past keeps the tighter margin to help its
+    // own tight transition. Both casters sit at the origin.
+    private const float PastMeleeFromCenter = 9.7f;
+    private const float FutureMeleeFromCenter = 11f;
+
+    private Func<IAiMove> AllThingsEndsBait(int i, int northIndex)
     {
-        return () => AiMove.All(new(0, 0)) // they actually dont bait anything, leave it for player to bait
-                           .ApplyPositions(AdjustForFuture(i), state.NewNorthAt(2 * i + 2).Apply);
+        var distance = state.EndAttacks[i] == EndAttack.PastsEnd ? -PastMeleeFromCenter : FutureMeleeFromCenter;
+        return () => AiMove.All(new(0, distance))
+                           .ApplyPositions(state.NewNorthAt(northIndex).Apply);
     }
 
-    private Action<IAiPositions> AdjustForFuture(int i)
+    // Occurrence 3's first leg: both variants start between the towers.
+    private Func<IAiMove> BetweenLastTowers()
     {
-        return pos =>
-        {
-            if (state.EndAttacks[i] == EndAttack.PastsEnd)
-                pos.Multiply(-1);
-        };
+        return () => AiMove.All(new(0, -PastMeleeFromCenter))
+                           .ApplyPositions(state.NewNorthAt(7).Apply);
     }
 
     private void Init()
@@ -109,8 +123,8 @@ public sealed class UmadP2ForsakenRinonAiHelper
         }
         catch (InvalidOperationException)
         {
-            Plugin.Log.Warning($"Lockons {string.Join(",", state.Lockons)}");
-            Plugin.Log.Warning($"Can't find {mechanic}.{order}, for {towerId}, for {string.Join(",", array)}");
+            DiagnosticLog.Warn($"Lockons {string.Join(",", state.Lockons)}");
+            DiagnosticLog.Warn($"Can't find {mechanic}.{order}, for {towerId}, for {string.Join(",", array)}");
             throw;
         }
     }

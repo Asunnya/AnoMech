@@ -15,6 +15,7 @@ public class UltimatePredationSettingsWindow
 
         if (SettingsGrid.Begin("##ultimatepredation"))
         {
+            SettingsGrid.FightOnlyNote();
             DrawCenterDodge();
             SettingsGrid.End();
         }

@@ -1,9 +1,12 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
+using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
+using AnoMech.Multiplayer;
 using static AnoMech.Scenarios.Ucob.UcobConstants;
 
 namespace AnoMech.Scenarios.Ucob.P5Exaflares;
@@ -23,11 +26,12 @@ namespace AnoMech.Scenarios.Ucob.P5Exaflares;
 // The timeline runs on a scenario-local Stopwatch (`timeline`), not the engine's ms-truncated
 // UpdateDelta, so the arrow cast bars and the rolling hits stay locked together and ignore the
 // Speed buttons.
-public sealed class UcobP5ExaflaresScenario : IScenario
+public sealed class UcobP5ExaflaresScenario : IMultiplayerReplayable
 {
     public string Name => "Exaflares";
     public IPhase Phase => UcobZone.P5;
     public bool SupportsSolo => true;
+    public bool SupportsMultiplayer => true;
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new UcobP5ExaflaresAi()];
 
@@ -47,6 +51,9 @@ public sealed class UcobP5ExaflaresScenario : IScenario
     private const double FrameGapCapSeconds = 0.25; // skip pause / alt-tab / hitch frames
 
     private UcobP5ExaflaresState state = null!;
+
+    // Polled by the multiplayer host; null until Run has rolled the pattern.
+    public UcobP5ExaflaresState? LastState { get; private set; }
     private SimWorld world = null!;
     private DamageSolver damage = null!;
     private SimEnemy? bahamut;
@@ -64,6 +71,7 @@ public sealed class UcobP5ExaflaresScenario : IScenario
         lastWall = 0;
 
         state = new UcobP5ExaflaresState(settingsWindow.Overrides, timeline);
+        LastState = state;
 
         // Bots schedule on the scenario `timeline` (after Clear, so their adds are absolute).
         if (selectedAi is { } idx && idx < AiStrats.Count)
@@ -159,5 +167,36 @@ public sealed class UcobP5ExaflaresScenario : IScenario
         bahamut?.Despawn();
         foreach (var helper in helpers) helper.Despawn();
         helpers.Clear();
+    }
+
+    public MpMessage? BuildReplayStateMessage()
+        => LastState is { } s
+            ? new UcobP5ExaflaresAiReplayStateMessage(s.Direction.RadiansFromNorth, s.LaneOrder.ToArray())
+            : null;
+
+    public object? StartReplay(MpMessage message, int aiIndex, PartyRole myRole, SimWorld replayWorld)
+    {
+        if (message is not UcobP5ExaflaresAiReplayStateMessage msg || aiIndex < 0 || aiIndex >= AiStrats.Count) return null;
+        // A peer's own scheduler: the Ai schedules its dodges onto it and TickReplay is the only
+        // thing advancing it.
+        var shadowState = UcobP5ExaflaresState.FromNetworkReplay(msg.DirectionRadians, msg.LaneOrder, new EventScheduler());
+        if (shadowState == null) return null;
+        ((IScenarioAi<UcobP5ExaflaresState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
+        return shadowState;
+    }
+
+    public void TickReplay(object shadowStateObj, float deltaSeconds)
+    {
+        if (shadowStateObj is not UcobP5ExaflaresState shadowState) return;
+        if (deltaSeconds > FrameGapCapSeconds) return;
+        shadowState.Timeline.Tick(deltaSeconds);
+    }
+
+    public float? ReplayClockSeconds => (float)(timeline.Elapsed + (wallClock.Elapsed.TotalSeconds - lastWall));
+
+    public void AdvanceReplayClockTo(object shadowStateObj, float seconds)
+    {
+        if (shadowStateObj is UcobP5ExaflaresState shadowState)
+            shadowState.Timeline.Advance(seconds - shadowState.Timeline.Elapsed);
     }
 }

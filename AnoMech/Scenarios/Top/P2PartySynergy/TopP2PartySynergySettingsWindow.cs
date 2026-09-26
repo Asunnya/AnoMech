@@ -11,6 +11,7 @@ public sealed class TopP2PartySynergySettingsWindow
         if (ImGui.Button("Auto")) ResetAll();
         if (SettingsGrid.Begin("##partysynergy"))
         {
+            SettingsGrid.FightOnlyNote();
 #if DEBUG
             DrawNewNorthA();
             DrawNewNorthB();

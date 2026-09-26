@@ -12,4 +12,16 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="../Shared/RelayWire.cs" Link="Multiplayer/RelayWire.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio.Core" Version="2.2.1" GeneratePathProperty="true" ExcludeAssets="runtime" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" GeneratePathProperty="true" ExcludeAssets="runtime" />
+    <PackageReference Include="NVorbis" Version="0.10.5" GeneratePathProperty="true" ExcludeAssets="runtime" />
+    <EmbeddedResource Include="$(PkgNAudio_Core)/lib/netstandard2.0/NAudio.Core.dll" LogicalName="AnoMech.Embedded.NAudio.Core.dll" Visible="false" />
+    <EmbeddedResource Include="$(PkgNAudio_WinMM)/lib/netstandard2.0/NAudio.WinMM.dll" LogicalName="AnoMech.Embedded.NAudio.WinMM.dll" Visible="false" />
+    <EmbeddedResource Include="$(PkgNVorbis)/lib/netstandard2.0/NVorbis.dll" LogicalName="AnoMech.Embedded.NVorbis.dll" Visible="false" />
+  </ItemGroup>
 </Project>

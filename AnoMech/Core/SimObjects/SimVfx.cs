@@ -25,9 +25,13 @@ public sealed unsafe class SimVfx : ISimObject
     public VfxData* Handle { get; private set; }
     public bool IsActive => Handle != null;
 
-    internal SimVfx(SimCharacter target, string path, float duration)
+    // A marker's own lockon id is what replicates, not this derived path.
+    public bool FromLockon { get; }
+
+    internal SimVfx(SimCharacter target, string path, float duration, bool fromLockon = false)
     {
         Path = path;
+        FromLockon = fromLockon;
         this.duration = duration;
         var chara = (Character*)target.BattleCharaPtr;
         Handle = VfxFunctions.SpawnActorVfx(path, chara, chara);

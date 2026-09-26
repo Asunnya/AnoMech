@@ -133,8 +133,11 @@ public sealed unsafe class SimTether : ISimObject
         {
             if (conditionalStatus.Condition(this))
             {
-                currentSource?.AddStatus(conditionalStatus.StatusId);
-                currentTarget?.AddStatus(conditionalStatus.StatusId);
+                // Pinned at 1 stack (not the AddStatus default of "add one more") -- this runs
+                // every tick the condition holds, so the additive default would pile on a new
+                // stack per tick instead of just holding the debuff present.
+                currentSource?.AddStatus(conditionalStatus.StatusId, stacks: 1, overrideStacks: true);
+                currentTarget?.AddStatus(conditionalStatus.StatusId, stacks: 1, overrideStacks: true);
             }
             else
             {

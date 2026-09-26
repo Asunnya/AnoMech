@@ -10,4 +10,7 @@ public sealed record TargetInstance(
     uint TerritoryId,
     Vector3 Origin,
     Vector3 PlayerPosition,
-    byte? WeatherId = null);
+    byte? WeatherId = null,
+    // Per-frame hold of the zone's fog value for the whole stay (ZoneSession.FogHold); null =
+    // the engine's own transition.
+    float? FogHold = null);
