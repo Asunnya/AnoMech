@@ -68,6 +68,7 @@ public sealed class UwuIntermissionScenario : IScenario
         world.Events.Add(26.03f, () => { foreach (var member in AliveMembers()) member.RemoveStatus(StatusId.Doom); });
         world.Events.Add(29.15f, () => lahabrea?.SetTargetable(true));
         world.Events.Add(29.15f, () => CastSelf(lahabrea, ActionId.DarkIV, 16.7f));
+        world.Events.Add(30.00f, () => lahabrea?.AddStatus(StatusId.Woken));
         world.Events.Add(43.72f, () => lahabrea?.SetTargetable(false));
         world.Events.Add(43.81f, () => lahabrea?.PlayActionTimeline(ActionTimelineId.LahabreaFalls));
         world.Events.Add(46.84f, () => lahabrea?.PlayActionTimeline(ActionTimelineId.LahabreaFadesOut));
