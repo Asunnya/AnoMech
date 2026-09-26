@@ -31,7 +31,6 @@ using AnoMech.Scenarios.Umad.P5Celestriad;
 using AnoMech.Scenarios.Umad.P5Exaflares;
 using AnoMech.Scenarios.Uwu.P1Garuda;
 using AnoMech.Scenarios.Uwu.P2Ifrit;
-using AnoMech.Scenarios.Uwu.Intermission;
 using AnoMech.Scenarios.Uwu.P3Titan;
 using AnoMech.Scenarios.Umad.P5Flood;
 using AnoMech.Scenarios.Uwu.UltimatePredation;
@@ -172,7 +171,6 @@ public sealed class Game : IDisposable
             new UwuP1GarudaScenario(),
             new UwuP2IfritScenario(),
             new UwuP3TitanScenario(),
-            new UwuIntermissionScenario(),
             new UltimatePredationScenario(),
             new UltimateSuppressionScenario(),
             new UcobP5ExaflaresScenario(),
