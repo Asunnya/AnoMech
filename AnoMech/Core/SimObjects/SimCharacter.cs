@@ -195,6 +195,8 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
     }
 
     public bool HasStatus(ushort statusId) => FindStatus(statusId) != null;
+
+    public bool HasAnyStatus(Predicate<ushort> match) => statusList.Exists(status => status.IsActive && match(status.StatusId));
     
     
     // -------------------------
