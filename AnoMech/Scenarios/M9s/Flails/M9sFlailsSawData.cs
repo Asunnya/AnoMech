@@ -1,8 +1,4 @@
-// Generated from Network_30301_20260923.log pull 10 (the clear): every Gravegrazer hit of the
-// flail phase, placed at the saw's last teleport (271) before it: the 21 line's source position lags
-// the saw by a step, worst at the corners. Times are scenario time (pull time
-// minus 272s). The saw paths are the same in every pull of the log (to the log's own sampling),
-// matching BossMod's hard-coded sequences, so they are replayed rather than randomized.
+// Every Gravegrazer hit of the clear (Network_30301_20260923.log pull 10), in scenario time; the paths never vary.
 using System.Collections.Generic;
 using System.Numerics;
 

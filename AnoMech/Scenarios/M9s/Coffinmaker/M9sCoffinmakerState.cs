@@ -12,8 +12,7 @@ public enum BossSide
     West = -1,
 }
 
-// How fast the party burns the saw down. The log's six pulls killed it at ~114s (three pulls: the
-// fourth cycle fires no Coffinfiller), ~116s (two: one wave) or ~125s (one: both waves).
+// When the saw dies, matching the log's kills at ~114s, ~116s and ~125s.
 public enum SawKill
 {
     Fast,
@@ -21,8 +20,7 @@ public enum SawKill
     Slow,
 }
 
-// One Half Moon (see M9sHalfMoon) + Coffinfiller set. Coffinfiller fires the corridor's four 5y
-// columns in two waves of two, one per side of the centre line, each wave lining up with one cleave.
+// One Half Moon plus Coffinfiller: two waves of two columns, each with one cleave.
 public sealed record SawCycle(
     float CastAt,
     Placement Boss,
@@ -39,14 +37,7 @@ public sealed record SawCycle(
         M9sHalfMoon.IsInsideCleave(Boss, rotation, point, margin, more);
 }
 
-// Per-run randomization for the Coffinmaker (saws) phase.
-//
-// Measured from six pulls of one log. Fixed: the corridor (x within ±10) shrinks from the north by
-// 10y per Dead Wake, three times; Coffinfiller runs from the current north edge to the south wall,
-// so the three filler actions (32/22/12y) only differ in length; the boss cleaves from one side
-// wall (x = ±12, z = 0), then the opposite one (x = ∓12, z = 10), then twice from the south wall.
-// Random: which side wall comes first (5 of 6 pulls east), each cycle's cleave order, and which
-// column on each side of the centre line fires in the first wave.
+// Coffinmaker randomization, from six pulls: first side wall, cleave orders and first-wave columns.
 public sealed class M9sCoffinmakerState
 {
     public static readonly float[] EastColumns = [2.5f, 7.5f];

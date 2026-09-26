@@ -10,14 +10,7 @@ using static AnoMech.Scenarios.M9s.M9sConstants;
 
 namespace AnoMech.Scenarios.M9s.HellInACell;
 
-// M9S Hell in a Cell, from the arena coming back after the flails to just before Undead Deathmatch:
-// Crowd Kill, Finale Fatale and the death-wall ring, Pulping Pulse, then two sets of four towers.
-// Each tower needs exactly one player; it locks them in a Charnel Cell (4y) that lashes them every
-// 3s until they kill it, and a player who already sat in one (Hell Awaits) dies to a second. While
-// one group is caged the other takes the Ultrasonics: Spread aims a 100° cone at a tank and 45°
-// cones at a healer and a DPS, Amp one shared 100° cone. Scenario time 0 is 358.0s into the clear in
-// Network_30301_20260923.log (pull 10); cells die on the clear's schedule since nothing here takes
-// player damage.
+// M9S Hell in a Cell, Finale Fatale to Undead Deathmatch; timings from Network_30301_20260923.log pull 10 (t0 = 381s).
 public sealed class M9sHellInACellScenario : IScenario
 {
     public string Name => "Hell in a Cell";
@@ -69,43 +62,37 @@ public sealed class M9sHellInACellScenario : IScenario
 
         world.Events.Add(0f, SpawnVamp);
         world.Events.Add(0f, () => world.EnforceSquareArenaBoundary(Geometry.ArenaHalfWidth, "Walked off the arena"));
-        world.Events.Add(6.95f, () => vamp?.Cast(ActionId.CrowdKillCast, castSeconds: 0.2f));
-        world.Events.Add(13.07f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.CrowdKill, 0.51f));
-        world.Events.Add(13.07f, () => state.Satisfied.Add(1));
-        world.Events.Add(13.33f, () => state.Satisfied.Add(1));
-        world.Events.Add(13.64f, () => state.Satisfied.Add(1));
-        world.Events.Add(13.95f, () => state.Satisfied.Add(1));
-        world.Events.Add(25.72f, () => vamp?.Cast(ActionId.FinaleFataleCast2, castSeconds: 4.7f));
-        world.Events.Add(31.72f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.FinaleFatale, 0.30f));
-        world.Events.Add(31.81f, () => world.Map.AddEffect(0x00020001, 0x10));
-        world.Events.Add(31.81f, () => world.EnforceArenaBoundary(Geometry.RingArenaRadius, "Walked into the death wall"));
+        world.Events.Add(2.72f, () => vamp?.Cast(ActionId.FinaleFataleCast2, castSeconds: 4.7f));
+        world.Events.Add(8.72f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.FinaleFatale, 0.30f));
+        world.Events.Add(8.81f, () => world.Map.AddEffect(0x00020001, 0x10));
+        world.Events.Add(8.81f, () => world.EnforceArenaBoundary(Geometry.RingArenaRadius, "Walked into the death wall"));
 
-        world.Events.Add(32.75f, () => CastPulpingPulses(0));
-        world.Events.Add(36.72f, ResolvePulpingPulses);
+        world.Events.Add(9.75f, () => CastPulpingPulses(0));
+        world.Events.Add(13.72f, ResolvePulpingPulses);
 
-        world.Events.Add(37.88f, () => CastTowers(0));
-        world.Events.Add(42.90f, () => ResolveTowers(0));
-        world.Events.Add(44.99f, () => CastUltrasonic(0, 0));
-        world.Events.Add(47.00f, () => KillCells(0, tank: true));
-        world.Events.Add(50.69f, () => ResolveUltrasonic(0, 0));
-        world.Events.Add(52.11f, () => CastUltrasonic(0, 1));
-        world.Events.Add(55.90f, () => KillCells(0, tank: false));
-        world.Events.Add(57.81f, () => ResolveUltrasonic(0, 1));
+        world.Events.Add(14.88f, () => CastTowers(0));
+        world.Events.Add(19.90f, () => ResolveTowers(0));
+        world.Events.Add(21.99f, () => CastUltrasonic(0, 0));
+        world.Events.Add(24.00f, () => KillCells(0, tank: true));
+        world.Events.Add(27.69f, () => ResolveUltrasonic(0, 0));
+        world.Events.Add(29.11f, () => CastUltrasonic(0, 1));
+        world.Events.Add(32.90f, () => KillCells(0, tank: false));
+        world.Events.Add(34.81f, () => ResolveUltrasonic(0, 1));
 
-        world.Events.Add(60.25f, () => CastTowers(1));
-        world.Events.Add(65.20f, () => ResolveTowers(1));
-        world.Events.Add(67.40f, () => CastUltrasonic(1, 0));
-        world.Events.Add(69.30f, () => KillCells(1, tank: true));
-        world.Events.Add(73.10f, () => ResolveUltrasonic(1, 0));
-        world.Events.Add(74.55f, () => CastUltrasonic(1, 1));
-        world.Events.Add(78.20f, () => KillCells(1, tank: false));
-        world.Events.Add(80.25f, () => ResolveUltrasonic(1, 1));
+        world.Events.Add(37.25f, () => CastTowers(1));
+        world.Events.Add(42.20f, () => ResolveTowers(1));
+        world.Events.Add(44.40f, () => CastUltrasonic(1, 0));
+        world.Events.Add(46.30f, () => KillCells(1, tank: true));
+        world.Events.Add(50.10f, () => ResolveUltrasonic(1, 0));
+        world.Events.Add(51.55f, () => CastUltrasonic(1, 1));
+        world.Events.Add(55.20f, () => KillCells(1, tank: false));
+        world.Events.Add(57.25f, () => ResolveUltrasonic(1, 1));
 
-        world.Events.Add(81.43f, () => CastPulpingPulses(1));
-        world.Events.Add(85.40f, ResolvePulpingPulses);
-        world.Events.Add(85.43f, () => CastPulpingPulses(2));
-        world.Events.Add(89.40f, ResolvePulpingPulses);
-        world.Events.Add(91f, DespawnAll);
+        world.Events.Add(58.43f, () => CastPulpingPulses(1));
+        world.Events.Add(62.40f, ResolvePulpingPulses);
+        world.Events.Add(62.43f, () => CastPulpingPulses(2));
+        world.Events.Add(66.40f, ResolvePulpingPulses);
+        world.Events.Add(68f, DespawnAll);
 
         ScheduleCellChecks();
     }
@@ -228,7 +215,7 @@ public sealed class M9sHellInACellScenario : IScenario
     // A cell holds its prisoner in and everyone else out; it lashes the prisoner every 3s.
     private void ScheduleCellChecks()
     {
-        for (var t = 43f; t <= 79f; t += CellCheckStep)
+        for (var t = 20f; t <= 56f; t += CellCheckStep)
         {
             var at = t;
             world.Events.Add(at, () => CheckCells(at));

@@ -5,6 +5,7 @@ using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
+using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -13,16 +14,7 @@ using static AnoMech.Scenarios.M9s.M9sConstants;
 
 namespace AnoMech.Scenarios.M9s.Flails;
 
-// M9S flail phase, the second Sadistic Screech to the third: the corridor with four saws sweeping it
-// (Gravegrazer, replayed hit for hit from the clear), three rounds of tank towers (Plummet) that
-// leave Fatal Flails behind, Electrocution puddles that grow under a Deadly Doornail until it dies,
-// and two Killer Voices. Scenario time 0 is 272.0s into the clear in Network_30301_20260923.log
-// (pull 10).
-//
-// The doornails have simulated HP: the bots assigned to them (healers and ranged, per Toxic) chip at
-// it, and the player's hostile actions on it add their share, tuned so the full group kills it about
-// when the clear did. A healer or ranged player who doesn't help leaves it alive past its deadline,
-// which wipes. The flails still die on the clear's schedule, a second before Barbed Burst would wipe.
+// M9S flail phase; timings from Network_30301_20260923.log pull 10 (t0 = 272s). Doornail HP is simulated.
 public sealed class M9sFlailsScenario : IScenario
 {
     public string Name => "Flails";
@@ -90,6 +82,7 @@ public sealed class M9sFlailsScenario : IScenario
         world.Events.Add(11.88f, () => MapEffect(0x00080004, 0x0F));
         world.Events.Add(11.88f, () => corridorActive = true);
         world.Events.Add(11.88f, SpawnSaws);
+        world.Events.Add(11.88f, () => world.Map.DirectorUpdate(M9sUtils.CorridorDirectorCommand, 0x07));
         world.Events.Add(11.95f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.SadisticScreech, 0.40f));
         world.Events.Add(16.02f, () => MapEffect(0x00800040, 0x0D, 0x0E));
         ScheduleSawHits();
@@ -148,14 +141,54 @@ public sealed class M9sFlailsScenario : IScenario
         world.Events.Add(78.61f, () => WipeIfDoornailSurvived(2));
         world.Events.Add(78.61f, () => vamp?.Cast(ActionId.SadisticScreechCast, castSeconds: 4.7f));
         world.Events.Add(84.34f, () => MapEffect(0x00080004, 0x00));
+        world.Events.Add(84.10f, () => DespawnSaws(big: true));
+        world.Events.Add(84.34f, () => MapEffect(0x00100004, 0x0D, 0x0E));
+        world.Events.Add(84.35f, () => PlaySmallSawsTimeline(SmallSawLeaveTimeline));
+        world.Events.Add(86.00f, () => DespawnSaws(big: false));
+        world.Events.Add(84.34f, () => world.Map.DirectorUpdate(M9sUtils.CorridorDirectorCommand, 0x01));
         world.Events.Add(84.50f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.SadisticScreech, 0.40f));
-        world.Events.Add(86f, DespawnAll);
+        world.Events.Add(92.95f, () => vamp?.Cast(ActionId.CrowdKillCast, castSeconds: 0.2f));
+        world.Events.Add(99.07f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.CrowdKill, 0.51f));
+        world.Events.Add(99.07f, () => state.Satisfied.Add(1));
+        world.Events.Add(99.33f, () => state.Satisfied.Add(1));
+        world.Events.Add(99.64f, () => state.Satisfied.Add(1));
+        world.Events.Add(99.95f, () => state.Satisfied.Add(1));
+        world.Events.Add(101f, DespawnAll);
     }
 
+    // The big saws put away with 0x00100004, everything else (corridor, cells) with 0x00080004.
     private void MapEffect(uint flags, params byte[] indices)
     {
         foreach (var index in indices)
+        {
             world.Map.AddEffect(flags, index);
+            world.ResetMapEffectOnDespawn(index, index is 0x0D or 0x0E ? 0x00100004u : 0x00080004u);
+        }
+        if (indices.Contains((byte)0x0D) && BigSawTimelineOf(flags) is { } timeline) PlayBigSawTimeline(timeline);
+    }
+
+    // Native map effects only honour a slot's first state, so big-saw moves play on the SG.
+    private const string BigSawSgb = "bg/ex5/01_xkt_x6/shared/for_bg/sgbg_x6r9_a1_gmc08.sgb";
+
+    private static uint? BigSawTimelineOf(uint flags)
+    {
+        var state = flags >> 16;
+        if (state < 0x80 || (state & (state - 1)) != 0) return null;
+        return (uint)System.Numerics.BitOperations.Log2(state);
+    }
+
+    internal static unsafe string PlayBigSawTimeline(uint index)
+    {
+        var sgs = LayoutQuery.FindAllBySgbPath(BigSawSgb);
+        var played = 0;
+        foreach (var p in sgs)
+        {
+            var sg = (FFXIVClientStructs.FFXIV.Client.LayoutEngine.Group.SharedGroupLayoutInstance*)p;
+            if (!sg->IsTimelineIndexValid(index)) continue;
+            sg->PlayTimeline(index, 0);
+            played++;
+        }
+        return $"timeline {index}: {played}/{sgs.Count} big saws";
     }
 
     // Flails and doornails have no mesh either: what players see is a map-effect object per cell.
@@ -211,8 +244,24 @@ public sealed class M9sFlailsScenario : IScenario
         }
     }
 
-    // Each saw strikes where it stands, then rolls on to its next hit so the model moves smoothly
-    // between the recorded positions.
+    private const ushort SmallSawLeaveTimeline = 0x11E2;
+
+    private void PlaySmallSawsTimeline(ushort timelineId)
+    {
+        foreach (var (lane, saw) in saws)
+            if (lane is SawLane.EastSmall or SawLane.WestSmall) saw?.PlayActionTimeline(timelineId);
+    }
+
+    private void DespawnSaws(bool big)
+    {
+        foreach (var lane in saws.Keys.Where(l => (l is SawLane.NorthBig or SawLane.SouthBig) == big).ToList())
+        {
+            saws[lane]?.Despawn();
+            saws.Remove(lane);
+        }
+    }
+
+    // Each saw strikes where it stands, then rolls to its next hit.
     private void ScheduleSawHits()
     {
         foreach (var lane in Enum.GetValues<SawLane>())
@@ -248,8 +297,7 @@ public sealed class M9sFlailsScenario : IScenario
         SpawnHelper(r.Doornail)?.Cast(ActionId.Electrocution, castSeconds: 6.7f);
     }
 
-    // A tower nobody tanks goes off as Massive Impact and wipes the party; anyone else standing in
-    // one takes a buster.
+    // An untanked tower wipes; non-tanks inside die.
     private void ResolveRound(int round)
     {
         var r = state.Rounds[round];
@@ -370,11 +418,7 @@ public sealed class M9sFlailsScenario : IScenario
         doornail = null;
     }
 
-    // The puddle is an EObj whose own SG timelines grow it and put it out; the log's EObjAnimation
-    // (0x19D) pairs are the old/new SharedTimelineState, 0x10 -> 0x20 to grow and 0x4 -> 0x8 to go
-    // out. It spawns in state 1, the small puddle (ACT's MaxMP column reads the EObj state field and
-    // shows 0 -> 1 as it appears; state 0 shows it fully grown). The omen under it marks the radius
-    // this sim kills at.
+    // Puddle EObj spawns small (state 1); 0x10->0x20 grows it, 0x4->0x8 puts it out.
     private void SpawnPuddle(int round)
     {
         var at = state.Rounds[round].Doornail;
