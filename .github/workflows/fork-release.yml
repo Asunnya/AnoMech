@@ -3,7 +3,7 @@ name: Fork release
 on:
   push:
     branches: [ asunnya-release ]
-    paths-ignore: [ pluginmaster.json ]
+    paths-ignore: [ pluginmaster.json, '**.md' ]
   workflow_dispatch:
 
 permissions:
