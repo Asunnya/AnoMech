@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Native;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using Lumina.Excel.Sheets;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -103,7 +105,21 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
     private void SyncInputLock()
     {
         var hooks = Plugin.PlayerInputHooks;
-        hooks.ZeroMovement = Dead || Movement.IsMoving;
-        hooks.DisableAllActions = Dead;
+        hooks.ZeroMovement = Dead || Movement.IsMoving || HasAnyStatus(LocksMovement);
+        hooks.DisableAllActions = Dead || HasAnyStatus(LocksActions);
     }
+
+    // Sim statuses never reach the server, so their Status sheet locks (e.g. Fetters) are applied here.
+    private static readonly Dictionary<ushort, (bool Movement, bool Actions)> statusLocks = [];
+
+    private static (bool Movement, bool Actions) LocksOf(ushort statusId)
+    {
+        if (statusLocks.TryGetValue(statusId, out var locks)) return locks;
+        var row = Plugin.DataManager.GetExcelSheet<Status>().GetRowOrDefault(statusId);
+        return statusLocks[statusId] = (row?.LockMovement ?? false, row?.LockActions ?? false);
+    }
+
+    private static bool LocksMovement(ushort statusId) => LocksOf(statusId).Movement;
+
+    private static bool LocksActions(ushort statusId) => LocksOf(statusId).Actions;
 }

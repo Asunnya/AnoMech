@@ -20,6 +20,10 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     private const float UpheavalStandOff = 3.8f;
     private const float TankStandOff = 2.5f;
     private const float PlanStep = 0.3f;
+    private const float TightSpread = 0.3f;
+
+    private static readonly Vector2 TitansLeftSide = new(12f, -5.8f);
+    private static readonly Vector2 TitansRightSide = new(13.8f, 5.8f);
 
     private UwuP3TitanState state = null!;
     private SimWorld world = null!;
@@ -31,29 +35,39 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         var ai = new AiManager(world);
 
         ai.Move(0.5f, () => Group(new Vector2(0f, 16.5f)));
-        ai.Move(6.0f, TankNorthOfTitanPartySouth);
-        ai.Move(23.0f, () => Group(new Vector2(0f, 5.5f)));
-        PlanEvery(ai, 24.4f, 30.4f, _ => []);
+        ai.Move(6.0f, () => TankAndParty(new Vector2(0f, 5.5f), new Vector2(0f, -5f)));
+        ai.Move(24.5f, () => TankAndParty(new Vector2(-7f, 0f), new Vector2(7f, 0f)));
+        ai.Move(27.5f, () => TankAndParty(new Vector2(0f, 5.5f), new Vector2(0f, -5f)));
 
         ai.Move(30.8f, () => Group(OppositeFirstJump(13.5f)));
         ai.Move(36.0f, () => Group(state.FromJumpFrame(new Vector2(14f - UpheavalStandOff, 0f)), 0.1f), jitter: 0f);
         ai.Move(40.1f, () => Group(UpheavalStandingSpot(), 0.1f), jitter: 0f);
-        ai.Move(46.8f, SpreadForLandslidesJailedTowardTheSixthBomb);
+        ai.Move(46.8f, JailedBesideTheirGaolSpotsOutOfTheLandslide, jitter: 0f);
+        ai.Move(46.8f, () => PartyTo(new Vector2(-0.8f, -6.1f), withGaolTargets: false), jitter: 0f);
         ai.Move(48.6f, () => HolderTo(new Vector2(-8f, -5f * state.SafeSide)));
-        ai.Move(50.75f, JailedIntoTheChain);
+        ai.Move(50.70f, JailedIntoTheChain, jitter: 0f);
+        ai.Move(50.75f, () => PartyTo(new Vector2(9.5f, -10.2f), withGaolTargets: false), jitter: 0f);
         ai.Move(50.8f, () => HolderTo(new Vector2(-8f, 0f)));
-        ai.Move(53.05f, () => HolderTo(new Vector2(-8f, -5f * state.SafeSide)));
-        PlanEvery(ai, 46.9f, 55.2f, _ => [(int)state.Holder, .. state.GaolTargets.Select(r => (int)r)]);
-        PlanEvery(ai, 55.3f, 84.6f, _ => []);
+        ai.Move(53.05f, () => HolderTo(new Vector2(-8f, -6f * state.SafeSide)));
+        ai.Move(57.0f, () => HolderTo(new Vector2(8f, 0f)), jitter: 0f);
+        ai.Move(57.8f, () => PartyTo(TitansLeftSide, withGaolTargets: true), jitter: 0f);
+
+        ai.Move(70.3f, () => PartyTo(TitansRightSide, withGaolTargets: true), jitter: 0f);
+        ai.Move(73.3f, () => PartyTo(new Vector2(7f, 6.5f), withGaolTargets: true), jitter: 0f);
+        ai.Move(73.3f, () => HolderTo(new Vector2(1f, 0f)), jitter: 0f);
+        PlanEvery(ai, 76.1f, 80.3f, _ => []);
 
         ai.Move(84.9f, () => Group(OppositeSecondJump(13f)));
         ai.Move(90.1f, () => Group(OppositeSecondJump(8.5f)));
-        PlanEvery(ai, 92.5f, 116.0f, _ => []);
+        ai.Move(92.5f, () => PartyTo(FromSecondJumpFrame(new Vector2(-2.8f, 0f)), withGaolTargets: true, jumpFrame: false), jitter: 0f);
+        ai.Move(92.5f, () => HolderAt(FromSecondJumpFrame(new Vector2(5.5f, 0f))), jitter: 0f);
+        PlanEvery(ai, 104.9f, 116.0f, _ => []);
         PlanEvery(ai, 116.0f, 124.5f, _ => [(int)PartyRole.OffTank]);
         ai.Move(116.0f, () => TankOppositeTheParty(PartyRole.OffTank));
         PlanEvery(ai, 124.5f, 141.0f, _ => []);
         PlanEvery(ai, 141.0f, 147.9f, _ => [(int)PartyRole.MainTank]);
         ai.Move(141.0f, () => TankOppositeTheParty(PartyRole.MainTank));
+        ai.Move(148.1f, () => Group(Vector2.Zero));
     }
 
     private void PlanEvery(AiManager ai, float from, float to, Func<float, int[]> excluded)
@@ -87,11 +101,11 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         return AiMove.Create(spots).NaturalOrder();
     }
 
-    private IAiMove TankNorthOfTitanPartySouth()
+    private IAiMove TankAndParty(Vector2 tank, Vector2 party)
     {
         var spots = new Vector2?[8];
-        for (var slot = 0; slot < 8; slot++) spots[slot] = new Vector2(0f, 5.5f) + SpreadOffset(slot, GroupSpread);
-        spots[(int)PartyRole.MainTank] = new Vector2(0f, -3.5f);
+        for (var slot = 0; slot < 8; slot++) spots[slot] = party + SpreadOffset(slot, GroupSpread);
+        spots[(int)PartyRole.MainTank] = tank;
         return AiMove.Create(spots).NaturalOrder();
     }
 
@@ -106,21 +120,51 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         return state.FromJumpFrame(titan + Vector2.Normalize(landing - titan) * UpheavalStandOff);
     }
 
+    private IAiMove PartyTo(Vector2 spot, bool withGaolTargets, bool jumpFrame = true)
+    {
+        var anchor = jumpFrame ? state.FromJumpFrame(spot) : spot;
+        var holderMovesAlone = !state.GaolTargets.Contains(state.Holder);
+        var spots = new Vector2?[8];
+        for (var slot = 0; slot < 8; slot++)
+        {
+            var role = (PartyRole)slot;
+            if (holderMovesAlone && role == state.Holder) continue;
+            if (!withGaolTargets && state.GaolTargets.Contains(role)) continue;
+            spots[slot] = anchor + SpreadOffset(slot, TightSpread);
+        }
+        return AiMove.Create(spots).NaturalOrder();
+    }
+
+    private Vector2 FromSecondJumpFrame(Vector2 eastFrame)
+    {
+        var (sin, cos) = MathF.SinCos((state.SecondJumpBearing - 90f) * MathF.PI / 180f);
+        return new Vector2(eastFrame.X * cos - eastFrame.Y * sin, eastFrame.X * sin + eastFrame.Y * cos);
+    }
+
+    private IAiMove HolderAt(Vector2 spot) =>
+        state.GaolTargets.Contains(state.Holder) && state.Jailed.Contains(state.Holder) ? Nobody() : Only(state.Holder, spot);
+
     private IAiMove HolderTo(Vector2 jumpFrameSpot) =>
         state.GaolTargets.Contains(state.Holder) ? Nobody() : Only(state.Holder, state.FromJumpFrame(jumpFrameSpot));
 
     private Vector2 GaolSpot(int order) => state.FromJumpFrame(order switch
     {
-        0 => new Vector2(-6.3f, 2.9f * state.SafeSide),
-        1 => new Vector2(-0.8f, 5.3f * state.SafeSide),
-        _ => new Vector2(-4.0f, 10.3f * state.SafeSide),
+        0 => new Vector2(-6.6f, 1.4f * state.SafeSide),
+        1 => new Vector2(-0.6f, 2.0f * state.SafeSide),
+        _ => new Vector2(5.9f, 0.6f * state.SafeSide),
     });
 
-    private IAiMove SpreadForLandslidesJailedTowardTheSixthBomb()
+    private Vector2 BesideGaolSpot(int order) => state.FromJumpFrame(order switch
+    {
+        0 => new Vector2(-6.6f, 3.8f * state.SafeSide),
+        1 => new Vector2(-0.6f, 3.8f * state.SafeSide),
+        _ => new Vector2(4.5f, 3.6f * state.SafeSide),
+    });
+
+    private IAiMove JailedBesideTheirGaolSpotsOutOfTheLandslide()
     {
         var spots = new Vector2?[8];
-        for (var i = 0; i < state.GaolTargets.Count; i++)
-            spots[(int)state.GaolTargets[i]] = i == 0 ? state.FromJumpFrame(new Vector2(-6.3f, 5.2f * state.SafeSide)) : GaolSpot(i);
+        for (var i = 0; i < state.GaolTargets.Count; i++) spots[(int)state.GaolTargets[i]] = BesideGaolSpot(i);
         if (!state.GaolTargets.Contains(state.Holder)) spots[(int)state.Holder] = state.FromJumpFrame(new Vector2(-8f, 0f));
         return AiMove.Create(spots).NaturalOrder();
     }

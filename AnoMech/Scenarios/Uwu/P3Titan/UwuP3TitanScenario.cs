@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
@@ -28,12 +29,13 @@ public sealed class UwuP3TitanScenario : IScenario
     private const float LandslideKnockback = 15f;
     private const float UpheavalKnockback = 24f;
     private const float FreefireRadius = 6f;
-    private const float GaolChainReach = 6.5f;
+    private const float GaolChainReach = 7.5f;
     private const float GaolChainDelay = 0.7f;
     private const float PrisonerFreedAfter = 1.1f;
     private const float TankBusterHalfAngle = MathF.PI / 4f;
     private const float RockBusterLength = 11f;
     private const float MountainBusterLength = 16f;
+    private const float JumpTurnSpeed = 3f;
 
     private SimWorld world = null!;
     private SimParty party = null!;
@@ -44,11 +46,13 @@ public sealed class UwuP3TitanScenario : IScenario
     private SimEnemy? titan;
     private SimEventObject? floor;
     private bool titanFacesTank;
+    private float? turningTo;
     private float landslideRotation;
     private readonly List<SimEnemy> helpers = [];
     private readonly SimEnemy?[] bombs = new SimEnemy?[6];
     private readonly SimEnemy?[] lateBombs = new SimEnemy?[4];
     private readonly Dictionary<SimEnemy, PartyRole> gaols = [];
+    private readonly Dictionary<PartyRole, Sign> gaolSigns = [];
     private readonly List<(SimEnemy? Caster, float Rotation)> landslideCasters = [];
 
     public void Run(SimWorld worldParam, int? selectedAi)
@@ -61,8 +65,10 @@ public sealed class UwuP3TitanScenario : IScenario
         titan = null;
         floor = null;
         titanFacesTank = false;
+        turningTo = null;
         helpers.Clear();
         gaols.Clear();
+        gaolSigns.Clear();
         landslideCasters.Clear();
         Array.Clear(bombs);
         Array.Clear(lateBombs);
@@ -85,11 +91,11 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(26.88f, () => PlayEffect(titan, ActionId.WeightOfTheLandTitan, 1.1f));
         world.Events.Add(27.37f, () => ResolveWeights(0));
         world.Events.Add(27.41f, () => CastWeights(1, 30.40f));
-        world.Events.Add(30.40f, () => ResolveWeights(1));
 
-        world.Events.Add(30.40f, () => FaceJump(state.FirstJumpBearing));
-        world.Events.Add(30.44f, () => Leave(titan));
-        world.Events.Add(31.60f, () => titan?.SetVisible(false));
+        world.Events.Add(29.40f, () => FaceJump(state.FirstJumpBearing));
+        world.Events.Add(30.40f, () => ResolveWeights(1));
+        world.Events.Add(30.90f, () => Leave(titan));
+        world.Events.Add(32.00f, () => titan?.SetVisible(false));
         world.Events.Add(32.60f, () => LandOnEdge(state.FirstJumpBearing));
         world.Events.Add(32.67f, () => CastSelf(titan, ActionId.GeocrushJump, 2.7f));
         world.Events.Add(32.67f, () => AnimateFloor(1, 2));
@@ -99,6 +105,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(38.11f, () => utils.Awaken(titan, false));
 
         world.Events.Add(40.01f, () => SpawnUpheavalBombs(41.14f));
+        world.Events.Add(40.21f, () => titanFacesTank = false);
         world.Events.Add(40.21f, () => CastSelf(titan, ActionId.Upheaval, 3.7f));
         world.Events.Add(41.14f, () => BuryBombs(bombs, 0, 5));
         world.Events.Add(43.23f, () => CastBursts(bombs, 0, 5, 46.71f));
@@ -106,6 +113,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(46.31f, MarkGaolTargets);
         world.Events.Add(46.71f, () => ResolveBursts(bombs, 0, 5));
         world.Events.Add(48.27f, () => SpawnBomb(bombs, 5, state.SixthBomb, 49.16f));
+        world.Events.Add(48.49f, () => titanFacesTank = true);
         world.Events.Add(48.49f, () => CastLandslide(50.68f));
         world.Events.Add(49.16f, () => BuryBombs(bombs, 5, 1));
         world.Events.Add(50.68f, ResolveLandslide);
@@ -130,15 +138,16 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(72.70f, () => PlayEffect(titan, ActionId.WeightOfTheLandTitan, 1.1f));
         world.Events.Add(73.20f, () => ResolveWeights(2));
         world.Events.Add(73.25f, () => CastWeights(3, 76.23f));
+        world.Events.Add(74.00f, () => titan?.MoveTo(state.FromJumpFrame(new Vector3(8.3f, 0f, 0f)), 3f));
         world.Events.Add(76.05f, () => CastLandslide(78.24f, 80.24f));
         world.Events.Add(76.23f, () => ResolveWeights(3));
         world.Events.Add(78.24f, ResolveLandslide);
         world.Events.Add(78.28f, CastAwakenedSecondHit);
         world.Events.Add(80.24f, ResolveAwakenedSecondHit);
 
-        world.Events.Add(84.75f, () => FaceJump(state.SecondJumpBearing));
-        world.Events.Add(84.79f, () => Leave(titan));
-        world.Events.Add(85.90f, () => titan?.SetVisible(false));
+        world.Events.Add(83.75f, () => FaceJump(state.SecondJumpBearing));
+        world.Events.Add(85.25f, () => Leave(titan));
+        world.Events.Add(86.35f, () => titan?.SetVisible(false));
         world.Events.Add(86.95f, () => LandOnEdge(state.SecondJumpBearing));
         world.Events.Add(87.02f, () => CastSelf(titan, ActionId.GeocrushJump, 2.7f));
         world.Events.Add(87.02f, () => AnimateFloor(10, 20));
@@ -204,6 +213,7 @@ public sealed class UwuP3TitanScenario : IScenario
     {
         if (titan == null) return;
         state.TitanPosition = titan.Position;
+        if (turningTo is { } goal) TurnToward(goal, delta);
         if (titanFacesTank && Get(state.Holder) is { } holder && holder.IsAlive() && !titan.IsCasting)
             titan.Face(holder);
     }
@@ -261,16 +271,30 @@ public sealed class UwuP3TitanScenario : IScenario
         enemy?.PlayActionTimeline(ActionTimelineId.WarpStart);
     }
 
-    // Titan turns to the cardinal he is about to jump to, the tell the party reads.
+    // Titan slowly turns to the cardinal he is about to jump to, the tell the party reads.
     private void FaceJump(float bearing)
     {
         if (titan == null) return;
         titanFacesTank = false;
-        titan.SetPosition(new Placement(titan.Position, Facing(titan.Position, AtBearing(bearing, JumpRadius))));
+        turningTo = Facing(titan.Position, AtBearing(bearing, JumpRadius));
+    }
+
+    private void TurnToward(float goal, float delta)
+    {
+        var diff = MathF.IEEERemainder(goal - titan!.Rotation, 2f * MathF.PI);
+        var step = JumpTurnSpeed * delta;
+        if (MathF.Abs(diff) <= step)
+        {
+            titan.SetRotation(goal);
+            turningTo = null;
+            return;
+        }
+        titan.SetRotation(titan.Rotation + MathF.Sign(diff) * step);
     }
 
     private void LandOnEdge(float bearing)
     {
+        turningTo = null;
         var edge = AtBearing(bearing, JumpRadius);
         titan?.SetPosition(new Placement(edge, FacingCentre(edge)));
         titan?.SetVisible(true);
@@ -436,11 +460,22 @@ public sealed class UwuP3TitanScenario : IScenario
 
     private void MarkGaolTargets() => MarkGaolTargets(state.GaolTargets);
 
+    // Automarker: Attack 1-3 in the gaol line order the bots use.
     private void MarkGaolTargets(IEnumerable<PartyRole> roles)
     {
+        var sign = Sign.Attack1;
         foreach (var role in roles)
-            if (Get(role) is { } target && target.IsAlive())
-                PlayEffect(titan, ActionId.RockThrow, 1.1f, target: target.GameObjectId);
+        {
+            if (Get(role) is not { } target || !target.IsAlive()) continue;
+            PlayEffect(titan, ActionId.RockThrow, 1.1f, target: target.GameObjectId);
+            Markings.Set(sign, target.GameObjectId);
+            gaolSigns[role] = sign++;
+        }
+    }
+
+    private void ClearGaolSign(PartyRole role)
+    {
+        if (gaolSigns.Remove(role, out var sign)) Markings.Clear(sign);
     }
 
     private void Jail(IEnumerable<PartyRole> roles)
@@ -474,7 +509,7 @@ public sealed class UwuP3TitanScenario : IScenario
     private void BurstSixthBombIntoGaols()
     {
         if (bombs[5] is not { } bomb) return;
-        var reached = gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(bomb.Position)) <= BurstRadius + 1.5f).ToList();
+        var reached = gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(bomb.Position)) <= BurstRadius + 2f).ToList();
         ResolveBursts(bombs, 5, 1);
         foreach (var gaol in reached) world.Events.Add(0.35f, () => BreakGaol(gaol, explode: true));
     }
@@ -498,6 +533,7 @@ public sealed class UwuP3TitanScenario : IScenario
 
     private void Free(PartyRole role)
     {
+        ClearGaolSign(role);
         state.Jailed.Remove(role);
         Get(role)?.RemoveStatus(StatusId.Fetters);
     }
@@ -519,8 +555,15 @@ public sealed class UwuP3TitanScenario : IScenario
                 prisoner.Die("Died to Granite Impact (gaol not broken in time)");
             }
             state.Jailed.Remove(role);
+            ClearGaolSign(role);
             gaol.Despawn();
         }
+    }
+
+    private float AtRandomPlayer()
+    {
+        var targets = AliveMembers().Where(m => !IsJailed(m)).ToList();
+        return targets.Count == 0 ? LandslideRotation() : Facing(titan!.Position, targets[Random.Shared.Next(targets.Count)].Position);
     }
 
     private float LandslideRotation()
@@ -531,11 +574,11 @@ public sealed class UwuP3TitanScenario : IScenario
             : FacingCentre(titan.Position);
     }
 
-    // Only the awakened cast has a second hit; the bots know where it will land from the first cast.
+    // Only the awakened cast has a second hit and aims at a random player; the bots know where it lands from the first cast.
     private void CastLandslide(float hitAt, float? secondHitAt = null)
     {
         if (titan == null) return;
-        var rotation = landslideRotation = LandslideRotation();
+        var rotation = landslideRotation = secondHitAt == null ? LandslideRotation() : AtRandomPlayer();
         titan.SetPosition(new Placement(titan.Position, rotation));
         CastSelf(titan, secondHitAt == null ? ActionId.LandslideTitanNormal : ActionId.LandslideTitan, 1.9f);
         CastLandslideLines(rotation, LandslideOffsets, ActionId.LandslideLine, 1.9f, hitAt);
