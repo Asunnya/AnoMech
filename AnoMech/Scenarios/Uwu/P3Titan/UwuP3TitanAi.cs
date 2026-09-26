@@ -50,7 +50,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         ai.Move(46.8f, JailedBesideTheirGaolSpotsOutOfTheLandslide, jitter: 0f);
         ai.Move(46.8f, () => PartyTo(new Vector2(-0.8f, -6.1f), withGaolTargets: false), jitter: 0f);
         ai.Move(48.6f, () => HolderTo(new Vector2(-11f, -5f * state.SafeSide)));
-        ai.Move(50.70f, JailedIntoTheChain, jitter: 0f);
+        ai.Move(50.40f, JailedIntoTheChain, jitter: 0f, sprint: true);
         ai.Move(50.75f, () => PartyTo(new Vector2(9.5f, -10.2f), withGaolTargets: false), jitter: 0f);
         ai.Move(50.8f, () => HolderTo(new Vector2(-11f, 0f)));
         ai.Move(53.05f, () => HolderTo(new Vector2(-8f, -6f * state.SafeSide)));

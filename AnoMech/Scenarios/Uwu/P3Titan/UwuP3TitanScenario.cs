@@ -30,9 +30,9 @@ public sealed class UwuP3TitanScenario : IScenario
     private const float LandslideKnockback = 15f;
     private const float UpheavalKnockback = 24f;
     private const float FreefireRadius = 6f;
-    private const float GaolChainReach = 7.5f;
-    private const float GaolChainDelay = 0.7f;
     private const float GaolSpotTolerance = 2.5f;
+    private const float GaolChainReach = 6.7f + GaolSpotTolerance;
+    private const float GaolChainDelay = 0.7f;
     private const float PrisonerFreedAfter = 1.1f;
     private const float TankBusterHalfAngle = MathF.PI / 4f;
     private const float RockBusterLength = 11f;
@@ -551,7 +551,7 @@ public sealed class UwuP3TitanScenario : IScenario
     private void BurstSixthBombIntoGaols()
     {
         if (bombs[5] is not { } bomb) return;
-        var reached = gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(bomb.Position)) <= BurstRadius + 2f).ToList();
+        var reached = gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(bomb.Position)) <= BurstRadius + GaolSpotTolerance + 0.5f).ToList();
         ResolveBursts(bombs, 5, 1);
         foreach (var gaol in reached) world.Events.Add(0.35f, () => BreakGaol(gaol, explode: true));
     }
