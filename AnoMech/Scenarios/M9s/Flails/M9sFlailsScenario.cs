@@ -177,18 +177,13 @@ public sealed class M9sFlailsScenario : IScenario
         return (uint)System.Numerics.BitOperations.Log2(state);
     }
 
-    internal static unsafe string PlayBigSawTimeline(uint index)
+    private static unsafe void PlayBigSawTimeline(uint index)
     {
-        var sgs = LayoutQuery.FindAllBySgbPath(BigSawSgb);
-        var played = 0;
-        foreach (var p in sgs)
+        foreach (var p in LayoutQuery.FindAllBySgbPath(BigSawSgb))
         {
             var sg = (FFXIVClientStructs.FFXIV.Client.LayoutEngine.Group.SharedGroupLayoutInstance*)p;
-            if (!sg->IsTimelineIndexValid(index)) continue;
-            sg->PlayTimeline(index, 0);
-            played++;
+            if (sg->IsTimelineIndexValid(index)) sg->PlayTimeline(index, 0);
         }
-        return $"timeline {index}: {played}/{sgs.Count} big saws";
     }
 
     // Flails and doornails have no mesh either: what players see is a map-effect object per cell.
