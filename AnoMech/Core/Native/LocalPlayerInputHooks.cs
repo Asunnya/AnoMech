@@ -275,7 +275,7 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
     private (byte BarCount, ushort CurrentUnits, ushort BarUnits)? savedLimitBreak;
     private const ushort LimitBreakUnitsPerBar = 10000;
     private const byte LimitBreakBars = 3;
-    // An intercepted tank LB3 empties the faked gauge for the rest of the run, as a real one would.
+    // Once per run: the first LB3 that lands spends it until the next run starts.
     private bool limitBreakConsumed;
     private static readonly HashSet<uint> TankLimitBreakActionIds = [199, 4240, 4241, 17105];
 
@@ -343,11 +343,17 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
             Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed but this run's gauge is already spent -- press dropped.");
             return true;
         }
+        // The gauge stays full until a cast lands, so a press queued behind it would fire a second one.
+        if (Plugin.GameInstance?.World.Party.Player?.IsLimitBreaking == true)
+        {
+            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed while the last one is still casting -- press dropped.");
+            return true;
+        }
         return false;
     }
 
     // The client's own refusal reason is the only way to see why a press did nothing.
-    private void NoteLimitBreakPress(uint actionId, ulong targetId, bool accepted)
+    private void NoteLimitBreakPress(uint actionId, ulong targetId, bool accepted, bool fired)
     {
         var name = Core.ActionLookup.Name(actionId);
         var job = Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId;
@@ -360,30 +366,42 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
             Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) refused by the client -- status {status} \"{reason}\".");
             return;
         }
-        limitBreakConsumed = true;
+        // A queued press comes back through UseAction (mode Queue) when the lock ends, and only
+        // that call is the LB going off.
+        if (!fired)
+        {
+            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, LB3, job={job}) queued by the client -- nothing happens until it fires.");
+            return;
+        }
+        if (TankLimitBreakActionIds.Contains(actionId)) ApplyTankLimitBreak(actionId, targetId);
         var castSeconds = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>().TryGetRow(actionId, out var row)
             ? row.Cast100ms / 10f
             : 0f;
-        Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, LB3, job={job}) accepted by the client, UseAction target 0x{targetId:X}.");
-        Plugin.GameInstance?.World.Party.Player?.WatchLimitBreak(actionId, castSeconds);
+        // A cast cancelled before the slidecast window costs nothing, as in retail, so SimPlayer
+        // spends the gauge only once it lands; anything else lands as it fires.
+        var watcher = castSeconds > 0f ? Plugin.GameInstance?.World.Party.Player : null;
+        if (watcher == null) limitBreakConsumed = true;
+        Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, LB3, job={job}) fired by the client, UseAction target 0x{targetId:X}{(watcher == null ? " -- the gauge is spent" : "")}.");
+        watcher?.WatchLimitBreak(actionId, castSeconds);
     }
 
-    // A cancelled cast costs nothing in retail, so the faked gauge refills for another try.
-    public void RefundLimitBreak() => limitBreakConsumed = false;
+    public void SpendLimitBreak() => limitBreakConsumed = true;
 
     private bool UseActionDetour(ActionManager* self, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)
     {
         RecordRecentAction(actionId, actionType);
         if (DisableAllActions && !IsStopAutosAction(actionType, actionId)) return false;
-        if (actionType == ActionType.Action && TryInterceptTankMitigation(actionId, targetId))
+        var limitBreakLevel = LimitBreakLevel(actionType, actionId);
+        if (limitBreakLevel is { } level && RefuseLimitBreak(level, actionId)) return false;
+        if (limitBreakLevel is null && actionType == ActionType.Action && TryInterceptTankMitigation(actionId, targetId))
         {
             actionUsedSincePoll = true;
             return true;
         }
-        var limitBreakLevel = LimitBreakLevel(actionType, actionId);
-        if (limitBreakLevel is { } level && RefuseLimitBreak(level, actionId)) return false;
+        // Advances only when the client actually sends the action, not when it queues it.
+        var sequence = self->LastUsedActionSequence;
         var result = useActionHook.Original(self, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
-        if (limitBreakLevel == 2) NoteLimitBreakPress(actionId, targetId, result);
+        if (limitBreakLevel == 2) NoteLimitBreakPress(actionId, targetId, result, fired: self->LastUsedActionSequence != sequence);
         // Ignore the auto-attack-cancel general action that UpdateDetour issues while stunned.
         if (result && !IsStopAutosAction(actionType, actionId))
         {
@@ -401,8 +419,6 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
     {
         if (Plugin.GameInstance is not { } game || !game.World.Map.IsInInstance) return false;
         if (!TankMitigation.ByActionId.TryGetValue(actionId, out var ability)) return false;
-        // A spent gauge means the gate below refuses the press, so the mitigation must not apply.
-        if (limitBreakConsumed && TankLimitBreakActionIds.Contains(actionId)) return false;
         var party = game.World.Party;
         var role = party.PlayerRole;
         if (party.Player is not { } player) return false;
@@ -410,10 +426,34 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         if (!TankMitigationTracker.IsAvailable(role, ability.StatusId, ability.Charges))
             return true; // still on the sim's own cooldown -- swallow the press, nothing happens
 
+        var appliedRoles = ApplyTankMitigation(game.World, player, ability, targetId);
+        ForceRecastSweep(actionId, ability.Cooldown ?? 0f);
+        var jobId = Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId;
+        Core.DiagnosticLog.Info($"[LocalPlayerInputHooks] Intercepted {ability.Name} (actionId={actionId}) for {role} (job={jobId}), scope={ability.Scope} -- applied synthetic status {ability.StatusId} to [{string.Join(",", appliedRoles)}], real ability never touched.");
+        return true;
+    }
+
+    // A tank LB3 spends the gauge, not a recast group, and the client plays it; only its
+    // mitigation is ours, applied as it fires.
+    private static void ApplyTankLimitBreak(uint actionId, ulong targetId)
+    {
+        if (Plugin.GameInstance is not { } game) return;
+        if (!TankMitigation.ByActionId.TryGetValue(actionId, out var ability)) return;
+        var party = game.World.Party;
+        if (party.Player is not { } player) return;
+        var appliedRoles = ApplyTankMitigation(game.World, player, ability, targetId);
+        var jobId = Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId;
+        Core.DiagnosticLog.Info($"[LocalPlayerInputHooks] Applied {ability.Name} (actionId={actionId}) for {party.PlayerRole} (job={jobId}) -- status {ability.StatusId} on [{string.Join(",", appliedRoles)}].");
+    }
+
+    private static List<PartyRole> ApplyTankMitigation(SimWorld world, SimPlayer player, TankMitigationAbility ability, ulong targetId)
+    {
+        var party = world.Party;
+        var role = party.PlayerRole;
         var appliedRoles = new List<PartyRole>();
         if (ability.SourceSide)
         {
-            var affected = ApplySourceSideMitigation(game.World, player, ability);
+            var affected = ApplySourceSideMitigation(world, player, ability);
             // A peer's enemy doppel is cosmetic; the host's copy needs the debuff too.
             Plugin.MultiplayerInstance?.ReportAppliedEnemyStatus(affected, ability.StatusId, ability.Duration ?? 0f);
         }
@@ -453,17 +493,7 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
             Plugin.MultiplayerInstance?.ReportAppliedRoleStatus(appliedRoles, ability.StatusId, ability.Duration ?? 0f, shieldFraction);
 
         TankMitigationTracker.RecordUse(role, ability.StatusId, ability.Cooldown ?? 0f);
-        var jobId = Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId;
-        // A tank LB3 spends the gauge, not a recast group, so the press falls through to the
-        // real UseAction for the client to play.
-        if (TankLimitBreakActionIds.Contains(actionId))
-        {
-            Core.DiagnosticLog.Info($"[LocalPlayerInputHooks] Applied {ability.Name} (actionId={actionId}) for {role} (job={jobId}) -- status {ability.StatusId} on [{string.Join(",", appliedRoles)}]; the press goes on to the client for its animation.");
-            return false;
-        }
-        ForceRecastSweep(actionId, ability.Cooldown ?? 0f);
-        Core.DiagnosticLog.Info($"[LocalPlayerInputHooks] Intercepted {ability.Name} (actionId={actionId}) for {role} (job={jobId}), scope={ability.Scope} -- applied synthetic status {ability.StatusId} to [{string.Join(",", appliedRoles)}], real ability never touched.");
-        return true;
+        return appliedRoles;
     }
 
     // Reprisal-style: debuffs every active enemy within the ability's radius of the caster.
