@@ -22,17 +22,5 @@ public sealed class M9sFlailsSettingsWindow
 
             SettingsGrid.End();
         }
-
-        // Temporary: find which gmc08 timeline slides the big saw along its lane.
-        ImGui.Separator();
-        ImGui.TextUnformatted("Big saw timeline test (in the arena):");
-        for (uint index = 0; index < 16; index++)
-        {
-            if (index % 8 != 0) ImGui.SameLine();
-            if (ImGui.Button($"{index}##bigsawtl")) bigSawTestResult = M9sFlailsScenario.PlayBigSawTimeline(index);
-        }
-        ImGui.TextUnformatted(bigSawTestResult);
     }
-
-    private string bigSawTestResult = "";
 }
