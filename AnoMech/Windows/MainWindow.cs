@@ -474,21 +474,37 @@ public unsafe class MainWindow : Window, IDisposable
 
 #if DEBUG
         ImGui.Spacing();
-        if (ImGui.TreeNodeEx("Debug###debug-v3",
-                ImGuiTreeNodeFlags.FramePadding))
-        {
-            ImGui.BeginDisabled(mpActive);
-            ImGui.BeginGroup();
-            debugMenu.DrawSpeedControl();
-            ImGui.EndGroup();
-            ImGui.EndDisabled();
-            if (mpActive && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip(MpDisabledReason(mpWindowOpen, mpConnected));
-            debugMenu.DrawDebugContent();
-            ImGui.TreePop();
-        }
+        DrawDebugSection(mpWindowOpen, mpConnected);
 #endif
     }
+
+    // This window is hidden while the instance is loaded, so RunningSimWindow draws these too.
+    internal void DrawRunningSimOptions()
+    {
+        var mpWindowOpen = plugin.MultiplayerWindow.IsOpen;
+        var mpConnected = plugin.Multiplayer.IsConnected;
+        DrawRunOptions(plugin.Game, mpWindowOpen, mpConnected);
+#if DEBUG
+        DrawDebugSection(mpWindowOpen, mpConnected);
+#endif
+    }
+
+#if DEBUG
+    private void DrawDebugSection(bool mpWindowOpen, bool mpConnected)
+    {
+        var mpActive = mpWindowOpen || mpConnected;
+        if (!ImGui.TreeNodeEx("Debug###debug-v3", ImGuiTreeNodeFlags.FramePadding)) return;
+        ImGui.BeginDisabled(mpActive);
+        ImGui.BeginGroup();
+        debugMenu.DrawSpeedControl();
+        ImGui.EndGroup();
+        ImGui.EndDisabled();
+        if (mpActive && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(MpDisabledReason(mpWindowOpen, mpConnected));
+        debugMenu.DrawDebugContent();
+        ImGui.TreePop();
+    }
+#endif
 
     private void DrawScenarioHeader(AnoMech.Core.Game.Game game)
     {

@@ -23,6 +23,8 @@ public sealed class UwuP3TitanState
 
     public readonly record struct Hazard(Vector2 Origin, float Bearing, float Size, float At, bool IsLane);
 
+    public readonly record struct AwakenedLandslideCast(Vector2 Origin, float Rotation, float SecondHitAt);
+
     public float FirstJumpBearing { get; }
     public float SecondJumpBearing { get; }
     public int SafeSide { get; }
@@ -36,16 +38,20 @@ public sealed class UwuP3TitanState
 
     public List<Hazard> Hazards { get; } = [];
     public Vector3 TitanPosition { get; set; }
+    public AwakenedLandslideCast? AwakenedLandslide { get; set; }
     public HashSet<PartyRole> Jailed { get; } = [];
 
-    public UwuP3TitanState()
+    public UwuP3TitanState(UwuP3TitanStateOverrides? overrides = null, PartyRole? player = null)
     {
         var rng = new Random();
         FirstJumpBearing = 90f * rng.Next(4);
         SecondJumpBearing = (FirstJumpBearing + 90f * rng.Next(1, 4)) % 360f;
         SafeSide = rng.Next(2) == 0 ? 1 : -1;
         var everyone = Enum.GetValues<PartyRole>();
-        GaolTargets = everyone.OrderBy(_ => rng.Next()).Take(3).OrderBy(r => (int)r).ToList();
+        var gaolTargets = everyone.OrderBy(_ => rng.Next()).Take(3).ToList();
+        if (overrides?.PlayerAlwaysInFirstGaols == true && player is { } me && !gaolTargets.Contains(me))
+            gaolTargets[rng.Next(3)] = me;
+        GaolTargets = gaolTargets.OrderBy(r => (int)r).ToList();
         JailedHealer = rng.Next(2) == 0 ? PartyRole.RegenHealer : PartyRole.ShieldHealer;
         WeightTargets = new[] { 4, 4, 2, 2, 2, 2, 2 }
             .Select(count => (IReadOnlyList<PartyRole>)everyone.OrderBy(_ => rng.Next()).Take(count).ToList())

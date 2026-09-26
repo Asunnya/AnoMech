@@ -55,6 +55,7 @@ public sealed class RunningSimWindow : Window
         }
 
         Plugin.MainWindow.DrawStopLeaveButtons();
+        Plugin.MainWindow.DrawRunningSimOptions();
 
         if (inSession)
         {
