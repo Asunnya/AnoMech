@@ -15,15 +15,7 @@ using static AnoMech.Scenarios.Uwu.P3Titan.UwuP3TitanState;
 
 namespace AnoMech.Scenarios.Uwu.P3Titan;
 
-// UWU P3, Titan from his landing to his death. Scenario time 0 is 12 s after Ifrit died in the
-// clear of Network_30208_20260816.log (pull 18); every timestamp below is that pull's, and the phase
-// ends where it killed him, before the third set of tumults.
-//
-// Each jump's Geocrush shrinks the floor (the fight's floor EObj replays the server's timeline
-// changes) and a tighter fence follows. Landslides fire along Titan's facing when the cast starts:
-// his tank when he is targetable, the arena centre right after landing. Gaols free their prisoners
-// only when broken: the sixth Upheaval bomb bursts the nearest and Freefire chains through any within
-// reach; the bots break the healer's gaol on the clear's schedule.
+// UWU P3 Titan; timings from the clear in Network_30208_20260816.log (pull 18). Landslides follow Titan's facing at cast start.
 public sealed class UwuP3TitanScenario : IScenario
 {
     public string Name => "Titan";
@@ -487,9 +479,7 @@ public sealed class UwuP3TitanScenario : IScenario
         foreach (var gaol in reached) world.Events.Add(0.35f, () => BreakGaol(gaol, explode: true));
     }
 
-    // A gaol that breaks explodes with Freefire, which breaks every other gaol in reach in turn. Its
-    // prisoner stays untouchable for a moment after, clear of the next gaol's blast (the clear
-    // freed each about 1.1 s after its gaol broke).
+    // Freefire chains to gaols in reach; the prisoner is freed ~1.1s later, like the clear.
     private void BreakGaol(SimEnemy gaol, bool explode)
     {
         if (!gaols.Remove(gaol, out var role)) return;

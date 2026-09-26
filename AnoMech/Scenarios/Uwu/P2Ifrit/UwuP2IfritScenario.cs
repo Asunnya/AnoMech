@@ -13,12 +13,7 @@ using static AnoMech.Scenarios.Uwu.P2Ifrit.UwuP2IfritState;
 
 namespace AnoMech.Scenarios.Uwu.P2Ifrit;
 
-// UWU P2, Ifrit from his entrance to his death. Scenario time 0 is 5 s after Garuda died in the
-// clear of Network_30208_20260816.log (pull 18); every timestamp below is that pull's, and the phase
-// ends after the second Flaming Crush, where it killed him.
-//
-// The party is expected to shield Vulcan Burst, so its knockback is left out. The bots kill the
-// nails on the clear's schedule, each death a raidwide Infernal Surge.
+// UWU P2 Ifrit; timings from the clear in Network_30208_20260816.log (pull 18). Vulcan Burst's knockback is left out (shielded).
 public sealed class UwuP2IfritScenario : IScenario
 {
     public string Name => "Ifrit";
@@ -225,8 +220,7 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(168.00f, DespawnAll);
     }
 
-    // Ifrit keeps his back to the party by facing his tank (the C marker until the nails, where he
-    // is tanked from); targeted casts like Inferno Howl would otherwise turn him toward their target.
+    // Keeps Ifrit facing his tank; targeted casts would turn him.
     public void Tick(float delta, float elapsed)
     {
         if (ifritTanked && ifrit is { IsMoving: false } boss && FacingTarget() is { } at)
@@ -452,8 +446,7 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(1.5f, () => DespawnHelper(caster));
     }
 
-    // The two players farthest from Ifrit when the set starts bait all four pairs of puddles. The
-    // healer holding Searing Wind never did in the logs, however far out.
+    // The Searing Wind holder never baits Eruption in the logs.
     private void MarkEruptionBaits()
     {
         if (ifrit == null) return;

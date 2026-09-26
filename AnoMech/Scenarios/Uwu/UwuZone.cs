@@ -5,13 +5,11 @@ using AnoMech.Core.SimObjects;
 
 namespace AnoMech.Scenarios.Uwu;
 
-// The primal phases carry a "P<n>" menu prefix; the Ultima phase's empty Name has none. Every
-// phase shares the fight's one BGM track.
+// Primal phases get a "P<n>" menu prefix; all share one BGM.
 public sealed class UwuZone : IZone
 {
     public static readonly UwuZone Instance = new();
-    // Each primal's sky is the weather of its trial arena (Howling Eye, Bowl of Embers, the Navel);
-    // Ultimania is Ultima's.
+    // Each primal uses its trial arena's weather; Ultimania is Ultima's.
     private const byte GalesWeather = 28;
     private const byte HeatWavesWeather = 26;
     private const byte EruptionsWeather = 29;

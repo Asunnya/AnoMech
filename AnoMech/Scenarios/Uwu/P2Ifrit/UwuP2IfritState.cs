@@ -6,21 +6,7 @@ using AnoMech.Core.Game.Party;
 
 namespace AnoMech.Scenarios.Uwu.P2Ifrit;
 
-// Per-run randomization for the Ifrit phase, measured from the 23 pulls in eight logs that reached
-// it.
-//
-// Opener: Ifrit dashes from a random cardinal. Eight Radiant Plumes are fixed (the intercardinals
-// at 11,11 and the cardinals at 7); the outer cardinals at 18 take one plume on the north-south
-// axis and one on the east-west axis, so the outer cardinal beside the dash without a plume is the
-// only safe spot.
-//
-// Nails: two adjacent cardinals (C1, then C2 clockwise) and the intercardinals at C1+135 and C1+225.
-// The strat kills them C1+225, C1, C1+135, C2 and the final clones dash in that order from those
-// directions. One final clone is woken; about 2.15 s after its dash a cross of two lanes crosses the
-// arena 45 degrees off its line.
-//
-// Positions the AI and Ifrit use are authored in the reference clear's frame (C1 south,
-// Network_30208_20260816.log pull 18) and rotated into this run's by FromReference.
+// Ifrit randomization, from 23 pulls. AI positions are authored with C1 south (the clear) and rotated by FromReference.
 public sealed class UwuP2IfritState
 {
     public const float EdgeRadius = 19.5f;

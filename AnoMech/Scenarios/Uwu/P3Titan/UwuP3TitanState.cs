@@ -6,17 +6,7 @@ using AnoMech.Core.Game.Party;
 
 namespace AnoMech.Scenarios.Uwu.P3Titan;
 
-// Per-run randomization for the Titan phase, measured from the 14 pulls in seven logs that reached
-// it.
-//
-// Titan jumps to a random cardinal edge, then later to a different one. Upheaval's bombs keep one
-// layout in the jump's frame (Titan at 14 east facing west): (-11, +-11) and (-5, +-5), one of
-// (-12, +-5), and the other (-12, -+5) as the late sixth bomb whose Burst frees the gaols. Rock
-// Throw jails three random players, later one random healer. Weight of the Land drops on four, then
-// two random players per wave. The late bombs fall at (+-3, +-3) clockwise from a random corner.
-//
-// Positions the AI and Titan use for the first jump are authored in that jump's frame (Titan east)
-// and rotated by FromJumpFrame.
+// Titan randomization, from 14 pulls. First-jump positions are authored with Titan east and rotated by FromJumpFrame.
 public sealed class UwuP3TitanState
 {
     public const float JumpRadius = 14f;

@@ -30,8 +30,7 @@ public unsafe class UwuUtils(SimWorld world)
         InstanceContentDirectorHelper.SetDirectorData(1, 0, unionData, true);
     }
 
-    // The fight's floor EObj (sgvf_w1fz_b1448) that the server spawns. The primal sky comes from
-    // the phase's weather, not from director data or the other floor EObjs.
+    // Server-spawned floor EObj; the sky itself comes from the phase weather.
     public SimEventObject? SpawnArenaFloor() => world.SpawnEventObject(new EventObjectSpawnConfig
     {
         EObjId = 2007457,
@@ -44,8 +43,7 @@ public unsafe class UwuUtils(SimWorld world)
         TimelineState = 1,
     });
 
-    // The game's own head marker (ActorControl 34), like the server sends: the icon's AVFX ends on
-    // its own, so tracking it as a persistent SimVfx would free it twice.
+    // Native head marker; its AVFX ends on its own, so it isn't tracked as a SimVfx.
     public static void Lockon(SimCharacter? target, uint lockonId)
     {
         if (target == null) return;
