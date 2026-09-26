@@ -420,7 +420,7 @@ public sealed class UwuP3TitanScenario : IScenario
 
     private void SpawnBomb(SimEnemy?[] set, int index, Vector3 at, float buryAt)
     {
-        set[index] = SpawnEnemy(BNpcBaseId.BombBoulder, BNpcNameId.BombBoulder, new Placement(at, 0f), false, false, EnemyListMode.Never);
+        set[index] = SpawnEnemy(BNpcBaseId.BombBoulder, BNpcNameId.BombBoulder, new Placement(at, 0f), false, true, EnemyListMode.Never);
         state.Hazards.Add(new Hazard(Flat(at), 0f, BuryRadius, buryAt, false));
     }
 

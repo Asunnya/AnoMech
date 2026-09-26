@@ -257,16 +257,26 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         if (wedgeSpot is not { } kept || kept.SecondHitAt != landslide.SecondHitAt)
         {
             var anchor = members.Aggregate(Vector2.Zero, (sum, x) => sum + Flat(x.member!.Position)) / members.Count;
-            var spot = NearestWedgeSpot(landslide, anchor, now) ?? NearestSpotClearOfUpcomingHazards(anchor, now, Margin + TightSpread);
+            var spot = NearestWedgeSpot(landslide, anchor, now, checkPath: true)
+                ?? NearestWedgeSpot(landslide, anchor, now, checkPath: false)
+                ?? NearestSpotClearOfUpcomingHazards(anchor, now, Margin + TightSpread);
             wedgeSpot = kept = (landslide.SecondHitAt, spot);
         }
         groupTarget = null;
-        foreach (var (slot, _) in members) spots[slot] = kept.Spot + SpreadOffset(slot, TightSpread);
+        var upcoming = state.Hazards.Where(h => h.At > now).ToList();
+        foreach (var (slot, member) in members)
+        {
+            var at = Flat(member!.Position);
+            var spot = kept.Spot + SpreadOffset(slot, TightSpread);
+            spots[slot] = ClearOfHazardsOnTheWay(at, spot, now, upcoming, TightSpread)
+                ? spot
+                : NearestSpotClearOfUpcomingHazards(at, now, Margin);
+        }
         return AiMove.Create(spots).NaturalOrder();
     }
 
     // Both hits leave the four wedges at 67.5 degrees either side of the first lines untouched, far enough out.
-    private Vector2? NearestWedgeSpot(UwuP3TitanState.AwakenedLandslideCast landslide, Vector2 from, float now)
+    private Vector2? NearestWedgeSpot(UwuP3TitanState.AwakenedLandslideCast landslide, Vector2 from, float now, bool checkPath)
     {
         var upcoming = state.Hazards.Where(h => h.At > now).ToList();
         var reach = ArenaRadiusAt(now) - 1f - TightSpread;
@@ -281,7 +291,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
                 var spot = landslide.Origin + direction * radius;
                 if (spot.Length() > reach) break;
                 var distance = Vector2.Distance(from, spot);
-                if (distance >= bestDistance || !ClearOfHazardsOnTheWay(spot, spot, now, upcoming, TightSpread + 0.3f)) continue;
+                if (distance >= bestDistance || !ClearOfHazardsOnTheWay(checkPath ? from : spot, spot, now, upcoming, TightSpread + 0.3f)) continue;
                 best = spot;
                 bestDistance = distance;
                 break;
