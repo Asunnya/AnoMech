@@ -105,7 +105,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UwuP1GarudaState>)AiStrats[idx]).Run(state, world);
 
-        world.Events.Add(0f, utils.SpawnArenaFloor);
+        world.Events.Add(0f, () => utils.SpawnArenaFloor());
         world.Events.Add(0f, SpawnGaruda);
         world.Events.Add(0.2f, () => garuda?.MoveTo(new Vector3(0f, 0f, -0.7f), 8f, MathF.PI));
         ScheduleHazards();

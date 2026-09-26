@@ -32,7 +32,7 @@ public unsafe class UwuUtils(SimWorld world)
 
     // The fight's floor EObj (sgvf_w1fz_b1448) that the server spawns. The primal sky comes from
     // the phase's weather, not from director data or the other floor EObjs.
-    public void SpawnArenaFloor() => world.SpawnEventObject(new EventObjectSpawnConfig
+    public SimEventObject? SpawnArenaFloor() => world.SpawnEventObject(new EventObjectSpawnConfig
     {
         EObjId = 2007457,
         Placement = new(new(0.16f, 0, 1.4434f), 0),
