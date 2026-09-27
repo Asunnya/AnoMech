@@ -45,7 +45,7 @@ public interface IScenario
     bool HasPerPlayerSettings => false;
     void DrawPerPlayerSettings() { }
 
-    // Stays editable while the Multiplayer window is open, unlike DrawSettings (e.g. a bot
+    // Stays editable while a multiplayer fight is running, unlike DrawSettings (e.g. a bot
     // tank's mitigation plan).
     void DrawMultiplayerSettings() { }
 

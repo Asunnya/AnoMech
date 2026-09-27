@@ -18,7 +18,7 @@ public class Configuration : IPluginConfiguration
     public bool AutoCollapseWhileRunning { get; set; } = false;
     public string LastSelectedScenario { get; set; } = "";
 
-    // Multiplayer relay address (see Relay/README.md) -- remembered across
+    // Multiplayer relay address (see AnoMech.Relay.Host/README.md) -- remembered across
     // sessions so the user only has to type it once.
     public string RelayServerUrl { get; set; } = "";
 
@@ -27,6 +27,8 @@ public class Configuration : IPluginConfiguration
     // can't hand it over; never logged.
     public string RelayAccessToken { get; set; } = "";
     public string RelayTokenOrigin { get; set; } = "";
+
+    public int EmbeddedRelayPort { get; set; } = 7890;
 
     public string TokenForRelay(string url)
     {

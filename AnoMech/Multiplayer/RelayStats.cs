@@ -6,7 +6,7 @@ namespace AnoMech.Multiplayer;
 // creeping toward one is visible before the relay cuts the socket. Rates are measured over a
 // rolling window of about a second; the maxima are for the whole connection.
 //
-// The caps mirror Relay/AnoMech.Relay/Program.cs. A relay started with different flags will
+// The caps mirror RelayOptions' defaults in AnoMech.Relay. A relay started with different flags will
 // enforce different numbers, so these are what the readout compares against, not a promise.
 internal static class RelayStats
 {

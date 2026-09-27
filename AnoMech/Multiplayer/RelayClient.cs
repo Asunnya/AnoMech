@@ -20,7 +20,7 @@ namespace AnoMech.Multiplayer;
 // same code can never succeed, so the reconnect loop gives up instead of backing off forever.
 internal sealed class RelaySessionRejectedException(string reason) : Exception(reason);
 
-// ClientWebSocket wrapper for AnoMech.Relay (Relay/README.md). The relay forwards bodies
+// ClientWebSocket wrapper for AnoMech.Relay (AnoMech.Relay.Host/README.md). The relay forwards bodies
 // unread, prefixed with who sent them (RelayWire.Envelope): the identity it derived from that
 // sender's secret, so every check on what a message says is made here, by the receiver.
 // Outgoing, the WebSocket message type doubles as the compression flag: Text = raw JSON,
@@ -88,7 +88,7 @@ public sealed class RelayClient(string peerSecret) : IDisposable
     }
 
     // A bare host tries wss:// then falls back to ws://; the only way to learn whether a server
-    // speaks TLS is to try. Default ports match Relay/README.md (443 behind Caddy, 7890
+    // speaks TLS is to try. Default ports match AnoMech.Relay.Host/README.md (443 behind Caddy, 7890
     // direct). An explicit scheme is tried once, literally.
     private static IReadOnlyList<Uri> ResolveCandidateUris(string relayUrl, string path)
     {
@@ -244,7 +244,7 @@ public sealed class RelayClient(string peerSecret) : IDisposable
 
     private sealed record RelayGreeting(int RelayVersion, string[]? Capabilities, string? SessionCode, Guid PeerId);
 
-    private const int GreetingTimeoutMs = 5000;
+    internal TimeSpan GreetingTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
     // The greeting is not an MpMessage and is consumed once before ReceiveLoopAsync starts. It
     // names the identity the relay derived from our secret, so a relay that can't authenticate
@@ -253,7 +253,7 @@ public sealed class RelayClient(string peerSecret) : IDisposable
     private async Task<string?> ReadGreetingAsync(bool hosting)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
-        timeout.CancelAfter(GreetingTimeoutMs);
+        timeout.CancelAfter(GreetingTimeout);
         using var message = new MemoryStream();
         var buffer = new byte[1024];
         WebSocketReceiveResult result;
@@ -271,16 +271,23 @@ public sealed class RelayClient(string peerSecret) : IDisposable
             message.Write(buffer, 0, result.Count);
         } while (!result.EndOfMessage);
 
+        var (sessionCode, capabilities) = ParseGreeting(message.ToArray(), RelayWire.PeerId(peerSecret), hosting);
+        RelayCapabilities = capabilities;
+        return sessionCode;
+    }
+
+    internal static (string? SessionCode, IReadOnlySet<string> Capabilities) ParseGreeting(byte[] json, Guid expectedPeerId, bool hosting)
+    {
         RelayGreeting? greeting;
-        try { greeting = JsonSerializer.Deserialize<RelayGreeting>(message.ToArray(), JsonOptions); }
+        try { greeting = JsonSerializer.Deserialize<RelayGreeting>(json, JsonOptions); }
         catch (JsonException) { throw new RelaySessionRejectedException("The relay sent an invalid greeting."); }
-        RelayCapabilities = greeting?.Capabilities is { } caps ? new HashSet<string>(caps) : new HashSet<string>();
-        DiagnosticLog.Info($"[RelayClient] Relay version {greeting?.RelayVersion}, capabilities: [{string.Join(", ", RelayCapabilities)}].");
-        if (greeting is null || greeting.RelayVersion != RelayWire.Version || !SupportsSenderIdentity
-            || !HasRelayCapability("roomModeration") || greeting.PeerId != RelayWire.PeerId(peerSecret)
+        var capabilities = greeting?.Capabilities is { } caps ? new HashSet<string>(caps) : new HashSet<string>();
+        DiagnosticLog.Info($"[RelayClient] Relay version {greeting?.RelayVersion}, capabilities: [{string.Join(", ", capabilities)}].");
+        if (greeting is null || greeting.RelayVersion != RelayWire.Version || !capabilities.Contains("authenticatedIdentity")
+            || !capabilities.Contains("roomModeration") || greeting.PeerId != expectedPeerId
             || (hosting && string.IsNullOrEmpty(greeting.SessionCode)))
             throw new RelaySessionRejectedException("This relay doesn't match your AnoMech version -- update the relay.");
-        return greeting.SessionCode;
+        return (greeting.SessionCode, capabilities);
     }
 
     public async Task SendAsync(MpMessage message)

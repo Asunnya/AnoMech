@@ -5,9 +5,7 @@ using NVorbis;
 
 namespace AnoMech.Core.Game;
 
-// Volume scales the samples: the output device's own volume would change the game's. NAudio pulls
-// through a plain Stream, as a type implementing one of its interfaces would stop the plugin
-// loading (see EmbeddedAssemblies).
+// Volume scales the samples: the output device's own volume would change the game's.
 internal sealed class MusicPlayer : IDisposable
 {
     private readonly VorbisReader reader;

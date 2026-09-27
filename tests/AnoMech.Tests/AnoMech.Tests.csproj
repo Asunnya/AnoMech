@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <DalamudLibPath Condition="'$(DalamudLibPath)' == ''">$(AppData)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
+    <DalamudLibPath Condition="'$(DALAMUD_HOME)' != ''">$(DALAMUD_HOME)/</DalamudLibPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../AnoMech/AnoMech.csproj" />
+  </ItemGroup>
+
+  <!-- The plugin references these with Private=false because Dalamud supplies them in game; the
+       test host has no Dalamud, so they're copied next to the tests instead. -->
+  <ItemGroup>
+    <Reference Include="Dalamud" HintPath="$(DalamudLibPath)Dalamud.dll" Private="true" />
+    <Reference Include="Dalamud.Bindings.ImGui" HintPath="$(DalamudLibPath)Dalamud.Bindings.ImGui.dll" Private="true" />
+    <Reference Include="Dalamud.Bindings.ImPlot" HintPath="$(DalamudLibPath)Dalamud.Bindings.ImPlot.dll" Private="true" />
+    <Reference Include="Dalamud.Bindings.ImGuizmo" HintPath="$(DalamudLibPath)Dalamud.Bindings.ImGuizmo.dll" Private="true" />
+    <Reference Include="FFXIVClientStructs" HintPath="$(DalamudLibPath)FFXIVClientStructs.dll" Private="true" />
+    <Reference Include="InteropGenerator.Runtime" HintPath="$(DalamudLibPath)InteropGenerator.Runtime.dll" Private="true" />
+    <Reference Include="Newtonsoft.Json" HintPath="$(DalamudLibPath)Newtonsoft.Json.dll" Private="true" />
+    <Reference Include="Lumina" HintPath="$(DalamudLibPath)Lumina.dll" Private="true" />
+    <Reference Include="Lumina.Excel" HintPath="$(DalamudLibPath)Lumina.Excel.dll" Private="true" />
+    <Reference Include="Serilog" HintPath="$(DalamudLibPath)Serilog.dll" Private="true" />
+    <Reference Include="Microsoft.Extensions.ObjectPool" HintPath="$(DalamudLibPath)Microsoft.Extensions.ObjectPool.dll" Private="true" />
+  </ItemGroup>
+</Project>

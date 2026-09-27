@@ -38,7 +38,8 @@ internal sealed unsafe class ScenarioPanelWindow : Window
 
     public override void PreOpenCheck()
     {
-        IsOpen = RequestedOpen && mainWindow.IsOpen && !mainWindow.IsActuallyCollapsed;
+        IsOpen = RequestedOpen && mainWindow.IsOpen && !mainWindow.IsActuallyCollapsed
+                 && !mainWindow.ShowingMultiplayerSetup;
     }
 
     public override void PreDraw()

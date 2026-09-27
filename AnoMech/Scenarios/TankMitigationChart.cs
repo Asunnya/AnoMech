@@ -219,7 +219,7 @@ public static class TankMitigationChart
 
         // ---- Tank limit break 3 ----
         // Party-wide 80% for 8s. The "cooldown" stands in for the gauge: one per run. The gauge
-        // itself is faked full while a sim runs (LocalPlayerInputHooks.UpdateLimitBreakIllusion).
+        // itself is faked by scenarios that grant one (SimWorld.SetLimitBreakGauge).
         new("Last Bastion", TankJob.Paladin, 196, 199, 0.80f, 8f, 600f, Scope: MitigationScope.Party,
             Notes: "Tank LB3. Action 199 / status 196 per the Action and Status sheets (2026-09-14)."),
         new("Land Waker", TankJob.Warrior, 863, 4240, 0.80f, 8f, 600f, Scope: MitigationScope.Party,

@@ -75,7 +75,7 @@ public sealed unsafe class Bgm : IDisposable
         }
         catch (Exception e) when (e is FileNotFoundException or FileLoadException or TypeLoadException)
         {
-            // The embedded decoder didn't load (see EmbeddedAssemblies).
+            // The NAudio/NVorbis dlls are missing from the plugin folder or failed to load.
             error = $"{e.GetType().Name}: {e.Message}";
         }
         if (player == null) { DiagnosticLog.Warn($"[Bgm] Track {bgmId} ({path}) failed to start on our output ({error}); playing it from the top instead."); return false; }

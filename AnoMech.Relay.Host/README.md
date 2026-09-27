@@ -8,7 +8,7 @@ AnoMech firewalls off FFXIV's own server traffic during a scenario), so this pro
 exists just to get them talking.
 
 **There's no default/public relay bundled with the plugin.** Every group runs their
-own — nothing connects until you type a URL into the Multiplayer window. It's built to
+own — nothing connects until you type a URL into the plugin's Multiplayer screen. It's built to
 be safe to run as a genuinely public service too (anyone, not just people you've
 personally shared a URL with) — see [Running it as a public
 service](#running-it-as-a-public-service) and [Security notes](#security-notes).
@@ -38,13 +38,22 @@ service](#running-it-as-a-public-service) and [Security notes](#security-notes).
 Same machine or LAN as your test partner? Skip the VPS:
 
 ```
-cd Relay/AnoMech.Relay
+cd AnoMech.Relay.Host
 dotnet run -- --port 7890
 ```
 
 - Host connects to `ws://127.0.0.1:7890`.
 - Others on the LAN connect to `ws://<host's-LAN-IP>:7890` (`ipconfig` → IPv4 Address).
 - Allow the app through Windows Firewall's private-network prompt if asked.
+
+Prebuilt Windows, Linux, and macOS binaries are attached to each `relay-v*` GitHub
+release. A Linux amd64/arm64 container is also published as
+`ghcr.io/anomek/anomech-relay:<version>` and `ghcr.io/anomek/anomech-relay:latest`.
+For example:
+
+```bash
+docker run --rm -p 7890:7890 ghcr.io/anomek/anomech-relay:latest
+```
 
 ---
 
@@ -56,14 +65,14 @@ is already overkill for a relay this light.
 1. **Publish self-contained** (no .NET needed on the VPS):
 
    ```bash
-   cd Relay/AnoMech.Relay
+   cd AnoMech.Relay.Host
    dotnet publish -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish
    ```
 
 2. **Copy it over**:
 
    ```bash
-   scp publish/AnoMech.Relay youruser@your-vps-ip:/home/youruser/anomech-relay
+   scp publish/AnoMech.Relay.Host youruser@your-vps-ip:/home/youruser/anomech-relay
    ```
 
 3. **Run it once to confirm it starts**:
@@ -120,7 +129,7 @@ stay on for the session.
 1. **Publish self-contained** (`-r win-x64` on Windows, `-r linux-x64` on Linux):
 
    ```
-   cd Relay/AnoMech.Relay
+   cd AnoMech.Relay.Host
    dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
    ```
 
@@ -132,7 +141,7 @@ stay on for the session.
    address. No static IP? A dynamic-DNS service (No-IP, DuckDNS) gives you a stable
    hostname instead.
 
-4. **Run it**: `.\publish\AnoMech.Relay.exe --port 7890` (`./publish/AnoMech.Relay
+4. **Run it**: `.\publish\AnoMech.Relay.Host.exe --port 7890` (`./publish/AnoMech.Relay.Host
    --port 7890` on Linux). Closing the console kills it — see
    [Troubleshooting](#troubleshooting) if it won't start.
 
@@ -205,7 +214,7 @@ anomech-relay --port 7890 --token <shared-secret> --admin-token <a-different-sec
   both require it (sent as a header, never in the URL/query string). Hand it out to
   the people you actually want using this relay; everyone else gets `401` before a
   WebSocket ever opens. Leave unset to keep the original "anyone with the URL" model.
-  The plugin's Multiplayer window only shows a password field when the relay it's
+  The plugin's Multiplayer screen only shows a password field when the relay it's
   pointed at actually has one set (see [Configuring the plugin](#configuring-the-plugin)).
 
   **Setting `--token` also enforces TLS.** A password sent in the clear isn't a
@@ -255,7 +264,7 @@ anomech-relay --port 7890 --token <shared-secret> --admin-token <a-different-sec
   | `--max-fragments-per-message` | 2000 | Fragments allowed while assembling one message, independent of its byte size — bounds someone deliberately sending many tiny frames to burn CPU rather than a large one |
   | `--max-failed-joins` | 10 | Failed attempts per address before a 5-minute lockout — shared across session-code guesses and a wrong `--token`. Wrong `--admin-token` attempts use their own separate bucket, so an admin-endpoint scan can never lock players out |
   | `--usage-warn-fraction` | 0.5 | Logs one `[NEAR-LIMIT]` line per connection once it passes this fraction of either rate cap — how you find out a real scenario is creeping toward a limit before anyone is cut off |
-  | `--bind` | `*` (all interfaces) | Address to listen on. Set `127.0.0.1` when a reverse proxy fronts the relay, so nothing can reach it directly |
+  | `--bind` | `*` (all interfaces, IPv4 and IPv6) | Address to listen on: an IP, `*`, or `localhost`. Set `127.0.0.1` when a reverse proxy fronts the relay, so nothing can reach it directly |
   | `--log-dir` | `logs/` next to the executable | Where compressed logs are written — see [Logging](#logging) |
   | `--log-max-bytes` | 5368709120 (5 GiB) | Total on-disk size of all log segments combined |
 
@@ -278,8 +287,8 @@ anomech-relay --port 7890 --token <shared-secret> --admin-token <a-different-sec
   arriving over loopback with no forwarding headers at all are exempt from the TLS check
   (they never left the machine) — this is what lets the admin CLI reach a local relay.
 
-**Put a real reverse proxy in front regardless of TLS.** `HttpListener` is a
-hand-rolled HTTP front door with far less adversarial-traffic hardening than nginx or
+**Put a real reverse proxy in front regardless of TLS.** The relay's own HTTP handling is a
+minimal hand-rolled front door with far less adversarial-traffic hardening than nginx or
 Caddy, which have absorbed years of internet-facing attack traffic. For a public
 deployment this isn't optional the way it is for a friend group — see [Adding
 TLS](#adding-tls-wss), which gets you both the proxy and the cert in one step with
@@ -463,20 +472,19 @@ Bans and limit changes live in memory only — they reset when the relay restart
 | "Disconnected" immediately after Host/Join | Relay isn't running, or the URL/port is wrong. Check the relay's own console/journal output. |
 | `Test-NetConnection` fails from outside | VPS firewall/security group isn't open, or the router port-forward doesn't match the PC's current LAN IP (consider a static DHCP lease). |
 | Works locally, not for others | Testing with a LAN IP but gave others your public IP without port-forwarding, or vice versa. |
-| `HttpListenerException` on startup (Windows) | Missing the `netsh http add urlacl` grant, or another process owns the port — check `netstat -ano \| findstr 7890`. |
+| `Failed to bind` on startup | Another process owns the port — check `netstat -ano \| findstr 7890` (Windows) or `ss -ltnp` (Linux). |
 | "session full" | 8 peers already connected; host a new session. |
 | Connects, nothing happens after Join | Confirm the same relay URL and session code on both ends (case-normalized, but typos happen). |
 
 ## Configuring the plugin
 
-Open the Multiplayer window (`/anomech mp`, or the "Multiplayer..." button once a
-multiplayer-supported scenario is selected) and type your relay's address into the
-**Relay URL** field. Just the address is enough (`relay.example.com`, or
+Open the Multiplayer screen (`/anomech mp`, or the **Multiplayer** button in the main
+window while in an inn) and type your relay's address into the **Server** field. Just the address is enough (`relay.example.com`, or
 `203.0.113.5:7890` without TLS) — the plugin tries `wss://` first and falls back to
 `ws://` only if that relay doesn't support it, telling you which one it used. An
 explicit `ws://`/`wss://` also works. Remembered across sessions once set.
 
-If the relay you typed requires `--token`, a **Relay password** field appears
+If the relay you typed requires `--token`, a **Password** field appears
 automatically underneath (the plugin asks the relay's plain `/info` endpoint whether
 one is needed before showing it) — also remembered across sessions. A relay with no
 token set never shows the field at all. The saved password is tied to the relay it was
@@ -504,14 +512,14 @@ first property is `t`: `{ "t": "relayControl", "Operation": "kick|ban|unban", "P
 the host. When a ban removes other connections on the same address, the relay tells the
 host with `{ "t": "relayNotice", "Removed": [ ... ] }`.
 
-## Regression checks
+## Tests
 
 From the repository root, with a .NET 8 runtime:
 
 ```
-dotnet run --project tests/SecurityTests/SecurityTests.csproj -c Release
+dotnet test tests/AnoMech.Relay.Tests
 ```
 
-They run the real relay room, routing, moderation and client code over loopback
-WebSockets, using a small stand-in for the HTTP upgrade so they don't need Windows
-HTTP.sys permissions.
+These cover the wire format and the relay's HTTP front door. The plugin-side suite
+(`dotnet test tests/AnoMech.Tests`, needs Dalamud installed) also runs the real relay
+against the plugin's client over loopback WebSockets: rooms, routing, moderation.
