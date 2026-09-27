@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Numerics;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 
@@ -5,7 +7,12 @@ namespace AnoMech.Scenarios.Uwu.UltimateAnnihilation;
 
 public class UltimateAnnihilationState
 {
+    public readonly record struct Puddle(Vector2 Center, float Radius, float LandsAt);
+
     public readonly Rng Rng = new();
+
+    public List<Puddle> Puddles { get; } = [];
+    public int UnpoppedOrbs { get; set; }
 
     public PartyRole SearingWindTarget { get; }
     public PartyRole FlamingCrushTarget { get; }

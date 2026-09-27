@@ -22,6 +22,9 @@ public sealed class UltimateAnnihilationScenario : IScenario
     public object SettingsOverrides => settingsWindow.Overrides;
 
     private const int WeightOfTheLandPuddles = 4;
+    private const float WeightOfTheLandRadius = 6f;
+    private const float WeightOfTheLandCastTime = 2.7f;
+    private const float FeatherRainRadius = 3f;
     private const float EyeOfTheStormInner = 12f;
     private const float EyeOfTheStormOuter = 25f;
     private const float MesohighRadius = 3f;
@@ -140,7 +143,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
         world.Events.Add(23.53f, SuperCyclone);
         world.Events.Add(24.29f, () => Get(state.SearingWindTarget)?.AddStatus(StatusId.SearingWind, 30f));
         world.Events.Add(24.60f, () => garuda?.PlayActionTimeline(ActionTimelineId.WarpStart2));
-        utils.FeatherRain(FeatherRainDummyGetters(), 25.95f, 26.11f, 27.10f);
+        utils.FeatherRain(FeatherRainDummyGetters(), 25.95f, 26.11f, 27.10f, at => AddPuddle(at, FeatherRainRadius, 26.81f));
         world.Events.Add(26.52f, SpawnOrb);
         world.Events.Add(27.10f, () => titan?.PlayActionTimeline(ActionTimelineId.WarpEnd));
         world.Events.Add(28.65f, () => CastSelf(ifrit, ActionId.CrimsonCyclone, 2.7f));
@@ -167,7 +170,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
         world.Events.Add(41.39f, SearingWindPulse);
         world.Events.Add(42.01f, () => garuda?.PlayActionTimeline(ActionTimelineId.WarpStart2));
         world.Events.Add(42.68f, () => Raidwide(ultima, ActionId.TankPurge, TankPurgeDamage, 2.1f));
-        utils.FeatherRain(FeatherRainDummyGetters(), 43.32f, 43.52f, 44.50f);
+        utils.FeatherRain(FeatherRainDummyGetters(), 43.32f, 43.52f, 44.50f, at => AddPuddle(at, FeatherRainRadius, 44.22f));
         world.Events.Add(46.73f, () => ultima?.SetTargetable(false));
         world.Events.Add(46.82f, () => ultima?.PlayActionTimeline(ActionTimelineId.WarpStart));
         world.Events.Add(47.40f, SearingWindPulse);
@@ -296,6 +299,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
             {
                 spots[i] = Get(targets[i])?.Position ?? Vector3.Zero;
                 dummies[firstDummy + i]?.SetPosition(new Placement(spots[i], 0f));
+                AddPuddle(spots[i], WeightOfTheLandRadius, castAt + WeightOfTheLandCastTime);
             }
         });
 
@@ -304,12 +308,16 @@ public sealed class UltimateAnnihilationScenario : IScenario
             var index = i;
             Func<Vector3> spot = () => spots[index];
             utils.Cast(() => dummies[firstDummy + index],
-                castAt, new() { ActionId = ActionId.WeightOfTheLand, ActionType = ActionType.Action, CastTime = 2.7f },
+                castAt, new() { ActionId = ActionId.WeightOfTheLand, ActionType = ActionType.Action, CastTime = WeightOfTheLandCastTime },
                 effectAt, new() { ActionId = ActionId.WeightOfTheLand, AnimationLock = 1.1f, SpellId = (ushort)ActionId.WeightOfTheLand, ActionType = ActionType.Action },
                 new() { CastPosition = spot, ActionEffectPosition = spot },
                 0.2f, snapshot => utils.ResolveSnapshot(snapshot, "Weight of the Land"));
         }
     }
+
+    // Puddles snapshot at the end of their cast, so that is when the bots must be out.
+    private void AddPuddle(Vector3 at, float radius, float snapshotAt) =>
+        state.Puddles.Add(new UltimateAnnihilationState.Puddle(new Vector2(at.X, at.Z), radius, snapshotAt));
 
     private void CastEyeOfTheStorm() => CastSelf(Dummy(EyeOfTheStormDummy), ActionId.EyeOfTheStorm, 2.7f);
 
@@ -415,13 +423,15 @@ public sealed class UltimateAnnihilationScenario : IScenario
 
     private void SpawnOrb()
     {
-        if (SpawnEnemy(BNpcBaseId.Aetheroplasm, BNpcNameId.Aetheroplasm, new Placement(OrbSpawn, 0f), false, true, EnemyListMode.Never) is { } enemy)
-            orbs.Add(new Orb(enemy, world.Events.Elapsed));
+        if (SpawnEnemy(BNpcBaseId.Aetheroplasm, BNpcNameId.Aetheroplasm, new Placement(OrbSpawn, 0f), false, true, EnemyListMode.Never) is not { } enemy) return;
+        orbs.Add(new Orb(enemy, world.Events.Elapsed));
+        state.UnpoppedOrbs++;
     }
 
     private void PopOrb(Orb orb, float now)
     {
         orb.PoppedAt = now;
+        state.UnpoppedOrbs--;
         PlayEffect(orb.Enemy, ActionId.Aetheroplasm, 1.1f);
         foreach (var hit in party.Find.InsideActionAoe(ActionId.Aetheroplasm, orb.Enemy.Placement()))
             damage.ApplyDamage(hit, AetheroplasmDamage, ActionId.Aetheroplasm, "only tanks should pop the orbs", !IsTank(hit));
@@ -430,6 +440,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
     private void BurstUnpoppedOrb(Orb orb, float now)
     {
         orb.PoppedAt = now;
+        state.UnpoppedOrbs--;
         PlayEffect(orb.Enemy, ActionId.Aetheroplasm, 1.1f);
         party.WipeAllPlayers("Died to Aetheroplasm (an orb was never popped)");
     }
