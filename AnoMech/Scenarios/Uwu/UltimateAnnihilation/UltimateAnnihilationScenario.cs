@@ -124,6 +124,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
         world.Events.Add(10.02f, () => ultima?.PlayActionTimeline(ActionTimelineId.WarpStart));
         world.Events.Add(12.07f, PlaceBosses);
         world.Events.Add(12.16f, WarpInBosses);
+        world.Events.Add(14.21f, () => ultima?.SetTargetable(true));
         world.Events.Add(14.21f, UltimaTargetsMainTank);
         world.Events.Add(14.21f, () => Lockon(Get(state.FlamingCrushTarget), LockonId.FlamingCrush));
         world.Events.Add(14.30f, () => CastSelf(titan, ActionId.WeightOfTheLandTitan, 2.2f));
