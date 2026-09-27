@@ -328,9 +328,10 @@ public sealed record UcobP5ExaflaresAiReplayStateMessage(
 
 // Elements and the Catastrophic Choice travel as indices into UmadP5CelestriadState's own fixed
 // orders; -1 is "free"/"none". Tower indices index AllTowers, which is fixed for a run.
+// TowerElementOrder carries the NE/S/NW sector permutation; null is the legacy fixed layout.
 public sealed record UmadP5CelestriadAiReplayStateMessage(
     int[] DoubleElement, Dictionary<PartyRole, int> PlayerDebuffElement,
-    int[][] SetActiveTowers, int[] AeroVariant) : MpMessage, IScenarioReplayStateMessage;
+    int[][] SetActiveTowers, int[] AeroVariant, int[]? TowerElementOrder = null) : MpMessage, IScenarioReplayStateMessage;
 
 // Who has what. The state's other fields are live SimCharacter handles the peer resolves from
 // its own party, and LightPillarPlacement is host-only (the Ai never reads it).

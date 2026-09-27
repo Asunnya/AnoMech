@@ -10,8 +10,7 @@ using static AnoMech.Scenarios.Umad.P5Celestriad.UmadP5CelestriadConstants;
 
 namespace AnoMech.Scenarios.Umad.P5Celestriad;
 
-// Declared in the confirmed real clockwise ring order (Fire block, then Lightning block, then
-// Ice block): ElementForSet's cyclic shift relies on this order to mean "next clockwise".
+// Stable element identities. Physical sector order is rolled separately for each run.
 public sealed record CelestriadElement(
     uint TowerSoakedActionId,
     uint TowerFailedActionId,
@@ -41,8 +40,8 @@ public sealed record CatastrophicChoice(uint CastActionId, uint ResolveActionId)
 // One of the 9 fixed towers, spawned once for the whole mechanic; position never changes.
 public sealed record CelestriadTower(CelestriadElement Element, int SubIndex, Vector3 Position);
 
-// Per-run randomization: which element (or "free") each party role is permanently debuffed
-// with, which element doubles up on each of the 3 sets, which of its 3 ring towers are active,
+// Per-run randomization: the three sectors' elements, each party role's permanent debuff
+// (an element or "free"), which element doubles up on each set, which ring towers are active,
 // and (sets 0 and 2 only, the 1st and 3rd soaks) whether that set's single Catastrophic Choice
 // is Aero (green, safe toward centre) or Earth (brown, safe away from centre). ElementForSet
 // derives each role's actual per-set soak target from its debuff.
@@ -56,12 +55,13 @@ public sealed class UmadP5CelestriadState
 {
     private readonly Rng rng = new();
 
-    // Cyclic shift applied to a debuffed player's own element index to get their set-s soak
-    // target: set 0 -> next element, set 1 -> element after that, set 2 -> own element again.
+    // Clockwise sector shift from a debuffed player's own element in this run's layout:
+    // set 0 -> next sector, set 1 -> sector after that, set 2 -> own element again.
     // Since this is a fixed shift of a 3-element cycle, it's automatically a bijection each set
     // (exactly one debuff group per element) and never repeats an element across the 3 sets.
     private static readonly int[] SetOffset = { 1, 2, 0 };
 
+    // Stable tower/wire IDs only. Strategy rotation must use TowerElementOrder.
     private static readonly CelestriadElement[] Elements =
         { CelestriadElement.Fire, CelestriadElement.Lightning, CelestriadElement.Ice };
 
@@ -70,6 +70,9 @@ public sealed class UmadP5CelestriadState
 
     public IReadOnlyDictionary<PartyRole, CelestriadElement?> PlayerDebuffElement { get; }
     public IReadOnlyList<CelestriadElement> DoubleElement { get; }
+    // Clockwise sectors: north-east (20/60/100 degrees), south (140/180/220),
+    // north-west (260/300/340). Rolled once; all three activation waves share it.
+    public IReadOnlyList<CelestriadElement> TowerElementOrder { get; }
     public IReadOnlyList<CelestriadTower> AllTowers { get; }
     // Each entry is an index into AllTowers. AllTowers has a fixed order for the lifetime of this state.
     public IReadOnlyList<IReadOnlyList<int>> SetActiveTowers { get; }
@@ -79,7 +82,7 @@ public sealed class UmadP5CelestriadState
     // debuff except in set 2. Free (undebuffed) players always fill in for the doubled element.
     public CelestriadElement ElementForSet(PartyRole role, int set) =>
         PlayerDebuffElement[role] is { } own
-            ? Elements[(Array.IndexOf(Elements, own) + SetOffset[set]) % Elements.Length]
+            ? TowerElementOrder[(TowerElementOrder.ToList().IndexOf(own) + SetOffset[set]) % TowerElementOrder.Count]
             : DoubleElement[set];
 
     public UmadP5CelestriadState(SimParty party, UmadP5CelestriadStateOverrides overrides)
@@ -99,6 +102,7 @@ public sealed class UmadP5CelestriadState
 
         PlayerDebuffElement = AssignDebuffs(party, overrides);
 
+        TowerElementOrder = rng.Shuffle(CelestriadElement.Fire, CelestriadElement.Lightning, CelestriadElement.Ice);
         AllTowers = BuildAllTowers();
 
         var setActive = new List<IReadOnlyList<int>>(3);
@@ -126,8 +130,14 @@ public sealed class UmadP5CelestriadState
     // Elements and the choice arrive as indices into Elements / (Aero, Earth); -1 means free/none.
     public static UmadP5CelestriadState? FromNetworkReplay(
         IReadOnlyList<int> doubleElement, IReadOnlyDictionary<PartyRole, int> playerDebuffElement,
-        IReadOnlyList<int[]> setActiveTowers, IReadOnlyList<int> aeroVariant)
+        IReadOnlyList<int[]> setActiveTowers, IReadOnlyList<int> aeroVariant,
+        IReadOnlyList<int>? towerElementOrder = null)
     {
+        // Hosts predating randomized sectors omit this field and use the original layout.
+        towerElementOrder ??= [0, 1, 2];
+        if (towerElementOrder.Count != Elements.Length
+            || towerElementOrder.Any(i => i < 0 || i >= Elements.Length)
+            || towerElementOrder.Distinct().Count() != Elements.Length) return null;
         var towerCount = Elements.Length * SubTowersPerElement;
         if (doubleElement.Count != SetCount || setActiveTowers.Count != SetCount || aeroVariant.Count != SetCount) return null;
         if (doubleElement.Any(i => i < 0 || i >= Elements.Length)) return null;
@@ -139,7 +149,8 @@ public sealed class UmadP5CelestriadState
             doubleElement.Select(i => Elements[i]).ToList(),
             playerDebuffElement.ToDictionary(kv => kv.Key, kv => kv.Value < 0 ? null : Elements[kv.Value]),
             setActiveTowers.Select(set => (IReadOnlyList<int>)set.ToList()).ToList(),
-            aeroVariant.Select(Choice).ToList());
+            aeroVariant.Select(Choice).ToList(),
+            towerElementOrder.Select(i => Elements[i]).ToList());
     }
 
     // -1 none, 0 Aero, 1 Earth -- the wire form of AeroVariant, both ways.
@@ -149,7 +160,7 @@ public sealed class UmadP5CelestriadState
     private static CatastrophicChoice? Choice(int index)
         => index < 0 ? null : index == 0 ? CatastrophicChoice.Aero : CatastrophicChoice.Earth;
 
-    // The element's own index in the fixed clockwise order, or -1 for a free player.
+    // Stable element/wire identity, independent of sector position; -1 for a free player.
     public static int ElementIndex(CelestriadElement? element)
         => element is null ? -1 : Array.IndexOf(Elements, element);
 
@@ -157,16 +168,18 @@ public sealed class UmadP5CelestriadState
         IReadOnlyList<CelestriadElement> doubleElement,
         IReadOnlyDictionary<PartyRole, CelestriadElement?> playerDebuffElement,
         IReadOnlyList<IReadOnlyList<int>> setActiveTowers,
-        IReadOnlyList<CatastrophicChoice?> aeroVariant)
+        IReadOnlyList<CatastrophicChoice?> aeroVariant,
+        IReadOnlyList<CelestriadElement> towerElementOrder)
     {
         DoubleElement = doubleElement;
         PlayerDebuffElement = playerDebuffElement;
+        TowerElementOrder = towerElementOrder;
         AllTowers = BuildAllTowers();
         SetActiveTowers = setActiveTowers;
         AeroVariant = aeroVariant;
     }
 
-    private static IReadOnlyList<CelestriadTower> BuildAllTowers()
+    private IReadOnlyList<CelestriadTower> BuildAllTowers()
     {
         var towers = new List<CelestriadTower>(Elements.Length * SubTowersPerElement);
         foreach (var element in Elements)
@@ -238,10 +251,11 @@ public sealed class UmadP5CelestriadState
 
     // 9 towers 40 degrees apart clockwise from north, grouped as 3 contiguous per-element blocks
     // (not interleaved) starting 20 degrees off north, confirmed against the real EObj spawn
-    // positions (see UmadP5CelestriadConstants). subIndex selects which of an element's 3 ring spots.
-    public static Vector3 TowerPosition(CelestriadElement element, int subIndex)
+    // positions (see UmadP5CelestriadConstants). Only the sector's element changes per run;
+    // the nine positions and each element's three contiguous sub-towers stay intact.
+    public Vector3 TowerPosition(CelestriadElement element, int subIndex)
     {
-        var ringIndex = Array.IndexOf(Elements, element) * 3 + subIndex;
+        var ringIndex = TowerElementOrder.ToList().IndexOf(element) * 3 + subIndex;
         var angle = MathF.PI / 9f + ringIndex * (MathF.PI * 2f / 9f);
         return new Vector3(MathF.Sin(angle) * CelestriadGeometry.RingRadius, 0f, -MathF.Cos(angle) * CelestriadGeometry.RingRadius);
     }

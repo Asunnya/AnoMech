@@ -215,7 +215,8 @@ public sealed class UmadP5CelestriadScenario : IMultiplayerReplayable
             s.DoubleElement.Select(UmadP5CelestriadState.ElementIndex).ToArray(),
             s.PlayerDebuffElement.ToDictionary(kv => kv.Key, kv => UmadP5CelestriadState.ElementIndex(kv.Value)),
             s.SetActiveTowers.Select(set => set.ToArray()).ToArray(),
-            s.AeroVariant.Select(UmadP5CelestriadState.ChoiceIndex).ToArray());
+            s.AeroVariant.Select(UmadP5CelestriadState.ChoiceIndex).ToArray(),
+            s.TowerElementOrder.Select(UmadP5CelestriadState.ElementIndex).ToArray());
     }
 
     // The Ai schedules onto world.Events, which already ticks on a peer, so there is no replay
@@ -224,7 +225,7 @@ public sealed class UmadP5CelestriadScenario : IMultiplayerReplayable
     {
         if (message is not UmadP5CelestriadAiReplayStateMessage msg || aiIndex < 0 || aiIndex >= AiStrats.Count) return null;
         var shadowState = UmadP5CelestriadState.FromNetworkReplay(
-            msg.DoubleElement, msg.PlayerDebuffElement, msg.SetActiveTowers, msg.AeroVariant);
+            msg.DoubleElement, msg.PlayerDebuffElement, msg.SetActiveTowers, msg.AeroVariant, msg.TowerElementOrder);
         if (shadowState == null) return null;
         ((IScenarioAi<UmadP5CelestriadState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
         return shadowState;
