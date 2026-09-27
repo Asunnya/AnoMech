@@ -171,13 +171,17 @@ public unsafe class UwuUtils(SimWorld world)
         }
     }
 
-    public void FeatherRain(Func<SimEnemy?>[] getDummies, float snapshotOffset, float castOffset, float effectOffset)
+    public void FeatherRain(Func<SimEnemy?>[] getDummies, float snapshotOffset, float castOffset, float effectOffset, Action<Vector3>? onTargeted = null)
     {
         var positions = new List<Vector3>();
 
-        world.Events.Add(snapshotOffset, () => positions.AddRange(
-            RoleList.Random(world.Party, getDummies.Length).List
-            .Select(x => world.Party.Get(x)!.Position)));
+        world.Events.Add(snapshotOffset, () =>
+        {
+            positions.AddRange(
+                RoleList.Random(world.Party, getDummies.Length).List
+                .Select(x => world.Party.Get(x)!.Position));
+            if (onTargeted != null) positions.ForEach(onTargeted);
+        });
 
         var castInfo = new UwuUtilsRecords
         {

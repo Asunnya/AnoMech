@@ -48,6 +48,7 @@ public class UwuConstants
         public const uint Ifrit = 8730;
         public const uint InfernalNail = 8731;
         public const uint UltimaWeapon = 8734;
+        public const uint Aetheroplasm = 8735;
         public const uint Dummy = 9020;
     }
 
@@ -66,6 +67,7 @@ public class UwuConstants
         public const uint Titan = 1801;
         public const uint GraniteGaol = 1804;
         public const uint UltimaWeapon = 2137;
+        public const uint Aetheroplasm = 2138;
     }
 
     public class ActionId
@@ -125,6 +127,7 @@ public class UwuConstants
         public const uint RadiantPlumeUltima = 11133;
         public const uint LandslideUltima = 11134;
         public const uint LandslideLineUltima = 11135;
+        public const uint Aetheroplasm = 11137;
         public const uint LightPillarUltima = 11138;
         public const uint LightPillarCircle = 11139;
         public const uint AetherochemicalLaserCenter = 11140;
@@ -161,6 +164,7 @@ public class UwuConstants
         public const ushort InfernalFetters = 377;
         public const ushort FireResistanceDownII = 1255;
         public const ushort ThermalLow = 1525;
+        public const ushort ThermalHigh = 1526;
         public const ushort AccursedFlame = 1527;
         public const ushort AetheriallyCharged = 1528;
         public const ushort Woken = 1529;

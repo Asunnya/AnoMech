@@ -19,6 +19,7 @@ namespace AnoMech.Core.SimObjects;
 //       · PassableEnd        — the closest member intercepting the beam toward
 //                              the anchor takes it over.
 //       · FarthestPlayerEnd  — the party member farthest from the anchor.
+//       · ClosestPlayerEnd   — the party member closest to the anchor.
 //
 // Dynamic ends are defined relative to a stable reference, so a tether must have
 // at least one fixed end. That invariant is enforced at the call site by the
@@ -127,6 +128,16 @@ public sealed class FarthestPlayerEnd : DynamicEnd
     }
 }
 
+// Re-targets to the party member closest to the anchor each tick.
+public sealed class ClosestPlayerEnd : DynamicEnd
+{
+    public override SimCharacter? Resolve(SimCharacter? self, SimCharacter? other, TetherContext ctx)
+    {
+        if (other is null) return self;
+        return ctx.Party.Closest(other.Position) ?? self;
+    }
+}
+
 // Factory for the dynamic end specs — keeps call sites reading as
 // world.Tether(boss, End.Passable(member), ...). A fixed end is the raw
 // SimCharacter, so End.Fixed is internal (used only by the SimWorld overloads).
@@ -136,4 +147,5 @@ public static class End
     // initial = null → a random alive party member is chosen on the first resolve.
     public static PassableEnd Passable(SimCharacter? initial = null, float halfWidth = 0.5f) => new(initial, halfWidth);
     public static FarthestPlayerEnd FarthestPlayer() => new();
+    public static ClosestPlayerEnd ClosestPlayer() => new();
 }

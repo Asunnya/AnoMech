@@ -33,6 +33,7 @@ using AnoMech.Scenarios.Uwu.P1Garuda;
 using AnoMech.Scenarios.Uwu.P2Ifrit;
 using AnoMech.Scenarios.Uwu.P3Titan;
 using AnoMech.Scenarios.Umad.P5Flood;
+using AnoMech.Scenarios.Uwu.UltimateAnnihilation;
 using AnoMech.Scenarios.Uwu.UltimatePredation;
 using AnoMech.Scenarios.Uwu.UltimateSuppression;
 using Dalamud.Game.Text;
@@ -172,6 +173,7 @@ public sealed class Game : IDisposable
             new UwuP2IfritScenario(),
             new UwuP3TitanScenario(),
             new UltimatePredationScenario(),
+            new UltimateAnnihilationScenario(),
             new UltimateSuppressionScenario(),
             new UcobP5ExaflaresScenario(),
             new M9sVampStompScenario(),
