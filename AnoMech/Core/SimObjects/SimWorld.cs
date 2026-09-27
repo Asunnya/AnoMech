@@ -173,6 +173,11 @@ public sealed class SimWorld : ISimObject, IDisposable
     public void SetWeather(byte weatherId, float transition = 0.5f)
         => Map.SetWeather(weatherId, transition);
 
+    // Fakes the local client's limit break gauge (0-3 bars) until the run ends; untouched unless
+    // called. Only a full gauge lets the player's LB3 through, and a landed LB3 empties it.
+    public void SetLimitBreakGauge(float bars)
+        => Plugin.PlayerInputHooks.SetLimitBreakGauge(bars);
+
     // Spawns the eight party slots and wires in the local player. Must be called
     // after ScenarioOrigin is set. Party is added first so it despawns last in
     // Reset's reverse-order teardown (tethers and enemies reference slot positions).

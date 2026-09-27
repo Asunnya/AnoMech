@@ -269,24 +269,28 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         gauge->OathGauge = 100;
     }
 
-    // Same for the limit break gauge: a scenario that expects a tank LB3 needs the button
-    // pressable, and solo in the inn the real gauge is empty. Client-side only; a press is
-    // intercepted or swallowed, so no LB packet ever leaves.
+    // Same for the limit break gauge, but only once a scenario asks for it (SimWorld.SetLimitBreakGauge):
+    // solo in the inn the real gauge is empty. Client-side only; a press is intercepted or
+    // swallowed, so no LB packet ever leaves.
     private (byte BarCount, ushort CurrentUnits, ushort BarUnits)? savedLimitBreak;
     private const ushort LimitBreakUnitsPerBar = 10000;
     private const byte LimitBreakBars = 3;
-    // Once per run: the first LB3 that lands spends it until the next run starts.
-    private bool limitBreakConsumed;
+    // Null until the scenario sets it; the gauge is then left alone and every LB press dropped.
+    private ushort? limitBreakUnits;
     private static readonly HashSet<uint> TankLimitBreakActionIds = [199, 4240, 4241, 17105];
+
+    public void SetLimitBreakGauge(float bars)
+        => limitBreakUnits = (ushort)(Math.Clamp(bars, 0f, LimitBreakBars) * LimitBreakUnitsPerBar);
 
     private void UpdateLimitBreakIllusion()
     {
+        if (limitBreakUnits is not { } units) return;
         var lb = LimitBreakController.Instance();
         if (lb == null) return;
         savedLimitBreak ??= (lb->BarCount, lb->CurrentUnits, lb->BarUnits);
         lb->BarCount = LimitBreakBars;
         lb->BarUnits = LimitBreakUnitsPerBar;
-        lb->CurrentUnits = limitBreakConsumed ? (ushort)0 : (ushort)(LimitBreakUnitsPerBar * LimitBreakBars);
+        lb->CurrentUnits = units;
     }
 
     // Also called from Game.ResetInternal so the restore is immediate on Reset/Leave.
@@ -303,7 +307,7 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
             }
             savedLimitBreak = null;
         }
-        limitBreakConsumed = false;
+        limitBreakUnits = null;
         if (savedOathGauge is not { } saved) return;
         if (Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId == PaladinClassJobId)
         {
@@ -327,7 +331,7 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         return null;
     }
 
-    // Only LB3, and only once per run. Everything else is the client's own: with the gauge faked
+    // Only LB3, and only from a full gauge. Everything else is the client's own: with the gauge faked
     // it runs the real UseAction, and the request packet that goes with it is eaten by the firewall.
     private bool RefuseLimitBreak(int level, uint actionId)
     {
@@ -338,9 +342,14 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
             Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, LB{level + 1}, job={job}) pressed -- only LB3 is simulated, press dropped.");
             return true;
         }
-        if (limitBreakConsumed)
+        if (limitBreakUnits is not { } units)
         {
-            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed but this run's gauge is already spent -- press dropped.");
+            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed but this scenario grants no limit break -- press dropped.");
+            return true;
+        }
+        if (units < LimitBreakUnitsPerBar * LimitBreakBars)
+        {
+            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed but the gauge isn't full ({units}/{LimitBreakUnitsPerBar * LimitBreakBars}) -- press dropped.");
             return true;
         }
         // The gauge stays full until a cast lands, so a press queued behind it would fire a second one.
@@ -380,12 +389,15 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         // A cast cancelled before the slidecast window costs nothing, as in retail, so SimPlayer
         // spends the gauge only once it lands; anything else lands as it fires.
         var watcher = castSeconds > 0f ? Plugin.GameInstance?.World.Party.Player : null;
-        if (watcher == null) limitBreakConsumed = true;
+        if (watcher == null) SpendLimitBreak();
         Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, LB3, job={job}) fired by the client, UseAction target 0x{targetId:X}{(watcher == null ? " -- the gauge is spent" : "")}.");
         watcher?.WatchLimitBreak(actionId, castSeconds);
     }
 
-    public void SpendLimitBreak() => limitBreakConsumed = true;
+    public void SpendLimitBreak()
+    {
+        if (limitBreakUnits != null) limitBreakUnits = 0;
+    }
 
     private bool UseActionDetour(ActionManager* self, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)
     {

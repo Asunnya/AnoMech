@@ -154,10 +154,11 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     }
 
     // Scheduled by host and peer alike, so broadcast: false; a peer's own clones play the same
-    // materialise timelines, so the preload belongs here too.
+    // materialise timelines, so the preload belongs here too, and so does a tank's LB3 gauge.
     public void RunInstanceEvents(SimWorld instanceWorld)
     {
         ActionTimelinePreload.Preload(CloneTimelines, "UmadP3LimitCut");
+        instanceWorld.SetLimitBreakGauge(3f);
         var u = Constants.Timing.UmbraCastAt;
         foreach (var (offset, arg) in Constants.Timing.DirectorBeats)
             instanceWorld.Events.Add(u + offset, () => instanceWorld.Map.DirectorUpdate(Constants.Timing.DirectorCategory, arg, 0x2U, Constants.Timing.DirectorArg3, Constants.Timing.DirectorKefkaId, broadcast: false));
