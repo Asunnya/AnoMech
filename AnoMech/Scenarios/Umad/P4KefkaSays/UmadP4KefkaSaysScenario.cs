@@ -84,8 +84,12 @@ public sealed class UmadP4KefkaSaysScenario : IMultiplayerReplayable
         (TimelineId.NeoExdeathShow, "mon_sp/m0418/show/mon_sp001"),
     ];
 
+    // Scheduled by host and peer alike, so each client fakes its own tank's LB3 gauge.
     public void RunInstanceEvents(SimWorld instanceWorld)
-        => ActionTimelinePreload.Preload(NeoExdeathTimelines, "UmadP4KefkaSays");
+    {
+        ActionTimelinePreload.Preload(NeoExdeathTimelines, "UmadP4KefkaSays");
+        instanceWorld.SetLimitBreakGauge(3f);
+    }
 
     private void Run_InstanceEvents()
     {
