@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
@@ -23,12 +22,4 @@ internal static class TestWire
         Assert.That(error, Is.InstanceOf<InvalidDataException>().Or.InstanceOf<JsonException>().Or.InstanceOf<ArgumentException>()
             .Or.InstanceOf<FormatException>().Or.InstanceOf<TrafficLimitException>(), what);
     }
-}
-
-internal sealed class QuietLog : IRelayLog
-{
-    public readonly ConcurrentQueue<string> Lines = new();
-    public void Info(string message) => Lines.Enqueue(message);
-    public void Warn(string message) => Lines.Enqueue(message);
-    public void Detail(string message) => Lines.Enqueue(message);
 }

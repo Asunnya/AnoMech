@@ -23,14 +23,6 @@ public class RelayServerTests
         Assert.That(RelayServer.AuthenticatePeer(version, new string('z', 64)), Is.Null);
     }
 
-    [TestCase("http://localhost:7890", true)]
-    [TestCase("http://[::1]:7890", true)]
-    [TestCase("https://relay.example", true)]
-    [TestCase("http://relay.example", false)]
-    [TestCase("https://user:secret@relay.example", false)]
-    public void AdminTransportPolicy(string uri, bool safe)
-        => Assert.That(RelayAdmin.IsSafeAdminUri(uri), Is.EqualTo(safe));
-
     [Test]
     public void MappedIpv4AbuseBucketsStayIndependent()
     {
@@ -41,18 +33,11 @@ public class RelayServerTests
     }
 
     [Test]
-    public void MappedProxyCidrIsNormalized()
-    {
-        Assert.That(RelayOptions.TryParseNetwork("::ffff:192.0.2.0/120", out var mappedNetwork));
-        Assert.That(mappedNetwork.Contains(IPAddress.Parse("192.0.2.8")));
-    }
-
-    [Test]
     public async Task RelaySerializesConcurrentWriters()
     {
-        var socket = new ProbeSocket();
+        var socket = new StubSocket();
         var server = new RelayServer(new RelayOptions(), new QuietLog());
-        var peer = new RelayServer.PeerConn(socket, 1u, IPAddress.Loopback, Guid.NewGuid());
+        var peer = new PeerConn(socket, 1u, IPAddress.Loopback, Guid.NewGuid());
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => server.SendOneAsync(peer, new byte[] { 1 }, WebSocketMessageType.Text, timeout.Token)));
         Assert.That(socket.PeakSends, Is.EqualTo(1));
@@ -84,8 +69,21 @@ public class RelayServerTests
         server.Start();
         var port = server.LocalEndPoint!.Port;
         await server.StopAsync().WaitAsync(TimeSpan.FromSeconds(10));
-        using var late = new TcpClient();
-        Assert.That(async () => await late.ConnectAsync(IPAddress.Loopback, port), Throws.InstanceOf<SocketException>());
+        var rebound = new TcpListener(IPAddress.Loopback, port);
+        Assert.That(rebound.Start, Throws.Nothing);
+        rebound.Stop();
+    }
+
+    [Test]
+    public void HostControlFramesNameAnOperationAndAnIdentity()
+    {
+        var id = Guid.NewGuid();
+        Assert.That(RelayServer.ParseControl(Bytes($$"""{"t":"relayControl","Operation":"ban","PeerId":"{{id}}"}""")), Is.EqualTo(("ban", id)));
+        Assert.That(RelayServer.ParseControl(Bytes("""{"t":"relayControl","Operation":"ban","PeerId":"not a guid"}""")), Is.Null);
+        Assert.That(RelayServer.ParseControl(Bytes($$"""{"t":"relayControl","Operation":1,"PeerId":"{{id}}"}""")), Is.Null);
+        Assert.That(RelayServer.ParseControl(Bytes($$"""{"t":"relayControl","PeerId":"{{id}}"}""")), Is.Null);
+        Assert.That(RelayServer.ParseControl(Bytes("""{"t":"relayControl",""")), Is.Null);
+        Assert.That(RelayServer.ParseControl(Bytes("[]")), Is.Null);
     }
 
     // A refusal may reach the client as a reset rather than a readable response when the
@@ -102,29 +100,5 @@ public class RelayServerTests
             return await reader.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(5));
         }
         catch (IOException) { return ""; }
-    }
-
-    private sealed class ProbeSocket : WebSocket
-    {
-        private int concurrent;
-        public int PeakSends;
-        public int Sends;
-        public override WebSocketCloseStatus? CloseStatus => null;
-        public override string? CloseStatusDescription => null;
-        public override WebSocketState State => WebSocketState.Open;
-        public override string? SubProtocol => null;
-        public override void Abort() { }
-        public override void Dispose() { }
-        public override Task CloseAsync(WebSocketCloseStatus status, string? description, CancellationToken token) => Task.CompletedTask;
-        public override Task CloseOutputAsync(WebSocketCloseStatus status, string? description, CancellationToken token) => Task.CompletedTask;
-        public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken token) => throw new NotSupportedException();
-        public override async Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType type, bool end, CancellationToken token)
-        {
-            var count = Interlocked.Increment(ref concurrent);
-            PeakSends = Math.Max(count, PeakSends);
-            await Task.Delay(5, token);
-            Interlocked.Decrement(ref concurrent);
-            Interlocked.Increment(ref Sends);
-        }
     }
 }

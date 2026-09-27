@@ -64,15 +64,6 @@ public sealed class RelayServer : IAsyncDisposable
     private static readonly string[] RelayCapabilities = ["binaryCompression", "authenticatedIdentity", "roomModeration"];
     private static readonly string RelayCapabilitiesJson = string.Join(",", RelayCapabilities.Select(c => $"\"{c}\""));
 
-    // The relay owns the room namespace, so it's the only party that can guarantee no
-    // collision (vs. a client picking one locally and hoping). Hosting goes through /host
-    // (no code in the URL); the relay picks a free one and hands it back in the greeting.
-    // Cryptographically random (not System.Random) -- on a public relay, a stranger who's
-    // observed a few issued codes must not be able to predict a future one and race the real
-    // host into a session before they've even shared its code.
-    private const string CodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I, 32 chars
-    private const int CodeLength = 6;
-
     // A room idle this long is considered abandoned (crashed host, dead sockets that never
     // closed cleanly). Comfortably above MultiplayerManager's 2s ping, so any live host
     // keeps its room for free.
@@ -84,52 +75,12 @@ public sealed class RelayServer : IAsyncDisposable
     // needing the admin endpoint.
     private static readonly TimeSpan SummaryLogInterval = TimeSpan.FromMinutes(1);
 
-    private const int MaxRoomBans = 1024;
-
     // ---- Live state ---------------------------------------------------------------------
-
-    internal sealed class PeerConn(WebSocket socket, uint id, IPAddress ip, Guid peerId)
-    {
-        public readonly WebSocket Socket = socket;
-        public readonly Guid PeerId = peerId;
-        // A WebSocket allows one send at a time, and a broadcast, a greeting and a close can all
-        // target the same socket at once.
-        public readonly SemaphoreSlim SendGate = new(1, 1);
-        // Set once the greeting is out, so no room traffic can arrive ahead of it.
-        public bool Ready;
-        public readonly uint Id = id;
-        public readonly IPAddress Ip = ip;
-        public readonly DateTime JoinedUtc = DateTime.UtcNow;
-        public long MessagesIn;
-        public long BytesIn;
-        public int PeakMessagesPerSecond;
-        public long PeakBytesPerSecond;
-        public bool NearLimitWarned;
-    }
-
-    private sealed class Room
-    {
-        public readonly List<PeerConn> Peers = new();
-        // Guards this room's own Peers/LastActivityUtc only -- NOT the Sessions table below.
-        // One lock per room (not one relay-wide lock) so unrelated sessions never contend with
-        // each other on join/leave/broadcast; only two operations touching the SAME session
-        // ever serialize against one another. See TryJoin/Leave for why Sessions removal also
-        // has to happen while holding this lock, not the table's own (lock-free) operations.
-        public readonly object Lock = new();
-        // Whoever created the room, by authenticated identity rather than socket, so a host
-        // that reconnects is the host again. Tagged onto every broadcast from them (see
-        // BroadcastAsync) so a receiving client can tell a real host message from a forgery.
-        public Guid HostPeerId;
-        // Null address: banned while not connected. Filled in the next time that identity tries.
-        public readonly Dictionary<Guid, IPAddress?> Bans = new();
-        public DateTime LastActivityUtc = DateTime.UtcNow;
-        public readonly DateTime CreatedUtc = DateTime.UtcNow;
-    }
 
     private readonly RelayOptions options;
     private readonly IRelayLog log;
 
-    private readonly ConcurrentDictionary<string, Room> Sessions = new();
+    private readonly RelayRooms rooms;
     private int nextConnectionId;
 
     // Per-IP abuse tracking, separate lock since it's touched on a different cadence
@@ -173,6 +124,7 @@ public sealed class RelayServer : IAsyncDisposable
     {
         this.options = options with { TrustedProxies = [.. options.TrustedProxies] };
         this.log = log;
+        rooms = new RelayRooms(this.options);
     }
 
     public IPEndPoint? LocalEndPoint => listener?.LocalEndpoint as IPEndPoint;
@@ -229,17 +181,7 @@ public sealed class RelayServer : IAsyncDisposable
         shutdown.Cancel();
         listener.Stop();
 
-        foreach (var (_, room) in Sessions)
-        {
-            List<PeerConn> peers;
-            lock (room.Lock)
-            {
-                peers = [.. room.Peers];
-                room.Peers.Clear();
-            }
-            foreach (var peer in peers) peer.Socket.Abort();
-        }
-        Sessions.Clear();
+        foreach (var peer in rooms.Clear()) peer.Socket.Abort();
         foreach (var client in connections.Keys) client.Dispose();
 
         try
@@ -551,7 +493,7 @@ public sealed class RelayServer : IAsyncDisposable
             string sessionCode;
             if (isHostRequest)
             {
-                if (!TryCreateSession(peer, out sessionCode!))
+                if (!rooms.TryCreate(peer, out sessionCode!))
                 {
                     CountRejection(ref rejectedRelayFull, "relay full", ip, sessionTag);
                     await CloseQuietlyAsync(socket, WebSocketCloseStatus.PolicyViolation, "relay full");
@@ -561,20 +503,29 @@ public sealed class RelayServer : IAsyncDisposable
             else
             {
                 sessionCode = joinCode!;
-                if (!TryJoin(sessionCode, peer, out var reason))
+                var join = rooms.Join(sessionCode, peer);
+                if (join.Evicted is { Count: > 0 } evicted)
                 {
+                    foreach (var other in evicted)
+                        _ = ClosePeerAsync(other, WebSocketCloseStatus.PolicyViolation, "banned from room");
+                    if (join.Host != null) _ = SendNoticeAsync(join.Host, evicted.Select(p => p.PeerId).Distinct().ToArray());
+                }
+                if (join.Outcome != JoinOutcome.Joined)
+                {
+                    var reason = join.Reason;
                     // Only "not found" is a guessing signal. A full room or a room ban both mean
                     // the code was right, and charging those toward the lockout would lock a
                     // whole household out of the relay over a banned player's retries.
-                    if (reason == "session not found")
+                    if (join.Outcome == JoinOutcome.NotFound)
                     {
                         CountRejection(ref rejectedSessionNotFound, reason, ip, sessionTag);
                         RecordFailedAuth(FailedJoinsByIp, JoinLockoutUntilByIp, key, "join");
                     }
-                    else CountRejection(ref reason == "banned from room" ? ref rejectedBanned : ref rejectedSessionFull, reason, ip, sessionTag);
+                    else CountRejection(ref join.Outcome == JoinOutcome.Banned ? ref rejectedBanned : ref rejectedSessionFull, reason, ip, sessionTag);
                     await CloseQuietlyAsync(socket, WebSocketCloseStatus.PolicyViolation, reason);
                     return;
                 }
+                join.Replaced?.Socket.Abort();
             }
 
             try
@@ -583,8 +534,8 @@ public sealed class RelayServer : IAsyncDisposable
             }
             finally
             {
-                Leave(sessionCode, peer);
-                log.Info($"[{sessionCode}] peer #{peer.Id} left ({CountPeers(sessionCode)} connected, " +
+                rooms.Leave(sessionCode, peer);
+                log.Info($"[{sessionCode}] peer #{peer.Id} left ({rooms.CountPeers(sessionCode)} connected, " +
                          $"{peer.MessagesIn} msgs / {peer.BytesIn / 1024} KB in, peak {peer.PeakMessagesPerSecond} msg/s " +
                          $"/ {peer.PeakBytesPerSecond / 1024} KB/s)");
             }
@@ -601,15 +552,9 @@ public sealed class RelayServer : IAsyncDisposable
         var socket = peer.Socket;
         try
         {
-            log.Info($"[{sessionCode}] {(isHostRequest ? "session created" : "peer joined")} as #{peer.Id} from {peer.Ip} ({CountPeers(sessionCode)} connected)");
+            log.Info($"[{sessionCode}] {(isHostRequest ? "session created" : "peer joined")} as #{peer.Id} from {peer.Ip} ({rooms.CountPeers(sessionCode)} connected)");
             await SendGreetingAsync(peer, isHostRequest ? sessionCode : null);
-            if (!Sessions.TryGetValue(sessionCode, out var joinedRoom)) return;
-            lock (joinedRoom.Lock)
-            {
-                if (!Sessions.TryGetValue(sessionCode, out var live) || !ReferenceEquals(live, joinedRoom)
-                    || !joinedRoom.Peers.Contains(peer) || socket.State != WebSocketState.Open) return;
-                peer.Ready = true;
-            }
+            if (!rooms.MarkReady(sessionCode, peer)) return;
 
             // A large message (e.g. WorldSnapshotMessage) can arrive split across several
             // frames; buffer until EndOfMessage before forwarding, or fragments get broadcast
@@ -749,14 +694,11 @@ public sealed class RelayServer : IAsyncDisposable
     }
 
     // Path is already trimmed of leading/trailing slashes -- see RelayHttpRequest.Path.
-    // Validated against the real alphabet/length, not just a length ceiling, so scanner/bot
-    // garbage gets rejected as a bad request instead of doing a session lookup at all.
     private static string? ExtractSessionCode(string path)
     {
         var parts = path.Split('/');
         if (parts.Length != 2 || parts[0] != "session") return null;
-        var code = parts[1];
-        return code.Length == CodeLength && code.All(CodeAlphabet.Contains) ? code : null;
+        return RelayRooms.IsValidCode(parts[1]) ? parts[1] : null;
     }
 
     // Timing-safe: a naive string comparison returns early on the first mismatched byte,
@@ -839,134 +781,6 @@ public sealed class RelayServer : IAsyncDisposable
     internal static Guid? AuthenticatePeer(string? protocolHeader, string? secretHeader)
         => protocolHeader == RelayVersion.ToString() && RelayWire.IsValidSecret(secretHeader) ? RelayWire.PeerId(secretHeader!) : null;
 
-    // Peer-join only -- a code nobody actually hosted is rejected immediately instead of
-    // silently vivifying an empty room. Loops rather than a single TryGetValue+lock because
-    // Leave() can retire (empty + remove) this exact room between the lookup and acquiring its
-    // lock; the re-check inside the lock catches that race and retries against whatever's
-    // actually current instead of joining a room that's already been thrown away.
-    private bool TryJoin(string sessionCode, PeerConn peer, out string reason)
-    {
-        while (true)
-        {
-            if (!Sessions.TryGetValue(sessionCode, out var room))
-            {
-                reason = "session not found";
-                return false;
-            }
-            PeerConn? replaced = null;
-            List<PeerConn>? evicted = null;
-            PeerConn? host = null;
-            var banned = false;
-            lock (room.Lock)
-            {
-                if (!Sessions.TryGetValue(sessionCode, out var current) || !ReferenceEquals(current, room))
-                    continue; // retired (or replaced) concurrently -- retry against the live one
-                // The host is exempt so banning someone on its own network can't lock it out.
-                if (peer.PeerId != room.HostPeerId
-                    && (room.Bans.ContainsKey(peer.PeerId) || room.Bans.Values.Contains(AbuseKey(peer.Ip))))
-                {
-                    banned = true;
-                    // A ban made while this identity was disconnected learns its address now, and
-                    // clears that address the way a ban on a connected player would have.
-                    if (room.Bans.TryGetValue(peer.PeerId, out var bannedAddress) && bannedAddress is null)
-                    {
-                        var address = AbuseKey(peer.Ip);
-                        room.Bans[peer.PeerId] = address;
-                        evicted = room.Peers.Where(p => p.PeerId != room.HostPeerId && AbuseKey(p.Ip).Equals(address)).ToList();
-                        foreach (var other in evicted)
-                        {
-                            other.Ready = false;
-                            room.Peers.Remove(other);
-                        }
-                        host = room.Peers.FirstOrDefault(p => p.PeerId == room.HostPeerId);
-                    }
-                }
-                else
-                {
-                    // One connection per identity: a reconnect replaces a connection that hasn't
-                    // noticed it's dead yet, the host's included.
-                    replaced = room.Peers.FirstOrDefault(p => p.PeerId == peer.PeerId);
-                    if (room.Peers.Count - (replaced == null ? 0 : 1) >= options.MaxPeersPerSession)
-                    {
-                        reason = "session full";
-                        return false;
-                    }
-                    if (replaced != null)
-                    {
-                        replaced.Ready = false;
-                        room.Peers.Remove(replaced);
-                    }
-                    room.Peers.Add(peer);
-                    room.LastActivityUtc = DateTime.UtcNow;
-                }
-            }
-            if (banned)
-            {
-                if (evicted is { Count: > 0 })
-                {
-                    foreach (var other in evicted)
-                        _ = ClosePeerAsync(other, WebSocketCloseStatus.PolicyViolation, "banned from room");
-                    if (host != null) _ = SendNoticeAsync(host, evicted.Select(p => p.PeerId).Distinct().ToArray());
-                }
-                reason = "banned from room";
-                return false;
-            }
-            replaced?.Socket.Abort();
-            reason = "";
-            return true;
-        }
-    }
-
-    private bool TryCreateSession(PeerConn host, out string sessionCode)
-    {
-        // A soft cap now, not a hard one -- a burst of concurrent /host requests right at the
-        // ceiling could transiently overshoot it by a few. MaxTotalSessions exists to bound
-        // resource usage, not as a security invariant, so this is an acceptable trade for not
-        // needing a relay-wide lock on every session creation.
-        if (Sessions.Count >= options.MaxTotalSessions)
-        {
-            sessionCode = "";
-            return false;
-        }
-        var room = new Room { HostPeerId = host.PeerId };
-        room.Peers.Add(host);
-        string code;
-        do { code = GenerateCode(); } while (!Sessions.TryAdd(code, room));
-        sessionCode = code;
-        return true;
-    }
-
-    private static string GenerateCode()
-    {
-        var chars = new char[CodeLength];
-        // CodeAlphabet.Length (32) divides 256 evenly, so byte % 32 is exactly uniform --
-        // no rejection sampling needed.
-        var bytes = RandomNumberGenerator.GetBytes(CodeLength);
-        for (var i = 0; i < CodeLength; i++)
-            chars[i] = CodeAlphabet[bytes[i] % CodeAlphabet.Length];
-        return new string(chars);
-    }
-
-    private void Leave(string sessionCode, PeerConn peer)
-    {
-        if (!Sessions.TryGetValue(sessionCode, out var room)) return;
-        // Removal from Sessions happens while still holding this room's own lock -- the one
-        // point that has to agree with TryJoin's re-check above, so a peer can never be added
-        // to a room in the instant between it going empty and being removed from the table.
-        lock (room.Lock)
-        {
-            peer.Ready = false;
-            room.Peers.Remove(peer);
-            if (room.Peers.Count == 0) Sessions.TryRemove(new KeyValuePair<string, Room>(sessionCode, room));
-        }
-    }
-
-    private int CountPeers(string sessionCode)
-    {
-        if (!Sessions.TryGetValue(sessionCode, out var room)) return 0;
-        lock (room.Lock) return room.Peers.Count;
-    }
-
     // peerId tells the client which identity the relay derived from its secret.
     private async Task SendGreetingAsync(PeerConn peer, string? assignedSessionCode)
     {
@@ -982,45 +796,26 @@ public sealed class RelayServer : IAsyncDisposable
     // A malformed command is ignored rather than closing the sender: the sender is the host.
     private void Moderate(string sessionCode, PeerConn sender, byte[] message)
     {
-        string? operation;
-        var id = Guid.Empty;
+        if (ParseControl(message) is not { } control) return;
+        var (operation, id) = control;
+        if (rooms.Moderate(sessionCode, sender, operation, id) is not { } result) return;
+        log.Info($"[{sessionCode}] host {operation} of {id}: {result.Removed.Count} connection(s) closed.");
+        foreach (var peer in result.Removed)
+            _ = ClosePeerAsync(peer, WebSocketCloseStatus.PolicyViolation, operation == "ban" ? "banned from room" : "kicked from room");
+        if (result.Others.Length > 0) _ = SendNoticeAsync(sender, result.Others);
+    }
+
+    internal static (string? Operation, Guid PeerId)? ParseControl(byte[] message)
+    {
         try
         {
             using var json = JsonDocument.Parse(message);
             if (!json.RootElement.TryGetProperty("Operation", out var action) || action.ValueKind != JsonValueKind.String
                 || !json.RootElement.TryGetProperty("PeerId", out var identity) || identity.ValueKind != JsonValueKind.String
-                || !identity.TryGetGuid(out id)) return;
-            operation = action.GetString();
+                || !identity.TryGetGuid(out var id)) return null;
+            return (action.GetString(), id);
         }
-        catch (Exception e) when (e is JsonException or InvalidOperationException) { return; }
-        if (!Sessions.TryGetValue(sessionCode, out var room)) return;
-        List<PeerConn> removed;
-        lock (room.Lock)
-        {
-            if (!sender.Ready || !room.Peers.Contains(sender) || sender.PeerId != room.HostPeerId) return;
-            if (operation == "unban") { room.Bans.Remove(id); return; }
-            if (operation is not ("kick" or "ban") || id == room.HostPeerId) return;
-            var target = room.Peers.FirstOrDefault(p => p.PeerId == id);
-            // Recorded even when they aren't connected: a ban issued between their reconnects
-            // still has to stop the next one. A full ban list still kicks.
-            if (operation == "ban" && (room.Bans.ContainsKey(id) || room.Bans.Count < MaxRoomBans))
-                room.Bans[id] = target is null ? room.Bans.GetValueOrDefault(id) : AbuseKey(target.Ip);
-            if (target == null) return;
-            removed = room.Peers.Where(p => ReferenceEquals(p, target)
-                || (operation == "ban" && p.PeerId != room.HostPeerId && AbuseKey(p.Ip).Equals(AbuseKey(target.Ip)))).ToList();
-            foreach (var peer in removed)
-            {
-                peer.Ready = false;
-                room.Peers.Remove(peer);
-            }
-        }
-        log.Info($"[{sessionCode}] host {operation} of {id}: {removed.Count} connection(s) closed.");
-        foreach (var peer in removed)
-            _ = ClosePeerAsync(peer, WebSocketCloseStatus.PolicyViolation, operation == "ban" ? "banned from room" : "kicked from room");
-        // The host removed only the id it named. Anyone else the ban took with them leaves
-        // without a word of their own, so without this they'd stay seated in its roster.
-        var others = removed.Where(p => p.PeerId != id).Select(p => p.PeerId).Distinct().ToArray();
-        if (others.Length > 0) _ = SendNoticeAsync(sender, others);
+        catch (Exception e) when (e is JsonException or InvalidOperationException) { return null; }
     }
 
     private async Task SendNoticeAsync(PeerConn host, Guid[] removed)
@@ -1104,8 +899,8 @@ public sealed class RelayServer : IAsyncDisposable
 
     public AdminStats GetStats()
     {
-        var sessionCount = Sessions.Count;
-        var totalPeers = Sessions.Values.Sum(r => { lock (r.Lock) return r.Peers.Count; });
+        var sessionCount = rooms.Count;
+        var totalPeers = rooms.TotalPeers;
         int ipCount, lockoutCount, bannedCount;
         lock (AbuseLock)
         {
@@ -1130,22 +925,7 @@ public sealed class RelayServer : IAsyncDisposable
             GC.GetTotalMemory(false), GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
     }
 
-    public List<SessionInfo> GetSessions()
-    {
-        var now = DateTime.UtcNow;
-        var list = new List<SessionInfo>();
-        foreach (var (code, room) in Sessions)
-        {
-            lock (room.Lock)
-            {
-                list.Add(new SessionInfo(code, (now - room.CreatedUtc).TotalSeconds, (now - room.LastActivityUtc).TotalSeconds,
-                    room.Peers.Select(peer => new PeerInfo(peer.Id, peer.Ip.ToString(),
-                        peer.PeerId == room.HostPeerId, (now - peer.JoinedUtc).TotalSeconds,
-                        peer.MessagesIn, peer.BytesIn, peer.PeakMessagesPerSecond, peer.PeakBytesPerSecond)).ToList()));
-            }
-        }
-        return list.OrderBy(s => s.Code).ToList();
-    }
+    public List<SessionInfo> GetSessions() => rooms.Snapshot();
 
     private string ApplyAdminActionBody(string body, IPAddress from)
     {
@@ -1163,26 +943,14 @@ public sealed class RelayServer : IAsyncDisposable
             case "kick-peer":
             {
                 if (request.ConnectionId is not { } id) return new AdminActionResult(false, "kick-peer needs a connectionId");
-                foreach (var (code, room) in Sessions)
-                {
-                    PeerConn? target;
-                    lock (room.Lock) target = room.Peers.FirstOrDefault(peer => peer.Id == id);
-                    if (target == null) continue;
-                    target.Socket.Abort();
-                    return new AdminActionResult(true, $"kicked #{id} ({target.Ip}) from {code}");
-                }
-                return new AdminActionResult(false, $"no live connection #{id}");
+                if (rooms.FindConnection(id) is not (var code, var target)) return new AdminActionResult(false, $"no live connection #{id}");
+                target.Socket.Abort();
+                return new AdminActionResult(true, $"kicked #{id} ({target.Ip}) from {code}");
             }
             case "disband-session":
             {
                 if (request.SessionCode is not { Length: > 0 } code) return new AdminActionResult(false, "disband-session needs a sessionCode");
-                if (!Sessions.TryGetValue(code, out var room)) return new AdminActionResult(false, $"no session {code}");
-                List<PeerConn> peers;
-                lock (room.Lock)
-                {
-                    peers = new List<PeerConn>(room.Peers);
-                    Sessions.TryRemove(new KeyValuePair<string, Room>(code, room));
-                }
+                if (rooms.Disband(code) is not { } peers) return new AdminActionResult(false, $"no session {code}");
                 foreach (var peer in peers) peer.Socket.Abort();
                 return new AdminActionResult(true, $"disbanded {code} ({peers.Count} peers)");
             }
@@ -1198,14 +966,9 @@ public sealed class RelayServer : IAsyncDisposable
                     else BannedIps.Remove(key);
                 }
                 if (!banning) return new AdminActionResult(true, $"unbanned {key}");
-                var dropped = 0;
-                foreach (var (_, room) in Sessions)
-                {
-                    List<PeerConn> matches;
-                    lock (room.Lock) matches = room.Peers.Where(peer => AbuseKey(peer.Ip).Equals(key)).ToList();
-                    foreach (var peer in matches) { peer.Socket.Abort(); dropped++; }
-                }
-                return new AdminActionResult(true, $"banned {key}, dropped {dropped} live connection(s)");
+                var matches = rooms.PeersAt(key);
+                foreach (var peer in matches) peer.Socket.Abort();
+                return new AdminActionResult(true, $"banned {key}, dropped {matches.Count} live connection(s)");
             }
             case "clear-lockouts":
                 lock (AbuseLock)
@@ -1288,20 +1051,7 @@ public sealed class RelayServer : IAsyncDisposable
 
     private async Task ReapOnceAsync()
     {
-        List<(string Code, List<PeerConn> Peers)> dead = new();
-        // Enumerating a ConcurrentDictionary while calling TryRemove on it is safe (unlike
-        // a plain Dictionary) -- no snapshot copy needed first.
-        var cutoff = DateTime.UtcNow - IdleTimeout;
-        foreach (var (code, room) in Sessions)
-        {
-            lock (room.Lock)
-            {
-                if (room.LastActivityUtc >= cutoff) continue;
-                dead.Add((code, new List<PeerConn>(room.Peers)));
-                Sessions.TryRemove(new KeyValuePair<string, Room>(code, room));
-            }
-        }
-        foreach (var (code, peers) in dead)
+        foreach (var (code, peers) in rooms.RemoveIdleSince(DateTime.UtcNow - IdleTimeout))
         {
             log.Info($"[{code}] idle for over {IdleTimeout.TotalSeconds:F0}s -- disbanding ({peers.Count} connected).");
             await Task.WhenAll(peers.Select(peer =>
@@ -1353,21 +1103,7 @@ public sealed class RelayServer : IAsyncDisposable
     // shape (see the Detail call in RunPeerAsync) without needing its own session lookup.
     private async Task<int> BroadcastAsync(string sessionCode, PeerConn sender, byte[] bytes, WebSocketMessageType type)
     {
-        if (!Sessions.TryGetValue(sessionCode, out var room)) return 0;
-        List<PeerConn> targets;
-        bool isFromHost;
-        // Only THIS room's lock, not a relay-wide one -- unrelated sessions broadcasting at the
-        // same time never contend with each other here, only two sends to the same session would.
-        lock (room.Lock)
-        {
-            if (!Sessions.TryGetValue(sessionCode, out var current) || !ReferenceEquals(current, room)) return 0;
-            if (!sender.Ready || !room.Peers.Contains(sender)) return 0;
-            room.LastActivityUtc = DateTime.UtcNow;
-            isFromHost = sender.PeerId == room.HostPeerId;
-            // A peer's traffic goes to the host alone; only the host speaks to everyone.
-            targets = room.Peers.Where(peer => !ReferenceEquals(peer, sender) && peer.Ready && peer.Socket.State == WebSocketState.Open
-                && (isFromHost || peer.PeerId == room.HostPeerId)).ToList();
-        }
+        if (rooms.Route(sessionCode, sender) is not (var isFromHost, var targets)) return 0;
 
         // Prefix identifying the ORIGINAL sender (see RelayWire.Envelope): host flag, the
         // relay-assigned connection id, the authenticated identity, and whether the body is

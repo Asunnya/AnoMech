@@ -1,23 +1,13 @@
-using System.Collections.Concurrent;
-using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using AnoMech.Multiplayer;
 using AnoMech.Network;
-using AnoMech.Relay;
 
 namespace AnoMech.Tests;
 
 internal static class TestWire
 {
     public static byte[] Bytes(string text) => Encoding.UTF8.GetBytes(text);
-
-    public static byte[] Zip(byte[] bytes)
-    {
-        using var stream = new MemoryStream();
-        using (var compressor = new BrotliStream(stream, CompressionLevel.Fastest, true)) compressor.Write(bytes);
-        return stream.ToArray();
-    }
 
     public static void Rejects(TestDelegate action, string what)
     {
@@ -33,12 +23,4 @@ internal static class TestWire
         RelayWire.Validate(body, fromHost, sender);
         return JsonSerializer.Deserialize<MpMessage>(body, ClientJson) ?? throw new InvalidDataException("Null message.");
     }
-}
-
-internal sealed class QuietLog : IRelayLog
-{
-    public readonly ConcurrentQueue<string> Lines = new();
-    public void Info(string message) => Lines.Enqueue(message);
-    public void Warn(string message) => Lines.Enqueue(message);
-    public void Detail(string message) => Lines.Enqueue(message);
 }
