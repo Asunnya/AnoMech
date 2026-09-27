@@ -38,7 +38,7 @@ service](#running-it-as-a-public-service) and [Security notes](#security-notes).
 Same machine or LAN as your test partner? Skip the VPS:
 
 ```
-cd Relay/AnoMech.Relay
+cd AnoMech.Relay.Host
 dotnet run -- --port 7890
 ```
 
@@ -65,14 +65,14 @@ is already overkill for a relay this light.
 1. **Publish self-contained** (no .NET needed on the VPS):
 
    ```bash
-   cd Relay/AnoMech.Relay
+   cd AnoMech.Relay.Host
    dotnet publish -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish
    ```
 
 2. **Copy it over**:
 
    ```bash
-   scp publish/AnoMech.Relay youruser@your-vps-ip:/home/youruser/anomech-relay
+   scp publish/AnoMech.Relay.Host youruser@your-vps-ip:/home/youruser/anomech-relay
    ```
 
 3. **Run it once to confirm it starts**:
@@ -129,7 +129,7 @@ stay on for the session.
 1. **Publish self-contained** (`-r win-x64` on Windows, `-r linux-x64` on Linux):
 
    ```
-   cd Relay/AnoMech.Relay
+   cd AnoMech.Relay.Host
    dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
    ```
 
@@ -141,7 +141,7 @@ stay on for the session.
    address. No static IP? A dynamic-DNS service (No-IP, DuckDNS) gives you a stable
    hostname instead.
 
-4. **Run it**: `.\publish\AnoMech.Relay.exe --port 7890` (`./publish/AnoMech.Relay
+4. **Run it**: `.\publish\AnoMech.Relay.Host.exe --port 7890` (`./publish/AnoMech.Relay.Host
    --port 7890` on Linux). Closing the console kills it — see
    [Troubleshooting](#troubleshooting) if it won't start.
 
@@ -512,13 +512,14 @@ first property is `t`: `{ "t": "relayControl", "Operation": "kick|ban|unban", "P
 the host. When a ban removes other connections on the same address, the relay tells the
 host with `{ "t": "relayNotice", "Removed": [ ... ] }`.
 
-## Regression checks
+## Tests
 
 From the repository root, with a .NET 8 runtime:
 
 ```
-dotnet run --project tests/SecurityTests/SecurityTests.csproj -c Release
+dotnet test tests/AnoMech.Relay.Tests
 ```
 
-They run the real relay (HTTP front door, rooms, routing, moderation) and client code
-over loopback WebSockets.
+These cover the wire format and the relay's HTTP front door. The plugin-side suite
+(`dotnet test tests/AnoMech.Tests`, needs Dalamud installed) also runs the real relay
+against the plugin's client over loopback WebSockets: rooms, routing, moderation.

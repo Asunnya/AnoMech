@@ -11,7 +11,7 @@ namespace AnoMech.Network;
 
 // Shared by the relay and the plugin. The relay only frames and routes: it never decompresses or
 // parses a forwarded body, so every check on message content is the receiving client's.
-internal static class RelayWire
+public static class RelayWire
 {
     public const int Version = 1;
     public const int PrefixBytes = 22;
@@ -169,9 +169,9 @@ internal static class RelayWire
 }
 
 // Distinct from a malformed message: going over a rate says nothing about the message itself.
-internal sealed class TrafficLimitException(string message) : Exception(message);
+public sealed class TrafficLimitException(string message) : Exception(message);
 
-internal sealed class TrafficBudget(int messages = int.MaxValue, long bytes = long.MaxValue)
+public sealed class TrafficBudget(int messages = int.MaxValue, long bytes = long.MaxValue)
 {
     private long window = Stopwatch.GetTimestamp();
     private int messageCount;

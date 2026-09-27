@@ -5,7 +5,7 @@ using System.Net.Sockets;
 
 namespace AnoMech.Relay;
 
-internal interface IRelayLog
+public interface IRelayLog
 {
     // Events an operator should see live: startup, session lifecycle, rejections severe enough
     // to carry their own message, alerts, summaries.
@@ -18,7 +18,7 @@ internal interface IRelayLog
 
 // Limits are mutable because the admin endpoint can retune them on a live relay; RelayServer
 // works on its own copy, so changing this object after construction has no effect.
-internal sealed record RelayOptions
+public sealed record RelayOptions
 {
     // IPv6Any listens dual-stack.
     public IPAddress BindAddress { get; set; } = IPAddress.IPv6Any;
@@ -112,7 +112,7 @@ internal sealed record RelayOptions
             return "A token or --require-tls is set, so TLS is enforced -- which needs --trusted-proxy " +
                    "<cidr> naming the reverse proxy that terminates it (e.g. --trusted-proxy 127.0.0.1/32 " +
                    "for a local Caddy/nginx). Without it, X-Forwarded-Proto could be spoofed by anyone " +
-                   "who can reach this port directly. See Relay/README.md.";
+                   "who can reach this port directly. See AnoMech.Relay.Host/README.md.";
 
         return null;
     }

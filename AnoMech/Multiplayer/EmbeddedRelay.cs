@@ -4,7 +4,7 @@ namespace AnoMech.Multiplayer;
 
 // A relay run inside the plugin, owned by the host: started by "Start server & host" and stopped
 // when the host leaves the session.
-// TODO: back this with Relay/AnoMech.Relay's RelayServer once the plugin can reference it.
+// TODO: back this with AnoMech.Relay's RelayServer.
 public sealed class EmbeddedRelay : IDisposable
 {
     public bool IsRunning { get; private set; }

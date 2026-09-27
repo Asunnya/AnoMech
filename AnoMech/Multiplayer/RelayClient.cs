@@ -20,7 +20,7 @@ namespace AnoMech.Multiplayer;
 // same code can never succeed, so the reconnect loop gives up instead of backing off forever.
 internal sealed class RelaySessionRejectedException(string reason) : Exception(reason);
 
-// ClientWebSocket wrapper for AnoMech.Relay (Relay/README.md). The relay forwards bodies
+// ClientWebSocket wrapper for AnoMech.Relay (AnoMech.Relay.Host/README.md). The relay forwards bodies
 // unread, prefixed with who sent them (RelayWire.Envelope): the identity it derived from that
 // sender's secret, so every check on what a message says is made here, by the receiver.
 // Outgoing, the WebSocket message type doubles as the compression flag: Text = raw JSON,
@@ -88,7 +88,7 @@ public sealed class RelayClient(string peerSecret) : IDisposable
     }
 
     // A bare host tries wss:// then falls back to ws://; the only way to learn whether a server
-    // speaks TLS is to try. Default ports match Relay/README.md (443 behind Caddy, 7890
+    // speaks TLS is to try. Default ports match AnoMech.Relay.Host/README.md (443 behind Caddy, 7890
     // direct). An explicit scheme is tried once, literally.
     private static IReadOnlyList<Uri> ResolveCandidateUris(string relayUrl, string path)
     {

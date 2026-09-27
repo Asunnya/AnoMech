@@ -22,7 +22,7 @@ permissions:
 
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
-  RELAY_PROJECT: Relay/AnoMech.Relay/AnoMech.Relay.csproj
+  RELAY_PROJECT: AnoMech.Relay.Host/AnoMech.Relay.Host.csproj
   RELEASE_BRANCH: ${{ github.event.repository.default_branch }}
   CONTAINER_IMAGE: ghcr.io/${{ github.repository_owner }}/anomech-relay
 
@@ -45,8 +45,8 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Run Relay regression checks
-        run: dotnet run --project tests/SecurityTests/SecurityTests.csproj --configuration Release
+      - name: Run Relay tests
+        run: dotnet test tests/AnoMech.Relay.Tests --configuration Release
 
       - name: Bump Relay version
         id: bump
@@ -150,9 +150,9 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           $baseName = "AnoMech.Relay-$env:VERSION-$env:RID"
           if ($env:FORMAT -eq 'zip') {
-            Compress-Archive -Path "publish/$env:RID/AnoMech.Relay.exe" -DestinationPath "dist/$baseName.zip"
+            Compress-Archive -Path "publish/$env:RID/AnoMech.Relay.Host.exe" -DestinationPath "dist/$baseName.zip"
           } else {
-            tar -C "publish/$env:RID" -czf "dist/$baseName.tar.gz" AnoMech.Relay
+            tar -C "publish/$env:RID" -czf "dist/$baseName.tar.gz" AnoMech.Relay.Host
           }
 
       - name: Upload release archive
@@ -202,7 +202,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Relay/AnoMech.Relay/Dockerfile
+          file: AnoMech.Relay.Host/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: VERSION=${{ needs.version.outputs.version }}

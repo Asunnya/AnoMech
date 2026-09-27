@@ -24,12 +24,12 @@ namespace AnoMech.Relay;
 // a scenario (see ZoneSession), and most players sit behind NAT, so direct P2P isn't viable.
 //
 // Meant to be runnable as a public service (anyone can point a plugin at it, not just people
-// you've personally shared a URL with) -- see Relay/README.md's Security notes for the full
+// you've personally shared a URL with) -- see AnoMech.Relay.Host/README.md's Security notes for the full
 // threat model this is designed against.
 //
 // All state is per instance so a host process (the CLI, or the plugin embedding it) can stop
 // and start relays without leftovers. One instance runs once: Start, then StopAsync.
-internal sealed class RelayServer : IAsyncDisposable
+public sealed class RelayServer : IAsyncDisposable
 {
     // ---- Fixed tunables ---------------------------------------------------------------------
 
@@ -200,7 +200,7 @@ internal sealed class RelayServer : IAsyncDisposable
         if (options.RequireTls || options.AccessToken != null || options.AdminToken != null)
             log.Info($"[AnoMech.Relay] {(options.RequireTls ? "--require-tls is set" : "A token is set")}, so every connection now " +
                      "REQUIRES a TLS-terminating reverse proxy in front (X-Forwarded-Proto: https) -- see " +
-                     "Relay/README.md. Unencrypted connections will be rejected with 426, including plain local testing.");
+                     "AnoMech.Relay.Host/README.md. Unencrypted connections will be rejected with 426, including plain local testing.");
 
         acceptLoop = AcceptLoopAsync(listener);
         reapLoop = ReapLoop();

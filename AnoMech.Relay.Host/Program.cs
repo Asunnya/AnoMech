@@ -176,9 +176,7 @@ internal static class AdminConsole
             return;
         }
 
-        // The admin token goes out on every request, so it must not leave in the clear or be
-        // redirected to another server.
-        if (!IsSafeAdminUri(host))
+        if (!RelayAdmin.IsSafeAdminUri(host))
         {
             Console.Error.WriteLine("Admin connections require HTTPS, except HTTP on loopback.");
             return;
@@ -217,16 +215,6 @@ internal static class AdminConsole
                 break;
             }
         }
-    }
-
-    internal static bool IsSafeAdminUri(string value)
-    {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.UserInfo.Length != 0
-            || uri.Query.Length != 0 || uri.Fragment.Length != 0) return false;
-        return uri.Scheme == "https" || (uri.Scheme == "http" &&
-            (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-             || (IPAddress.TryParse(uri.Host.Trim('[', ']'), out var ip)
-                 && IPAddress.IsLoopback(ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4() : ip))));
     }
 
     private static string? ValueOf(string[] args, string name)

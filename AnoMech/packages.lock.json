@@ -34,6 +34,9 @@
         "requested": "[0.10.5, )",
         "resolved": "0.10.5",
         "contentHash": "o+IptCG4Avze39HrGeztC+xIp6fOOwGVAwkoa1J++4Ji1WmZ+KIKlFl5wsgxsXqBkmdpfs/vFSUproiLKYa2bw=="
+      },
+      "anomech.relay": {
+        "type": "Project"
       }
     }
   }

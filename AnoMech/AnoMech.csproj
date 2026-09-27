@@ -13,7 +13,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="../Shared/RelayWire.cs" Link="Multiplayer/RelayWire.cs" />
+    <ProjectReference Include="../AnoMech.Relay/AnoMech.Relay.csproj" />
+    <InternalsVisibleTo Include="AnoMech.Tests" />
   </ItemGroup>
 
   <ItemGroup>

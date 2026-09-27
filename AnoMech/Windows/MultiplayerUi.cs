@@ -112,7 +112,7 @@ internal sealed class MultiplayerUi
         DrawLink("How to run a server", RelayReadmeUrl);
     }
 
-    private const string RelayReadmeUrl = "https://github.com/anomek/AnoMech/blob/master/Relay/README.md";
+    private const string RelayReadmeUrl = "https://github.com/anomek/AnoMech/blob/master/AnoMech.Relay.Host/README.md";
     private static readonly Vector4 LinkColor = new(0.45f, 0.7f, 1f, 1f);
 
     private static void DrawLink(string label, string url)
