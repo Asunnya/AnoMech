@@ -23,6 +23,7 @@ public class UltimateAnnihilationAi : IScenarioAi<UltimateAnnihilationState>
     private const float PlayerDrift = 2f;
     private const float FeatherRainRadius = 3f;
     private const float OrbTouchRadius = 1.5f;
+    private const float OrbBlastRadius = 6f;
     private const float OrbBlastClearance = 6.5f;
     private const float MesohighRadius = 3f;
     private const float FirstMesohighAt = 22.50f;
@@ -39,8 +40,6 @@ public class UltimateAnnihilationAi : IScenarioAi<UltimateAnnihilationState>
     private static readonly Vector2 NorthOfNorthWestStack = new(-6f, -13f);
     private static readonly Vector2 MainTankOrb = new(1.6f, -3.4f);
     private static readonly Vector2 OffTankOrb = new(2.6f, -4.4f);
-    private static readonly Vector2 MainTankBesideOrb = new(0f, -2.5f);
-    private static readonly Vector2 OffTankBesideOrb = new(0f, -5.5f);
 
     private readonly record struct Hazard(Vector2 Center, float Radius, float? LandsAt);
 
@@ -63,7 +62,7 @@ public class UltimateAnnihilationAi : IScenarioAi<UltimateAnnihilationState>
         ai.Move(15f, () => Plan(Dodging(15f, Everyone(EastOfStack))));
         ai.Move(17.6f, () => Plan(Dodging(17.6f, Everyone(WestStack), InsideTheEye)));
         ai.Move(20.6f, () => ClearOfTheFirstMesohigh(20.6f,
-            Group(NorthWestOfStack, MainTankBesideOrb, OffTankBesideOrb, searingWind: new(-11f, 3f), firstMesohigh: new(-1f, 6.5f))));
+            Group(NorthWestOfStack, MainTankOrb, OffTankOrb, searingWind: new(-11f, 3f), firstMesohigh: new(-1f, 6.5f))));
         ai.Move(23f, () => Plan(Dodging(23f, Only(state.FirstMesohighTaker, new(12.5f, 1f)))));
         foreach (var at in new[] { 23.1f, 23.6f, 24.1f, 24.6f, 25.1f, 25.6f })
             ai.Move(at, () => TanksPopTheOrbOnceThePartyIsClear(at));
@@ -172,14 +171,13 @@ public class UltimateAnnihilationAi : IScenarioAi<UltimateAnnihilationState>
     {
         var depart = now + ReactionDelay;
         var result = (Vector2?[])spots.Clone();
-        var orbWaitsForTheTanks = state.UnpoppedOrbs > 0 && spots[(int)PartyRole.MainTank] != MainTankOrb;
         var groups = Enumerable.Range(0, 8)
             .Where(slot => spots[slot] != null && IsBot(slot))
             .GroupBy(slot => (Spot: spots[slot]!.Value, Tank: IsTank(slot)));
         foreach (var group in groups)
         {
             var saved = expected;
-            if (orbWaitsForTheTanks) expected = [.. saved, new Hazard(Orb, OrbTouchRadius, null)];
+            if (state.UnpoppedOrbs > 0 && !group.Key.Tank) expected = [.. saved, new Hazard(Orb, OrbBlastRadius, null)];
             var found = NearestClear(group.Key.Spot, group.Select(slot => Projected(slot, depart, now)).ToList(), now, depart, reach);
             expected = saved;
             if (found == null) unresolved.UnionWith(group);
