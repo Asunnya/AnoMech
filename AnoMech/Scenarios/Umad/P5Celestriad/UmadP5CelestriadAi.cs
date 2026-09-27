@@ -11,7 +11,8 @@ namespace AnoMech.Scenarios.Umad.P5Celestriad;
 // First-pass bots for Celestriad: each doppel already "knows" its own permanent element (or
 // free-pair role) and, within a doubled element's active pair, which tower is "theirs" (see
 // PlaceSet), a strategy call this AI owns, not something UmadP5CelestriadState hands it. Runs
-// to that set's matching tower, splitting the pair 1y either side of the tower's tangent so
+// clockwise through this run's element sectors to that set's matching tower, splitting the
+// pair 1y either side of the tower's tangent so
 // both fit inside the soak radius. On Catastrophic Choice sets (0 and 2), bots first stack in
 // the tower's centre, then after ChoiceReadDelay step to the safe half: Aero (green) -> away
 // from the boss, Earth (brown) -> toward the boss. This is simulated recognition time, not a

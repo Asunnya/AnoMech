@@ -11,6 +11,8 @@ namespace AnoMech.Scenarios.Umad.P5Celestriad;
 // - The towers are native EventObjects, not cast omens: confirmed via the replay's spawn
 //   packets at radius 10 from arena centre, 40 degrees apart, in three contiguous per-element
 //   blocks (not interleaved): 20/60/100, 140/180/220, 260/300/340 degrees.
+//   Which element occupies each block is randomized each run; the cited replay's fixed
+//   Fire/Lightning/Ice ordering is one layout, not a permanent assignment to those sectors.
 // - All 9 towers spawn once and persist for the whole mechanic; each set just toggles its 4
 //   active towers between DormantState (resting look, ring included) and ActiveState (lit).
 // - Only two Catastrophic Choice casts happen in total, not one per set: the first governs set
