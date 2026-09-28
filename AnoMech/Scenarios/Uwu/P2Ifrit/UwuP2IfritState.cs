@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game.Party;
+using AnoMech.Core.SimObjects;
 
 namespace AnoMech.Scenarios.Uwu.P2Ifrit;
 
@@ -39,7 +40,7 @@ public sealed class UwuP2IfritState
     public IReadOnlyList<Lane> AwakenedCrossLanes { get; }
     public IReadOnlyList<Lane> FinalLanes { get; }
 
-    public UwuP2IfritState()
+    public UwuP2IfritState(SimParty party, UwuP2IfritStateOverrides overrides)
     {
         var rng = new Random();
         OpenerBearing = 90f * rng.Next(4);
@@ -58,8 +59,15 @@ public sealed class UwuP2IfritState
         NailKillBearings = [Normalize(NailBearing + 225f), NailBearing, Normalize(NailBearing + 135f), Normalize(NailBearing + 90f)];
 
         FettersDps = Dps[rng.Next(Dps.Length)];
-        HowlFirst = Healers[rng.Next(Healers.Length)];
-        HowlSecond = HowlFirst == PartyRole.RegenHealer ? PartyRole.ShieldHealer : PartyRole.RegenHealer;
+        var playerRole = party.PlayerRole;
+        var playerIsHealer = Healers.Contains(playerRole);
+        HowlFirst = overrides.SearingWindOnPlayer switch
+        {
+            SearingWindChoice.FirstAndThirdHowl when playerIsHealer => playerRole,
+            SearingWindChoice.SecondHowl when playerIsHealer => OtherHealer(playerRole),
+            _ => Healers[rng.Next(Healers.Length)],
+        };
+        HowlSecond = OtherHealer(HowlFirst);
         FlamingCrushTargets = [Dps[rng.Next(Dps.Length)], Dps[rng.Next(Dps.Length)]];
 
         AwakenedDash = rng.Next(4);
@@ -74,6 +82,9 @@ public sealed class UwuP2IfritState
         lanes.AddRange(AwakenedCrossLanes);
         FinalLanes = lanes.OrderBy(l => l.At).ToList();
     }
+
+    private static PartyRole OtherHealer(PartyRole healer) =>
+        healer == PartyRole.RegenHealer ? PartyRole.ShieldHealer : PartyRole.RegenHealer;
 
     public Vector2 FromReference(Vector2 reference)
     {

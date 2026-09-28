@@ -19,6 +19,8 @@ public sealed class UwuP2IfritScenario : IScenario
     public string Name => "Ifrit";
     public IPhase Phase => UwuZone.Ifrit;
     public bool SupportsSolo => true;
+    public void DrawSettings() => settingsWindow.Draw();
+    public object SettingsOverrides => settingsWindow.Overrides;
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new UwuP2IfritAi()];
 
@@ -34,6 +36,7 @@ public sealed class UwuP2IfritScenario : IScenario
     private const uint NailMaxHp = 26870;
     private const float NailDrainFrom = 45f;
 
+    private readonly UwuP2IfritSettingsWindow settingsWindow = new();
     private SimWorld world = null!;
     private SimParty party = null!;
     private UwuUtils utils = null!;
@@ -59,7 +62,7 @@ public sealed class UwuP2IfritScenario : IScenario
         party = world.Party;
         utils = new UwuUtils(world);
         damage = new DamageSolver(party);
-        state = new UwuP2IfritState();
+        state = new UwuP2IfritState(party, settingsWindow.Overrides);
         helpers.Clear();
         radiantPlumeCasters.Clear();
         nails.Clear();
