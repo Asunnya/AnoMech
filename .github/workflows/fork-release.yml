@@ -31,13 +31,16 @@ jobs:
         Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
         Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
 
-    # The csproj's major.minor.build plus the run number, so every release is newer than the last.
+    # The csproj's major.minor.build plus one past the highest released revision of it, starting at 0.
     - name: Pick version
       id: version
       shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         base=$(sed -n 's:.*<Version>\([0-9]*\.[0-9]*\.[0-9]*\)\.[0-9]*</Version>.*:\1:p' AnoMech/AnoMech.csproj)
-        echo "version=$base.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+        last=$(gh release list -L 1000 --json tagName -q '.[].tagName' | sed -n "s/^v${base//./\\.}\.\([0-9]*\)$/\1/p" | sort -n | tail -n 1)
+        echo "version=$base.$(( ${last:--1} + 1 ))" >> "$GITHUB_OUTPUT"
 
     - name: Build
       run: dotnet build --configuration Release -p:Version=${{ steps.version.outputs.version }}
