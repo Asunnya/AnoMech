@@ -13,6 +13,8 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     public string Name => "Zeal / The Balance";
 
     private const float RunSpeed = 6f;
+    private const float FastestRun = 6.5f;
+    private const float LateFrame = 1f / 60f;
     private const float Margin = 1f;
     private const float GroupSpread = 0.5f;
     private const float SearchStep = 0.6f;
@@ -37,6 +39,8 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     private float groupSpread = GroupSpread;
     private (float SecondHitAt, Vector2?[]? Spots, bool[] DodgesSecondHitLater)? wedgePlan;
     private SimWorld world = null!;
+    private readonly Vector2?[] headingFor = new Vector2?[8];
+    private readonly float[] headingSince = new float[8];
 
     public void Run(UwuP3TitanState stateParam, SimWorld worldParam)
     {
@@ -44,6 +48,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         groupTarget = null;
         wedgePlan = null;
         world = worldParam;
+        ForgetWhereBotsAreHeading();
         var ai = new AiManager(world);
 
         ai.Move(0.5f, () => Group(new Vector2(0f, 16.5f)));
@@ -118,7 +123,12 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         for (var t = from; t < to; t += PlanStep)
         {
             var at = t;
-            ai.Move(at, () => GroupDodgesKnownHazards(at, excluded(at), holderJoinsTheGroup), jitter: 0f);
+            var first = t == from;
+            ai.Move(at, () =>
+            {
+                if (first) ForgetWhereBotsAreHeading();
+                return GroupDodgesKnownHazards(at, excluded(at), holderJoinsTheGroup);
+            }, jitter: 0f);
         }
     }
 
@@ -231,6 +241,8 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
             && WedgePlanFor(landslide, now, excluded) is { } wedge)
         {
             groupTarget = null;
+            for (var slot = 0; slot < 8; slot++)
+                if (wedge[slot] is { } spot) HeadFor(slot, spot, now);
             return AiMove.Create((Vector2?[])wedge.Clone()).NaturalOrder();
         }
         var holder = (int)state.Holder;
@@ -241,7 +253,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
             .ToList();
         var spots = new Vector2?[8];
         if (members.Count == 0) return AiMove.Create(spots).NaturalOrder();
-        var anchor = members.Aggregate(Vector2.Zero, (sum, x) => sum + Flat(x.member!.Position)) / members.Count;
+        var anchor = CentreOfTheBots(members.Select(x => x.member!).ToList());
         var upcoming = state.Hazards.Where(h => h.At > now).OrderBy(h => h.At).ToList();
         var stillReachable = groupTarget is { } kept && kept.Length() <= ArenaRadiusAt(now) - 1f - GroupSpread
             && ClearOfHazardsOnTheWay(anchor, kept, now, Imminent(upcoming, now), GroupSpread + 0.2f,
@@ -253,7 +265,17 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
             groupSpread = stacked ? StackedSpread : GroupSpread;
         }
         var target = groupTarget!.Value;
-        foreach (var (slot, _) in members) spots[slot] = target + SpreadOffset(slot, groupSpread);
+        var imminent = Imminent(upcoming, now);
+        foreach (var (slot, member) in members)
+        {
+            var at = Flat(member!.Position);
+            var spot = target + SpreadOffset(slot, groupSpread);
+            if (!ReachesSafely(slot, at, spot, now, imminent, WedgeRunMargin))
+                spot = headingFor[slot] is { } heading && ReachesSafely(slot, at, heading, now, imminent, 0f)
+                    ? heading
+                    : NearestSpotClearOfUpcomingHazards(WhereItTurns(slot, at), now, Margin);
+            spots[slot] = HeadFor(slot, spot, now);
+        }
         if (!holderJoinsTheGroup && !excluded.Contains(holder) && !state.Jailed.Contains(state.Holder) && world.Party.Get(holder) is { } tank && tank.IsAlive())
             spots[holder] = state.Hazards.Any(h => h.At > now)
                 ? NearestSpotClearOfUpcomingHazards(Flat(tank.Position), now, Margin)
@@ -283,7 +305,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         var dodgesLater = new bool[8];
         if (members.Count > 0)
         {
-            var anchor = members.Aggregate(Vector2.Zero, (sum, x) => sum + Flat(x.Member.Position)) / members.Count;
+            var anchor = CentreOfTheBots(members.Select(x => x.Member).ToList());
             if (NearestWedgeSpot(landslide, anchor, now) is { } wedge)
             {
                 spots = new Vector2?[8];
@@ -342,6 +364,43 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         return best;
     }
 
+    private void ForgetWhereBotsAreHeading() => Array.Clear(headingFor);
+
+    private Vector2 HeadFor(int slot, Vector2 spot, float now)
+    {
+        if (headingFor[slot] is not { } heading || Vector2.Distance(heading, spot) >= 0.1f)
+        {
+            headingFor[slot] = spot;
+            headingSince[slot] = now;
+        }
+        return spot;
+    }
+
+    private Vector2 WhereItTurns(int slot, Vector2 at)
+    {
+        if (headingFor[slot] is not { } heading) return at;
+        var toHeading = heading - at;
+        var distance = toHeading.Length();
+        return distance > 0.01f ? at + toHeading / distance * MathF.Min(distance, FastestRun * ReactionDelay) : at;
+    }
+
+    private bool ReachesSafely(int slot, Vector2 at, Vector2 spot, float now, List<UwuP3TitanState.Hazard> hazards, float margin)
+    {
+        var slowest = margin == 0f ? FastestRun : RunSpeed;
+        if (headingFor[slot] is not { } heading)
+            return ClearOfHazardsOnTheWay(at, spot, now, hazards, margin, slowest: slowest);
+        if (Vector2.Distance(heading, spot) < 0.1f)
+            return ClearOfHazardsOnTheWay(at, spot, now, hazards, margin, reaction: MathF.Max(0f, headingSince[slot] + ReactionDelay - now), slowest: slowest);
+        return ClearOfHazardsOnTheWay(WhereItTurns(slot, at), spot, now + ReactionDelay, hazards, margin, reaction: 0f, slowest: slowest);
+    }
+
+    private static Vector2 CentreOfTheBots(List<SimCharacter> members)
+    {
+        var bots = members.Where(m => m is not SimPlayer).ToList();
+        var counted = bots.Count > 0 ? bots : members;
+        return counted.Aggregate(Vector2.Zero, (sum, m) => sum + Flat(m.Position)) / counted.Count;
+    }
+
     private Vector2 BesideTitanAwayFrom(Vector2 party, float now)
     {
         var titan = Flat(state.TitanPosition);
@@ -361,9 +420,11 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         var dodgeable = new[] { upcoming.Count }.Concat(CutsLeavingTimeToDodgeTheRest(upcoming, now)).ToList();
         var tiers = dodgeable.SelectMany(count => new[] { (count, margin, margin), (count, tightest, tightest) })
             .Concat(dodgeable.Select(count => (count, StackedMargin, tightest)))
+            .Concat(dodgeable.Select(count => (count, 0f, 0f)))
             .Concat(Enumerable.Range(0, upcoming.Count).Reverse().SelectMany(count => new[] { (count, margin, margin), (count, tightest, tightest) }));
         foreach (var (count, circleMargin, laneMargin) in tiers)
-            if (NearestClearSpot(from, now, upcoming.Take(count).ToList(), circleMargin, laneMargin, reach) is { } found)
+            if (NearestClearSpot(from, now, upcoming.Take(count).ToList(), circleMargin, laneMargin, reach,
+                    circleMargin == 0f ? FastestRun : RunSpeed) is { } found)
             {
                 stacked = circleMargin < tightest;
                 return found;
@@ -385,7 +446,8 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
                 yield return count;
     }
 
-    private static Vector2? NearestClearSpot(Vector2 from, float now, List<UwuP3TitanState.Hazard> hazards, float margin, float laneMargin, float reach)
+    private static Vector2? NearestClearSpot(Vector2 from, float now, List<UwuP3TitanState.Hazard> hazards, float margin, float laneMargin, float reach,
+        float slowest = RunSpeed)
     {
         Vector2? best = null;
         var bestDistance = float.MaxValue;
@@ -395,7 +457,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
                 var spot = new Vector2(x, z);
                 if (spot.Length() > reach) continue;
                 var distance = Vector2.Distance(from, spot);
-                if (distance >= bestDistance || !ClearOfHazardsOnTheWay(from, spot, now, hazards, margin, laneMargin)) continue;
+                if (distance >= bestDistance || !ClearOfHazardsOnTheWay(from, spot, now, hazards, margin, laneMargin, slowest: slowest)) continue;
                 best = spot;
                 bestDistance = distance;
             }
@@ -403,14 +465,20 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     }
 
     private static bool ClearOfHazardsOnTheWay(Vector2 from, Vector2 to, float now, IEnumerable<UwuP3TitanState.Hazard> hazards, float margin,
-        float? laneMargin = null, float reaction = ReactionDelay)
+        float? laneMargin = null, float reaction = ReactionDelay, float slowest = RunSpeed)
     {
         var distance = Vector2.Distance(from, to);
         var direction = distance > 0.01f ? (to - from) / distance : Vector2.Zero;
         foreach (var hazard in hazards)
         {
-            var whenItHits = from + direction * MathF.Min(distance, RunSpeed * MathF.Max(0f, hazard.At - now - reaction));
-            if (IsInside(whenItHits, hazard, hazard.IsLane ? laneMargin ?? margin : margin)) return false;
+            var running = MathF.Max(0f, hazard.At - now - reaction);
+            var nearest = MathF.Min(distance, slowest * running);
+            var farthest = running > 0f ? MathF.Min(distance, FastestRun * (running + LateFrame)) : nearest;
+            var closest = Math.Clamp(Vector2.Dot(hazard.Origin - from, direction), nearest, farthest);
+            var hazardMargin = hazard.IsLane ? laneMargin ?? margin : margin;
+            if (IsInside(from + direction * nearest, hazard, hazardMargin)
+                || IsInside(from + direction * farthest, hazard, hazardMargin)
+                || !hazard.IsLane && IsInside(from + direction * closest, hazard, hazardMargin)) return false;
         }
         return true;
     }
