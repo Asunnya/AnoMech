@@ -207,32 +207,9 @@ internal sealed unsafe class DebugMenu
         }
     }
 
-    // Buttons modify Game.EventTimeScale live so callers can speed up / slow down a
-    // scenario mid-run. Only event scheduling is affected; cast bars and animations
-    // continue at real time (see Game.Tick).
-    public void DrawSpeedControl()
-    {
-        var game = plugin.Game;
-        ImGui.TextUnformatted("Speed:");
-        for (int x = 1; x <= 4; x++)
-        {
-            ImGui.SameLine();
-            var active = MathF.Abs(game.EventTimeScale - x) < 0.01f;
-            if (active) ImGui.PushStyleColor(ImGuiCol.Button, ImGui.GetColorU32(ImGuiCol.ButtonActive));
-            if (ImGui.Button($"x{x}")) game.EventTimeScale = x;
-            if (active) ImGui.PopStyleColor();
-        }
-        ImGui.SameLine();
-        if (!speedInputActive) speedInput = game.EventTimeScale;
-        ImGui.SetNextItemWidth(70 * ImGuiHelpers.GlobalScale);
-        ImGui.InputFloat("x##speed-value", ref speedInput, 0f, 0f, "%.2f");
-        speedInputActive = ImGui.IsItemActive();
-        if (ImGui.IsItemDeactivatedAfterEdit()) game.EventTimeScale = Math.Clamp(speedInput, 0.1f, 10f);
-    }
+    private readonly SpeedControl speedControl = new();
 
-    // Applied on Enter or focus loss, so half-typed values like "0" never reach the timeline.
-    private float speedInput = 1f;
-    private bool speedInputActive;
+    public void DrawSpeedControl() => speedControl.Draw(plugin.Game, "debug-speed");
 
     public void DrawDebugContent()
     {
