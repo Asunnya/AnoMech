@@ -222,7 +222,17 @@ internal sealed unsafe class DebugMenu
             if (ImGui.Button($"x{x}")) game.EventTimeScale = x;
             if (active) ImGui.PopStyleColor();
         }
+        ImGui.SameLine();
+        if (!speedInputActive) speedInput = game.EventTimeScale;
+        ImGui.SetNextItemWidth(70 * ImGuiHelpers.GlobalScale);
+        ImGui.InputFloat("x##speed-value", ref speedInput, 0f, 0f, "%.2f");
+        speedInputActive = ImGui.IsItemActive();
+        if (ImGui.IsItemDeactivatedAfterEdit()) game.EventTimeScale = Math.Clamp(speedInput, 0.1f, 10f);
     }
+
+    // Applied on Enter or focus loss, so half-typed values like "0" never reach the timeline.
+    private float speedInput = 1f;
+    private bool speedInputActive;
 
     public void DrawDebugContent()
     {
