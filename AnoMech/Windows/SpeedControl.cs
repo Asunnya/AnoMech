@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 
@@ -30,6 +31,8 @@ internal sealed class SpeedControl
         ImGui.InputFloat("x##speed-value", ref typed, 0f, 0f, "%.2f");
         typing = ImGui.IsItemActive();
         if (ImGui.IsItemDeactivatedAfterEdit()) game.EventTimeScale = Math.Clamp(typed, 0.1f, 10f);
+        if (MathF.Abs(game.EventTimeScale - 1f) > 0.01f)
+            ImGui.TextColored(new Vector4(1f, 0.8f, 0.2f, 1f), "Bots may die: they still run at normal speed.");
         ImGui.PopID();
     }
 }
