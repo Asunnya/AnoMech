@@ -35,7 +35,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     private Vector2? groupTarget;
     private float groupTargetChosenAt;
     private float groupSpread = GroupSpread;
-    private (float SecondHitAt, Vector2?[]? Spots)? wedgePlan;
+    private (float SecondHitAt, Vector2?[]? Spots, bool[] DodgesSecondHitLater)? wedgePlan;
     private SimWorld world = null!;
 
     public void Run(UwuP3TitanState stateParam, SimWorld worldParam)
@@ -272,9 +272,15 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     // Decided once per cast: re-checking a bot already on its way would count its reaction delay twice.
     private Vector2?[]? WedgePlanFor(UwuP3TitanState.AwakenedLandslideCast landslide, float now, int[] excluded)
     {
-        if (wedgePlan is { } decided && decided.SecondHitAt == landslide.SecondHitAt) return decided.Spots;
+        if (wedgePlan is { } decided && decided.SecondHitAt == landslide.SecondHitAt)
+        {
+            if (decided.Spots != null && !state.Hazards.Any(h => h.At > now && h.At < landslide.SecondHitAt))
+                ReplanThoseDodgingTheSecondHitLater(decided.Spots, decided.DodgesSecondHitLater, now);
+            return decided.Spots;
+        }
         var members = WedgeMembers(excluded);
         Vector2?[]? spots = null;
+        var dodgesLater = new bool[8];
         if (members.Count > 0)
         {
             var anchor = members.Aggregate(Vector2.Zero, (sum, x) => sum + Flat(x.Member.Position)) / members.Count;
@@ -286,14 +292,29 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
                 {
                     var at = Flat(member.Position);
                     var spot = wedge + SpreadOffset(slot, TightSpread);
-                    spots[slot] = ClearOfHazardsOnTheWay(at, spot, now, upcoming, WedgeRunMargin)
-                        ? spot
-                        : NearestSpotClearOfUpcomingHazards(at, now, Margin);
+                    if (ClearOfHazardsOnTheWay(at, spot, now, upcoming, WedgeRunMargin))
+                        spots[slot] = spot;
+                    else
+                    {
+                        spots[slot] = NearestSpotClearOfUpcomingHazards(at, now, Margin);
+                        dodgesLater[slot] = true;
+                    }
                 }
             }
         }
-        wedgePlan = (landslide.SecondHitAt, spots);
+        wedgePlan = (landslide.SecondHitAt, spots, dodgesLater);
         return spots;
+    }
+
+    private void ReplanThoseDodgingTheSecondHitLater(Vector2?[] spots, bool[] dodgesLater, float now)
+    {
+        for (var slot = 0; slot < 8; slot++)
+        {
+            if (!dodgesLater[slot]) continue;
+            dodgesLater[slot] = false;
+            if (world.Party.Get(slot) is { } member && member.IsAlive())
+                spots[slot] = NearestSpotClearOfUpcomingHazards(Flat(member.Position), now, Margin);
+        }
     }
 
     // Both hits leave the four wedges at 67.5 degrees either side of the first lines untouched, far enough out.
