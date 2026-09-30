@@ -209,7 +209,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     private IAiMove BaitTheGaolWindowLandslideThroughTheMiddle()
     {
         var spots = new Vector2?[8];
-        var onTheAxis = state.FromJumpFrame(new Vector2(-0.8f, 0f));
+        var onTheAxis = state.FromJumpFrame(new Vector2(-11f, 0f));
         for (var slot = 0; slot < 8; slot++)
             if (!state.GaolTargets.Contains((PartyRole)slot)) spots[slot] = onTheAxis + SpreadOffset(slot, TightSpread);
         return AiMove.Create(spots).NaturalOrder();
