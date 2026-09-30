@@ -28,6 +28,7 @@ public sealed class UwuP2IfritScenario : IScenario
     private const uint NailMaxHp = 26870;
     private const float NailDrainFrom = 45f;
     private const float NailDrainTo = 69.46f;
+    private const float HelperLifetime = 1.5f;
 
     private readonly UwuP2IfritSettingsWindow settingsWindow = new();
     private SimWorld world = null!;
@@ -391,7 +392,7 @@ public sealed class UwuP2IfritScenario : IScenario
             member.AddStatus(StatusId.VulnerabilityUp, 1f);
         }
         nails.Remove(bearing);
-        world.Events.Add(1.5f, nail.Despawn);
+        world.Events.Add(HelperLifetime, nail.Despawn);
     }
 
     private void TetherInfernalFetters() =>
@@ -417,7 +418,7 @@ public sealed class UwuP2IfritScenario : IScenario
         var caster = SpawnHelper(holder.Position);
         PlayEffect(caster, ActionId.SearingWind, 1.1f, target: holder.GameObjectId);
         damage.Resolve(holder, ActionId.SearingWind, [DamageType.Lethal], [], excludeTargets: [holder]);
-        world.Events.Add(1.5f, () => DespawnHelper(caster));
+        world.Events.Add(HelperLifetime, () => DespawnHelper(caster));
     }
 
     // The Searing Wind holder never baits Eruption.
