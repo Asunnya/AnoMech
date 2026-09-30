@@ -243,18 +243,18 @@ public sealed class UwuP2IfritScenario : IScenario
             IsVisible: visible,
             Placement: placement));
 
-    private SimEnemy? SpawnDummy(Vector3 at, float rotation = 0f)
+    private SimEnemy? SpawnHelper(Vector3 position, float rotation = 0f)
     {
-        var dummy = SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.Dummy, new Placement(at, rotation), false, true, EnemyListMode.Never);
-        if (dummy != null) helpers.Add(dummy);
-        return dummy;
+        var helper = SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.Dummy, new Placement(position, rotation), false, true, EnemyListMode.Never);
+        if (helper != null) helpers.Add(helper);
+        return helper;
     }
 
     private void SpawnIfrit()
     {
         var edge = EdgeSpot(state.OpenerBearing);
         ifrit = SpawnEnemy(BNpcBaseId.Ifrit, BNpcNameId.Ifrit, new Placement(edge, FacingCentre(edge)), false, false, EnemyListMode.Always);
-        for (var i = 0; i < eruptionCasters.Length; i++) eruptionCasters[i] = SpawnDummy(Vector3.Zero);
+        for (var i = 0; i < eruptionCasters.Length; i++) eruptionCasters[i] = SpawnHelper(Vector3.Zero);
     }
 
     private static void Arrive(SimEnemy? enemy)
@@ -296,7 +296,7 @@ public sealed class UwuP2IfritScenario : IScenario
     {
         foreach (var at in state.RadiantPlumes)
         {
-            if (SpawnDummy(at, MathF.PI) is not { } caster) continue;
+            if (SpawnHelper(at, MathF.PI) is not { } caster) continue;
             radiantPlumeCasters.Add(caster);
             caster.NativeCast(ActionId.RadiantPlumePuddle, ActionType.Action, 0f, 3.7f, false, rotation: MathF.PI, position: at);
         }
@@ -414,7 +414,7 @@ public sealed class UwuP2IfritScenario : IScenario
     private void SearingWind(PartyRole healer)
     {
         if (Get(healer) is not { } holder || !holder.IsAlive()) return;
-        var caster = SpawnDummy(holder.Position);
+        var caster = SpawnHelper(holder.Position);
         PlayEffect(caster, ActionId.SearingWind, 1.1f, target: holder.GameObjectId);
         damage.Resolve(holder, ActionId.SearingWind, [DamageType.Lethal], [], excludeTargets: [holder]);
         world.Events.Add(1.5f, () => DespawnHelper(caster));
@@ -480,7 +480,7 @@ public sealed class UwuP2IfritScenario : IScenario
         for (var i = 0; i < lanes.Count && i < crossCasters.Length; i++)
         {
             var edge = EdgeSpot(lanes[i].Bearing);
-            crossCasters[i] ??= SpawnDummy(edge);
+            crossCasters[i] ??= SpawnHelper(edge);
             crossCasters[i]?.SetPosition(new Placement(edge, FacingCentre(edge)));
             ResolveCrimsonCyclone(crossCasters[i], lanes[i].Bearing, ActionId.CrimsonCycloneAwaken);
         }

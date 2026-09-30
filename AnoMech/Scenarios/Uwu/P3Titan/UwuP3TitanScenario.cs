@@ -245,11 +245,11 @@ public sealed class UwuP3TitanScenario : IScenario
             IsVisible: visible,
             Placement: placement));
 
-    private SimEnemy? SpawnDummy(Vector3 at, float rotation = 0f)
+    private SimEnemy? SpawnHelper(Vector3 position, float rotation = 0f)
     {
-        var dummy = SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.Dummy, new Placement(at, rotation), false, true, EnemyListMode.Never);
-        if (dummy != null) helpers.Add(dummy);
-        return dummy;
+        var helper = SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.Dummy, new Placement(position, rotation), false, true, EnemyListMode.Never);
+        if (helper != null) helpers.Add(helper);
+        return helper;
     }
 
     private void DespawnHelper(SimEnemy? helper)
@@ -360,7 +360,7 @@ public sealed class UwuP3TitanScenario : IScenario
         {
             if (Get(role) is not { } target || !target.IsAlive()) continue;
             var at = target.Position;
-            var caster = SpawnDummy(at);
+            var caster = SpawnHelper(at);
             caster?.NativeCast(ActionId.WeightOfTheLand, ActionType.Action, 0f, 2.7f, false, position: at);
             puddles.Add((caster, at));
             state.Hazards.Add(new Hazard(Flat(at), 0f, WeightRadius, resolveAt, false));
@@ -582,7 +582,7 @@ public sealed class UwuP3TitanScenario : IScenario
         foreach (var offset in offsets)
         {
             var lineRotation = rotation - offset * MathF.PI / 180f;
-            var caster = SpawnDummy(titan!.Position, lineRotation);
+            var caster = SpawnHelper(titan!.Position, lineRotation);
             caster?.NativeCast(actionId, ActionType.Action, 0f, castSeconds, false, rotation: lineRotation, position: titan.Position);
             landslideCasters.Add((caster, lineRotation));
         }
@@ -606,7 +606,7 @@ public sealed class UwuP3TitanScenario : IScenario
         foreach (var offset in AwakenedLandslideOffsets)
         {
             var lineRotation = landslideRotation - offset * MathF.PI / 180f;
-            var caster = SpawnDummy(titan.Position, lineRotation);
+            var caster = SpawnHelper(titan.Position, lineRotation);
             caster?.NativeCast(ActionId.LandslideAwaken, ActionType.Action, 0f, 1.7f, false, rotation: lineRotation, position: titan.Position);
             landslideCasters.Add((caster, lineRotation));
         }

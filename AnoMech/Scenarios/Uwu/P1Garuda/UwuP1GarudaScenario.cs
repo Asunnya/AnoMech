@@ -204,11 +204,11 @@ public sealed class UwuP1GarudaScenario : IScenario
             IsVisible: visible,
             Placement: placement));
 
-    private SimEnemy? SpawnDummy(Vector3 at)
+    private SimEnemy? SpawnHelper(Vector3 position, float rotation = 0f)
     {
-        var dummy = SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.Dummy, new Placement(at, 0f), false, true, EnemyListMode.Never);
-        if (dummy != null) helpers.Add(dummy);
-        return dummy;
+        var helper = SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.Dummy, new Placement(position, rotation), false, true, EnemyListMode.Never);
+        if (helper != null) helpers.Add(helper);
+        return helper;
     }
 
     // Garuda's walks are scripted, so she keeps her spots and only turns to the main tank.
@@ -226,7 +226,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     private void SpawnGaruda()
     {
         garuda = SpawnEnemy(BNpcBaseId.Garuda, BNpcNameId.Garuda, new Placement(new Vector3(0f, 0f, -10f), MathF.PI), true, true, EnemyListMode.Always);
-        for (var i = 0; i < featherDummies.Length; i++) featherDummies[i] = SpawnDummy(Vector3.Zero);
+        for (var i = 0; i < featherDummies.Length; i++) featherDummies[i] = SpawnHelper(Vector3.Zero);
     }
 
     private void ResolveCone(SimEnemy? caster, uint actionId, float rotation, float animationLock)
@@ -276,7 +276,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     {
         if (!greatWhirlwindSpots.TryGetValue(spot, out var at)) return;
         if (!greatWhirlwindCasters.TryGetValue(spot, out var caster) || caster == null)
-            greatWhirlwindCasters[spot] = caster = SpawnDummy(at);
+            greatWhirlwindCasters[spot] = caster = SpawnHelper(at);
         caster?.SetPosition(new Placement(at, 0f));
         caster?.NativeCast(ActionId.GreatWhirlwind, ActionType.Action, 0f, 2.7f, false, position: at);
     }
@@ -414,7 +414,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         if (member.FindStatus(StatusId.ThermalLow) is not { } thermalLow) return;
         var awakening = thermalLow.Stacks >= MaxThermalLow;
         member.RemoveStatus(StatusId.ThermalLow);
-        var caster = SpawnDummy(member.Position);
+        var caster = SpawnHelper(member.Position);
         PlayEffect(caster, awakening ? ActionId.SuperCycloneAwaken : ActionId.SuperCyclone, 1.1f);
         foreach (var hit in party.Find.InsideCircle(member.Position, 50f).ToList())
             damage.ApplyDamage(hit, 0.1f, ActionId.SuperCyclone, "Super Cyclone", false);
@@ -494,7 +494,7 @@ public sealed class UwuP1GarudaScenario : IScenario
 
     private void CastEyeOfTheStorm()
     {
-        eyeOfTheStorm ??= SpawnDummy(Vector3.Zero);
+        eyeOfTheStorm ??= SpawnHelper(Vector3.Zero);
         CastSelf(eyeOfTheStorm, ActionId.EyeOfTheStorm, 2.7f);
     }
 
