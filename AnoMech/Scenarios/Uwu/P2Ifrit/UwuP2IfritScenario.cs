@@ -29,6 +29,10 @@ public sealed class UwuP2IfritScenario : IScenario
     private const float NailDrainFrom = 45f;
     private const float NailDrainTo = 69.46f;
     private const float HelperLifetime = 1.5f;
+    private const float HellfireDamage = 0.65f;
+    private const float VulcanBurstDamage = 0.15f;
+    private const float IncinerateDamage = 0.4f;
+    private const float InfernalSurgeDamage = 0.22f;
 
     private readonly UwuP2IfritSettingsWindow settingsWindow = new();
     private SimWorld world = null!;
@@ -325,14 +329,14 @@ public sealed class UwuP2IfritScenario : IScenario
     {
         PlayEffect(ifrit, ActionId.Hellfire, 2.1f);
         foreach (var member in party.ActiveMembers().ToList())
-            damage.ApplyDamage(member, 0.65f, ActionId.Hellfire, "Raidwide", false);
+            damage.ApplyDamage(member, HellfireDamage, ActionId.Hellfire, "Raidwide", false);
     }
 
     private void VulcanBurst()
     {
         PlayEffect(ifrit, ActionId.VulcanBurst, 1.1f);
         foreach (var member in party.ActiveMembers().ToList())
-            damage.ApplyDamage(member, 0.15f, ActionId.VulcanBurst, "Raidwide", false);
+            damage.ApplyDamage(member, VulcanBurstDamage, ActionId.VulcanBurst, "Raidwide", false);
     }
 
     private void Incinerate()
@@ -344,7 +348,7 @@ public sealed class UwuP2IfritScenario : IScenario
         var hits = damage.Resolve(ifrit, ActionId.Incinerate, [DamageType.TankBuster], [(StatusId.FireResistanceDownII, 5f)],
             size: IncinerateHalfAngle, extraRange: ifrit.HitboxRadius);
         foreach (var tank in hits.Where(h => h.IsAlive()))
-            damage.ApplyDamage(tank, 0.4f, ActionId.Incinerate, "Tankbuster", false);
+            damage.ApplyDamage(tank, IncinerateDamage, ActionId.Incinerate, "Tankbuster", false);
     }
 
     private void SpawnNails()
@@ -388,7 +392,7 @@ public sealed class UwuP2IfritScenario : IScenario
         PlayEffect(nail, ActionId.InfernalSurge, 1.1f);
         foreach (var member in party.ActiveMembers().ToList())
         {
-            damage.ApplyDamage(member, 0.22f, ActionId.InfernalSurge, "Raidwide", false);
+            damage.ApplyDamage(member, InfernalSurgeDamage, ActionId.InfernalSurge, "Raidwide", false);
             member.AddStatus(StatusId.VulnerabilityUp, 1f);
         }
         nails.Remove(bearing);
