@@ -32,9 +32,10 @@ public sealed class UwuP3TitanState
     public PartyRole JailedHealer { get; }
     public IReadOnlyList<IReadOnlyList<PartyRole>> WeightTargets { get; }
     public int LateBombStart { get; }
-
-    public PartyRole Holder => GaolTargets.Contains(PartyRole.MainTank) ? PartyRole.OffTank : PartyRole.MainTank;
-    public bool BothTanksJailed => GaolTargets.Contains(PartyRole.MainTank) && GaolTargets.Contains(PartyRole.OffTank);
+    // Both Landslides of the gaol window go down this one player's line; never a gaol target.
+    public PartyRole GaolWindowLandslideTarget { get; }
+    // The awakened Landslides outside the gaols (76s, 134s); the one at 104.84s always goes to the jailed healer.
+    public IReadOnlyList<PartyRole> AwakenedLandslideTargets { get; }
 
     public List<Hazard> Hazards { get; } = [];
     public Vector3 TitanPosition { get; set; }
@@ -48,8 +49,9 @@ public sealed class UwuP3TitanState
         SecondJumpBearing = (FirstJumpBearing + 90f * rng.Next(1, 4)) % 360f;
         SafeSide = rng.Next(2) == 0 ? 1 : -1;
         var everyone = Enum.GetValues<PartyRole>();
-        var gaolTargets = everyone.OrderBy(_ => rng.Next()).Take(3).ToList();
-        if (overrides?.PlayerAlwaysInFirstGaols == true && player is { } me && !gaolTargets.Contains(me))
+        var gaolable = everyone.Where(r => r != PartyRole.MainTank).ToArray();
+        var gaolTargets = gaolable.OrderBy(_ => rng.Next()).Take(3).ToList();
+        if (overrides?.PlayerAlwaysInFirstGaols == true && player is { } me && me != PartyRole.MainTank && !gaolTargets.Contains(me))
             gaolTargets[rng.Next(3)] = me;
         GaolTargets = gaolTargets.OrderBy(r => (int)r).ToList();
         JailedHealer = rng.Next(2) == 0 ? PartyRole.RegenHealer : PartyRole.ShieldHealer;
@@ -57,6 +59,9 @@ public sealed class UwuP3TitanState
             .Select(count => (IReadOnlyList<PartyRole>)everyone.OrderBy(_ => rng.Next()).Take(count).ToList())
             .ToList();
         LateBombStart = rng.Next(4);
+        var notJailed = everyone.Where(r => !GaolTargets.Contains(r)).ToArray();
+        GaolWindowLandslideTarget = notJailed[rng.Next(notJailed.Length)];
+        AwakenedLandslideTargets = [everyone[rng.Next(everyone.Length)], everyone[rng.Next(everyone.Length)]];
     }
 
     public IReadOnlyList<Vector3> UpheavalBombs =>
@@ -73,7 +78,7 @@ public sealed class UwuP3TitanState
     {
         0 => new Vector2(6.7f, 0.5f * SafeSide),
         1 => new Vector2(0f, 1.0f * SafeSide),
-        _ => new Vector2(-6.7f, 1.0f * SafeSide),
+        _ => new Vector2(-7.0f, 1.2f * SafeSide),
     });
 
     public Vector3 SixthBomb => FromJumpFrame(new Vector3(-12f, 0f, 5f * SafeSide));
