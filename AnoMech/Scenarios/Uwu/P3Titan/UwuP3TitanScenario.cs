@@ -33,6 +33,10 @@ public sealed class UwuP3TitanScenario : IScenario
     private const float UpheavalKnockback = 24f;
     private const float FreefireRadius = 6f;
     private const float GaolChainDelay = 0.7f;
+    private const float BurstReachesGaolAfter = 0.35f;
+    private const float GaolDespawnsAfterBreaking = 1f;
+    private const float BombFadesAfterBurst = 0.3f;
+    private const float HelperLifetime = 1.5f;
     private const float PrisonerFreedAfter = 1.1f;
     private const float TankBusterHalfAngle = MathF.PI / 4f;
     private const uint HealerGaolMaxHp = 1_300_000;
@@ -375,7 +379,7 @@ public sealed class UwuP3TitanScenario : IScenario
         {
             PlayEffect(caster, ActionId.WeightOfTheLand, 0.1f, at: at);
             damage.Resolve(IPositioned.From(at), ActionId.WeightOfTheLand, [DamageType.Lethal], [], excludeTargets: Jailed());
-            world.Events.Add(1.5f, () => DespawnHelper(caster));
+            world.Events.Add(HelperLifetime, () => DespawnHelper(caster));
         }
     }
 
@@ -436,8 +440,8 @@ public sealed class UwuP3TitanScenario : IScenario
             PlayEffect(bomb, ActionId.Burst, 2.1f);
             damage.Resolve(bomb, ActionId.Burst, [DamageType.Lethal], [], excludeTargets: Jailed());
             set[i] = null;
-            world.Events.Add(0.3f, bomb.FadeOut);
-            world.Events.Add(1.5f, bomb.Despawn);
+            world.Events.Add(BombFadesAfterBurst, bomb.FadeOut);
+            world.Events.Add(HelperLifetime, bomb.Despawn);
         }
     }
 
@@ -494,7 +498,7 @@ public sealed class UwuP3TitanScenario : IScenario
         if (bombs[5] is not { } bomb) return;
         var reached = gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(bomb.Position)) <= BurstRadius + g.HitboxRadius).ToList();
         ResolveBursts(bombs, 5, 1);
-        foreach (var gaol in reached) world.Events.Add(0.35f, () => BreakGaol(gaol, explode: true));
+        foreach (var gaol in reached) world.Events.Add(BurstReachesGaolAfter, () => BreakGaol(gaol, explode: true));
     }
 
     // Freefire chains to gaols in reach; the prisoner is freed ~1.1s later.
@@ -510,7 +514,7 @@ public sealed class UwuP3TitanScenario : IScenario
                 world.Events.Add(GaolChainDelay, () => BreakGaol(next, explode: true));
         }
         world.Events.Add(PrisonerFreedAfter, () => Free(role));
-        world.Events.Add(1f, gaol.Despawn);
+        world.Events.Add(GaolDespawnsAfterBreaking, gaol.Despawn);
     }
 
     private void Free(PartyRole role)
@@ -630,7 +634,7 @@ public sealed class UwuP3TitanScenario : IScenario
             damage.ApplyDamage(member, 0.76f, ActionId.LandslideLine, "Landslide", false);
             (member as ISimPartyMember)?.Knockback(titan.Position, LandslideKnockback, 20f);
         }
-        foreach (var caster in landslideCasters) world.Events.Add(1.5f, () => DespawnHelper(caster.Caster));
+        foreach (var caster in landslideCasters) world.Events.Add(HelperLifetime, () => DespawnHelper(caster.Caster));
         landslideCasters.Clear();
     }
 
