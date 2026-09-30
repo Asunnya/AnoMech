@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
+using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using static AnoMech.Scenarios.M9s.M9sConstants;
@@ -49,7 +50,7 @@ public sealed class M9sAetherlettingScenario : IScenario
             ((IScenarioAi<M9sAetherlettingState>)AiStrats[idx]).Run(state, world);
 
         world.Events.Add(0f, SpawnVamp);
-        world.Events.Add(0f, () => world.EnforceSquareArenaBoundary(Geometry.ArenaHalfWidth, "Walked off the arena"));
+        world.Events.Add(0f, () => world.EnforceArenaBoundary(new SquareArena(Geometry.ArenaHalfWidth), "Walked off the arena"));
         world.Events.Add(6.75f, () => vamp?.Cast(ActionId.CrowdKillCast, castSeconds: 0.2f));
         world.Events.Add(12.86f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.CrowdKill, 0.51f));
         world.Events.Add(12.86f, () => state.Satisfied.Add(1));

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
+using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using static AnoMech.Scenarios.M9s.M9sConstants;
@@ -49,7 +50,7 @@ public sealed class M9sVampStompScenario : IScenario
             ((IScenarioAi<M9sVampStompState>)AiStrats[idx]).Run(state, world);
 
         world.Events.Add(0f, SpawnVamp);
-        world.Events.Add(0f, () => world.EnforceSquareArenaBoundary(Geometry.ArenaHalfWidth, "Walked off the arena"));
+        world.Events.Add(0f, () => world.EnforceArenaBoundary(new SquareArena(Geometry.ArenaHalfWidth), "Walked off the arena"));
         world.Events.Add(0.08f, () => vamp?.MoveTo(new Vector3(0f, 0f, -0.5f), 7.5f));
         world.Events.Add(5f, () => vamp?.Cast(ActionId.KillerVoice, castSeconds: 4.7f));
         world.Events.Add(9.96f, () => M9sUtils.Raidwide(party, damage, ActionId.KillerVoice, 0.45f));

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
+using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
@@ -75,7 +76,7 @@ public sealed class M9sFlailsScenario : IScenario
             ((IScenarioAi<M9sFlailsState>)AiStrats[idx]).Run(state, world);
 
         world.Events.Add(0f, SpawnVamp);
-        world.Events.Add(0f, () => world.EnforceSquareArenaBoundary(Geometry.ArenaHalfWidth, "Walked off the arena"));
+        world.Events.Add(0f, () => world.EnforceArenaBoundary(new SquareArena(Geometry.ArenaHalfWidth), "Walked off the arena"));
         world.Events.Add(6.06f, () => vamp?.Cast(ActionId.SadisticScreechCast, castSeconds: 4.7f));
         world.Events.Add(6.06f, () => MapEffect(0x00020001, 0x0F));
         world.Events.Add(11.88f, () => MapEffect(0x00020001, 0x00, 0x0D, 0x0E));

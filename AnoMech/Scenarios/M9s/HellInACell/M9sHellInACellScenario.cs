@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
+using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using static AnoMech.Scenarios.M9s.M9sConstants;
@@ -61,7 +62,7 @@ public sealed class M9sHellInACellScenario : IScenario
             ((IScenarioAi<M9sHellInACellState>)AiStrats[idx]).Run(state, world);
 
         world.Events.Add(0f, SpawnVamp);
-        world.Events.Add(0f, () => world.EnforceSquareArenaBoundary(Geometry.ArenaHalfWidth, "Walked off the arena"));
+        world.Events.Add(0f, () => world.EnforceArenaBoundary(new SquareArena(Geometry.ArenaHalfWidth), "Walked off the arena"));
         world.Events.Add(2.72f, () => vamp?.Cast(ActionId.FinaleFataleCast2, castSeconds: 4.7f));
         world.Events.Add(8.72f, () => M9sUtils.Raidwide(world.Party, damage, ActionId.FinaleFatale, 0.30f));
         world.Events.Add(8.81f, () => world.Map.AddEffect(0x00020001, 0x10));
