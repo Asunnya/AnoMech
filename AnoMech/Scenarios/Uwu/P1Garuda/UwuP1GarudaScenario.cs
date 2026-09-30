@@ -12,7 +12,6 @@ using static AnoMech.Scenarios.Uwu.UwuUtils;
 
 namespace AnoMech.Scenarios.Uwu.P1Garuda;
 
-// UWU P1 Garuda; timings from the clear in Network_30208_20260816.log (pull 18).
 // Thermal Low cleansed at two stacks charges Garuda; four charges wake her.
 public sealed class UwuP1GarudaScenario : IScenario
 {
@@ -253,7 +252,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     private readonly Dictionary<GreatWhirlwindSpot, Vector3> greatWhirlwindSpots = [];
     private readonly Dictionary<GreatWhirlwindSpot, SimEnemy?> greatWhirlwindCasters = [];
 
-    // First player in the line takes the heavy hit (log medians); its tornado drops there.
+    // First player in the line takes the heavy hit; its tornado drops there.
     private readonly record struct MistralSongDamage(float Intercept, float Behind);
 
     private void ResolveMistralSong(SimEnemy? caster, uint actionId, SimCharacter? target, GreatWhirlwindSpot spot, MistralSongDamage songDamage)
@@ -316,7 +315,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         }
     }
 
-    // The bots AoE the plumes down on the log's schedule.
+    // The bots AoE the plumes down on a fixed schedule.
     private void SatinPlumesGathered(float at, float[] botKillAt)
     {
         for (var i = 0; i < satinPlumes.Count && i < botKillAt.Length; i++)

@@ -12,7 +12,6 @@ using static AnoMech.Scenarios.Uwu.UwuUtils;
 
 namespace AnoMech.Scenarios.Uwu.UltimateAnnihilation;
 
-// Damage values are the median fraction of max HP the hit took in real pulls.
 public sealed class UltimateAnnihilationScenario : IScenario
 {
     public string Name => "Ultimate Annihilation";

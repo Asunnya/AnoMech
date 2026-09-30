@@ -6,7 +6,7 @@ using AnoMech.Core.Game.Party;
 
 namespace AnoMech.Scenarios.Uwu.P3Titan;
 
-// Titan randomization, from 14 pulls. First-jump positions are authored with Titan east and rotated by FromJumpFrame.
+// First-jump positions are authored with Titan east and rotated by FromJumpFrame.
 public sealed class UwuP3TitanState
 {
     public const float JumpRadius = 14f;

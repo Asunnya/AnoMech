@@ -13,7 +13,7 @@ using static AnoMech.Scenarios.Uwu.P2Ifrit.UwuP2IfritState;
 
 namespace AnoMech.Scenarios.Uwu.P2Ifrit;
 
-// UWU P2 Ifrit; timings from the clear in Network_30208_20260816.log (pull 18). Vulcan Burst's knockback is left out (shielded).
+// Vulcan Burst's knockback is left out (shielded).
 public sealed class UwuP2IfritScenario : IScenario
 {
     public string Name => "Ifrit";
@@ -421,7 +421,7 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(1.5f, () => DespawnHelper(caster));
     }
 
-    // The Searing Wind holder never baits Eruption in the logs.
+    // The Searing Wind holder never baits Eruption.
     private void MarkEruptionBaits()
     {
         if (ifrit == null) return;
