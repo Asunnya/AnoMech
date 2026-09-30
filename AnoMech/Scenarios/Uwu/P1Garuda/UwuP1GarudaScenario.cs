@@ -24,6 +24,10 @@ public sealed class UwuP1GarudaScenario : IScenario
     private const float MistralSongLength = 40f;
     private static readonly MistralSongDamage GarudaSongDamage = new(Intercept: 0.59f, Behind: 0.60f);
     private static readonly MistralSongDamage SistersSongDamage = new(Intercept: 0.48f, Behind: 0.28f);
+    private const float MistralShriekDamage = 0.4f;
+    private const float AerialBlastDamage = 0.5f;
+    private const float FrictionDamage = 0.15f;
+    private const float SuperCycloneDamage = 0.1f;
     private const float SlipstreamHalfAngle = MathF.PI / 4f;
     private const float FrictionRadius = 5f;
     private const float EyeOfTheStormInner = 12f;
@@ -124,7 +128,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(38.21f, () => CastSelf(spiny, ActionId.Gigastorm, 2.7f));
         world.Events.Add(38.30f, () => CastSelf(garuda, ActionId.MistralShriek, 2.7f));
         world.Events.Add(41.19f, ResolveGigastorm);
-        world.Events.Add(41.28f, () => Raidwide(garuda, ActionId.MistralShriek, 0.4f, 2.3f));
+        world.Events.Add(41.28f, () => Raidwide(garuda, ActionId.MistralShriek, MistralShriekDamage, 2.3f));
         world.Events.Add(43.45f, SpawnBubble);
         world.Events.Add(43.45f, () => bubbleActive = true);
         world.Events.Add(47.77f, () => bubble?.SetVisible(true));
@@ -145,7 +149,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(71.04f, () => garuda?.PlayActionTimeline(ActionTimelineId.WarpEnd));
         world.Events.Add(73.09f, () => garuda?.SetTargetable(true));
         world.Events.Add(73.18f, () => CastSelf(garuda, ActionId.AerialBlast, 2.7f));
-        world.Events.Add(76.17f, () => Raidwide(garuda, ActionId.AerialBlast, 0.5f, 2.3f));
+        world.Events.Add(76.17f, () => Raidwide(garuda, ActionId.AerialBlast, AerialBlastDamage, 2.3f));
 
         world.Events.Add(87.62f, SpawnSisters);
         world.Events.Add(87.71f, () => PlaySisters(ActionTimelineId.SistersArrive));
@@ -397,7 +401,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         PlayEffect(garuda, ActionId.Friction, 1.1f, target: target.GameObjectId);
         foreach (var hit in party.Find.InsideCircle(target.Position, FrictionRadius).ToList())
         {
-            damage.ApplyDamage(hit, 0.15f, ActionId.Friction, "Friction", false);
+            damage.ApplyDamage(hit, FrictionDamage, ActionId.Friction, "Friction", false);
             AddThermalLow(hit);
         }
     }
@@ -417,7 +421,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         var caster = SpawnHelper(member.Position);
         PlayEffect(caster, awakening ? ActionId.SuperCycloneAwaken : ActionId.SuperCyclone, 1.1f);
         foreach (var hit in party.Find.InsideCircle(member.Position, 50f).ToList())
-            damage.ApplyDamage(hit, 0.1f, ActionId.SuperCyclone, "Super Cyclone", false);
+            damage.ApplyDamage(hit, SuperCycloneDamage, ActionId.SuperCyclone, "Super Cyclone", false);
         if (!awakening) return;
         aetherialCharges++;
         garuda?.AddStatus(StatusId.AetheriallyCharged, 0f, 1);

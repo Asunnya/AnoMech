@@ -37,6 +37,16 @@ public sealed class UwuP3TitanScenario : IScenario
     private const float GaolDespawnsAfterBreaking = 1f;
     private const float BombFadesAfterBurst = 0.3f;
     private const float HelperLifetime = 1.5f;
+    private const float GeocrushLandingDamage = 0.5f;
+    private const float GeocrushLandingFalloff = 20f;
+    private const float GeocrushJumpDamage = 0.8f;
+    private const float GeocrushJumpFalloff = 32f;
+    private const float EarthenFuryDamage = 0.57f;
+    private const float TumultDamage = 0.13f;
+    private const float RockBusterDamage = 0.28f;
+    private const float MountainBusterDamage = 0.6f;
+    private const float UpheavalDamage = 0.26f;
+    private const float LandslideDamage = 0.76f;
     private const float PrisonerFreedAfter = 1.1f;
     private const float TankBusterHalfAngle = MathF.PI / 4f;
     private const uint HealerGaolMaxHp = 1_300_000;
@@ -89,12 +99,12 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(0f, SpawnTitan);
         world.Events.Add(2.56f, () => titan?.SetVisible(true));
         world.Events.Add(2.56f, () => CastSelf(titan, ActionId.GeocrushLanding, 2.7f));
-        world.Events.Add(5.55f, () => Geocrush(ActionId.GeocrushLanding, 0.5f, 20f));
+        world.Events.Add(5.55f, () => Geocrush(ActionId.GeocrushLanding, GeocrushLandingDamage, GeocrushLandingFalloff));
         world.Events.Add(7.91f, () => TitanTargetable(true));
         world.Events.Add(8.00f, () => CastSelf(titan, ActionId.EarthenFury, 2.7f));
-        world.Events.Add(10.98f, () => Raidwide(ActionId.EarthenFury, 0.57f));
-        world.Events.Add(19.17f, () => TankBuster(PartyRole.MainTank, ActionId.RockBuster, 0.28f));
-        world.Events.Add(22.29f, () => TankBuster(PartyRole.MainTank, ActionId.MountainBuster, 0.6f));
+        world.Events.Add(10.98f, () => Raidwide(ActionId.EarthenFury, EarthenFuryDamage));
+        world.Events.Add(19.17f, () => TankBuster(PartyRole.MainTank, ActionId.RockBuster, RockBusterDamage));
+        world.Events.Add(22.29f, () => TankBuster(PartyRole.MainTank, ActionId.MountainBuster, MountainBusterDamage));
 
         world.Events.Add(24.39f, () => CastWeights(0, 27.37f));
         world.Events.Add(26.88f, () => PlayEffect(titan, ActionId.WeightOfTheLandTitan, 1.1f));
@@ -109,7 +119,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(32.67f, () => CastSelf(titan, ActionId.GeocrushJump, 2.7f));
         world.Events.Add(32.40f, () => floor = utils.SpawnTitanArena());
         world.Events.Add(32.67f, () => AnimateFloor(1, 2));
-        world.Events.Add(35.66f, () => Geocrush(ActionId.GeocrushJump, 0.8f, 32f));
+        world.Events.Add(35.66f, () => Geocrush(ActionId.GeocrushJump, GeocrushJumpDamage, GeocrushJumpFalloff));
         world.Events.Add(36.70f, () => world.EnforceArenaBoundary(FirstShrinkRadius, ShrunkenFloorDeath));
         world.Events.Add(38.02f, () => TitanTargetable(true));
 
@@ -161,7 +171,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(86.95f, () => LandOnEdge(state.SecondJumpBearing));
         world.Events.Add(87.02f, () => CastSelf(titan, ActionId.GeocrushJump, 2.7f));
         world.Events.Add(87.02f, () => AnimateFloor(10, 20));
-        world.Events.Add(90.00f, () => Geocrush(ActionId.GeocrushJump, 0.8f, 32f));
+        world.Events.Add(90.00f, () => Geocrush(ActionId.GeocrushJump, GeocrushJumpDamage, GeocrushJumpFalloff));
         world.Events.Add(91.00f, () => world.EnforceArenaBoundary(SecondShrinkRadius, ShrunkenFloorDeath));
         world.Events.Add(92.36f, () => TitanTargetable(true));
         world.Events.Add(92.40f, PullTitanTowardCentre);
@@ -181,8 +191,8 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(116.64f, Tumult);
         world.Events.Add(117.75f, Tumult);
         world.Events.Add(116.00f, () => busterTank = PartyRole.OffTank);
-        world.Events.Add(119.88f, () => TankBuster(PartyRole.OffTank, ActionId.RockBuster, 0.28f));
-        world.Events.Add(123.98f, () => TankBuster(PartyRole.OffTank, ActionId.MountainBuster, 0.6f));
+        world.Events.Add(119.88f, () => TankBuster(PartyRole.OffTank, ActionId.RockBuster, RockBusterDamage));
+        world.Events.Add(123.98f, () => TankBuster(PartyRole.OffTank, ActionId.MountainBuster, MountainBusterDamage));
         world.Events.Add(125.50f, () => busterTank = null);
         world.Events.Add(125.60f, () => titan?.MoveTo(AtBearing(state.SecondJumpBearing, 7.5f), 3f));
 
@@ -215,7 +225,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(138.69f, () => ResolveBursts(lateBombs, 2, 1));
         world.Events.Add(140.70f, () => ResolveBursts(lateBombs, 3, 1));
         world.Events.Add(141.00f, () => busterTank = PartyRole.MainTank);
-        world.Events.Add(144.80f, () => TankBuster(PartyRole.MainTank, ActionId.RockBuster, 0.28f));
+        world.Events.Add(144.80f, () => TankBuster(PartyRole.MainTank, ActionId.RockBuster, RockBusterDamage));
 
         world.Events.Add(148.05f, () => Leave(titan));
         world.Events.Add(148.05f, () => AnimateFloor(4, 8));
@@ -341,7 +351,7 @@ public sealed class UwuP3TitanScenario : IScenario
             damage.ApplyDamage(member, fraction, actionId, "Raidwide", false);
     }
 
-    private void Tumult() => Raidwide(ActionId.Tumult, 0.13f);
+    private void Tumult() => Raidwide(ActionId.Tumult, TumultDamage);
 
     private void TankBuster(PartyRole role, uint actionId, float fraction)
     {
@@ -450,7 +460,7 @@ public sealed class UwuP3TitanScenario : IScenario
         if (titan == null) return;
         PlayEffect(titan, ActionId.Upheaval, 2.1f);
         foreach (var member in party.ActiveMembers().ToList())
-            damage.ApplyDamage(member, 0.26f, ActionId.Upheaval, "Knockback", false);
+            damage.ApplyDamage(member, UpheavalDamage, ActionId.Upheaval, "Knockback", false);
         party.Knockback(titan.Position, UpheavalKnockback);
     }
 
@@ -631,7 +641,7 @@ public sealed class UwuP3TitanScenario : IScenario
         }
         foreach (var member in hit)
         {
-            damage.ApplyDamage(member, 0.76f, ActionId.LandslideLine, "Landslide", false);
+            damage.ApplyDamage(member, LandslideDamage, ActionId.LandslideLine, "Landslide", false);
             (member as ISimPartyMember)?.Knockback(titan.Position, LandslideKnockback, 20f);
         }
         foreach (var caster in landslideCasters) world.Events.Add(HelperLifetime, () => DespawnHelper(caster.Caster));
