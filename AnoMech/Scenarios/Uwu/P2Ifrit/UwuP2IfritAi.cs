@@ -55,9 +55,9 @@ public sealed class UwuP2IfritAi : IScenarioAi<UwuP2IfritState>
         ai.Move(91.9f, () => BaitersTo(RimReference(33f, 17f)));
         ai.Move(93.9f, () => BaitersTo(RimReference(-0.5f, 17f)));
         ai.Move(95.9f, () => BaitersTo(CornerReference(PartyCornerRadius)));
-        ai.Move(104.85f, () => Only(state.HowlFirst, RimReference(45f)));
+        ai.Move(104.85f, () => Only(state.HowlThird, RimReference(45f)));
         ai.Move(117.7f, () => Only(state.HowlSecond, CornerReference(PartyCornerRadius)));
-        ai.Move(119.5f, () => Only(state.HowlFirst, RimReference(135f)));
+        ai.Move(119.5f, () => Only(state.HowlThird, RimReference(135f)));
 
         for (var t = 123.0f; t < 133.3f; t += 0.3f)
         {
@@ -126,14 +126,14 @@ public sealed class UwuP2IfritAi : IScenarioAi<UwuP2IfritState>
         var party = new List<Vector2>();
         for (var slot = 0; slot < 8; slot++)
         {
-            if (slot == (int)state.HowlFirst || world.Party.Get(slot) is not { } member || !member.IsAlive()) continue;
+            if (slot == (int)state.HowlThird || world.Party.Get(slot) is not { } member || !member.IsAlive()) continue;
             var spot = NearestSpotClearOfUpcomingLanes(Flat(member.Position), now, []);
             spots[slot] = spot;
             party.Add(spot);
             party.Add(Flat(member.Position));
         }
-        if (world.Party.Get(state.HowlFirst) is { } holder && holder.IsAlive())
-            spots[(int)state.HowlFirst] = NearestSpotClearOfUpcomingLanes(Flat(holder.Position), now, party);
+        if (world.Party.Get(state.HowlThird) is { } holder && holder.IsAlive())
+            spots[(int)state.HowlThird] = NearestSpotClearOfUpcomingLanes(Flat(holder.Position), now, party);
         return AiMove.Create(spots).NaturalOrder();
     }
 
