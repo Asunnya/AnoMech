@@ -233,7 +233,6 @@ public sealed class UwuP2IfritScenario : IScenario
 
     private SimCharacter? Get(PartyRole role) => party.Get(role);
 
-
     private SimEnemy? SpawnEnemy(uint baseId, uint nameId, Placement placement, bool targetable, bool visible, EnemyListMode enemyList) =>
         world.SpawnEnemy(new EnemySpawnConfig(
             BNpcBaseId: baseId,
@@ -324,14 +323,14 @@ public sealed class UwuP2IfritScenario : IScenario
     private void Hellfire()
     {
         PlayEffect(ifrit, ActionId.Hellfire, 2.1f);
-        foreach (var member in AliveMembers())
+        foreach (var member in party.ActiveMembers().ToList())
             damage.ApplyDamage(member, 0.65f, ActionId.Hellfire, "Raidwide", false);
     }
 
     private void VulcanBurst()
     {
         PlayEffect(ifrit, ActionId.VulcanBurst, 1.1f);
-        foreach (var member in AliveMembers())
+        foreach (var member in party.ActiveMembers().ToList())
             damage.ApplyDamage(member, 0.15f, ActionId.VulcanBurst, "Raidwide", false);
     }
 
@@ -386,7 +385,7 @@ public sealed class UwuP2IfritScenario : IScenario
         if (!nails.TryGetValue(bearing, out var nail) || nail == null) return;
         SetNailHp(nail, 0f);
         PlayEffect(nail, ActionId.InfernalSurge, 1.1f);
-        foreach (var member in AliveMembers())
+        foreach (var member in party.ActiveMembers().ToList())
         {
             damage.ApplyDamage(member, 0.22f, ActionId.InfernalSurge, "Raidwide", false);
             member.AddStatus(StatusId.VulnerabilityUp, 1f);
@@ -492,13 +491,6 @@ public sealed class UwuP2IfritScenario : IScenario
         if (Get(role) is not { } target || !target.IsAlive()) return;
         PlayEffect(ifrit, ActionId.FlamingCrush, 1.1f, target: target.GameObjectId);
         damage.Resolve(target, ActionId.FlamingCrush, [DamageType.Magic], [], stackMinTargets: FlamingCrushMinStack);
-    }
-
-    private IEnumerable<SimCharacter> AliveMembers()
-    {
-        for (var slot = 0; slot < 8; slot++)
-            if (party.Get(slot) is { } member && member.IsAlive())
-                yield return member;
     }
 
     private void DespawnHelper(SimEnemy? helper)
