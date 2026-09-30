@@ -611,6 +611,13 @@ public sealed unsafe class SimEnemy : SimNpc
 
     public void SetVisible(bool visible) => desiredVisible = visible;
 
+    // ActorControl 607 (self, 1, 0, 100), the same fade SimEventObject.FadeOut sends to props.
+    public void FadeOut()
+    {
+        if (EntityId == 0) return;
+        PacketDispatcher.HandleActorControlPacket(EntityId, 607, EntityId, 1, 0, 100, 0, 0, 0, 0, 0xE0000000, false);
+    }
+
     // RenderFlags Model|Nameplate. The engine then drops the DrawObject entirely, so this does
     // not keep action VFX alive on a hidden carrier; kept for the Flood carrier A/B.
     // Re-asserted every tick because EnableDraw resets RenderFlags.

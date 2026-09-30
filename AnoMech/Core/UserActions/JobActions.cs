@@ -251,6 +251,8 @@ internal static unsafe class JobActions
     private static readonly ResourceGauge RprLemureShroud = new() { Read = jgm => jgm->Reaper.LemureShroud, Write = (jgm, v) => jgm->Reaper.LemureShroud = (byte)v, Max = 5 };
     private static readonly ResourceGauge RprVoidShroud = new() { Read = jgm => jgm->Reaper.VoidShroud, Write = (jgm, v) => jgm->Reaper.VoidShroud = (byte)v, Max = 8 };
     private static readonly ResourceGauge SgeAddersting = new() { Read = jgm => jgm->Sage.Addersting, Write = (jgm, v) => jgm->Sage.Addersting = (byte)v, Max = 3 };
+    // The client swaps in the Eukrasian spells off this gauge byte, not off the Eukrasia status.
+    private static readonly ResourceGauge SgeEukrasia = new() { Read = jgm => jgm->Sage.Eukrasia, Write = (jgm, v) => jgm->Sage.Eukrasia = (byte)v, Max = 1 };
     private static readonly ResourceGauge PctPalette = new() { Read = jgm => jgm->Pictomancer.PalleteGauge, Write = (jgm, v) => jgm->Pictomancer.PalleteGauge = (byte)v, Max = 100 };
     private static readonly ResourceGauge PctPaint = new() { Read = jgm => jgm->Pictomancer.Paint, Write = (jgm, v) => jgm->Pictomancer.Paint = (byte)v, Max = 5 };
     private static readonly ResourceGauge BlmPolyglot = new() { Read = jgm => jgm->BlackMage.PolyglotStacks, Write = (jgm, v) => jgm->BlackMage.PolyglotStacks = (byte)v, Max = 3 };
@@ -605,7 +607,14 @@ internal static unsafe class JobActions
         [34685] = [Status(3686, 10f)],                      // Tempera Coat → self-status (enables Tempera Grassa)
 
         // SGE
-        [24290] = [Status(2606, 0f)],                     // Eukrasia (toggle, no-expiry)
+        [24290] = [Status(2606, 0f), Gauge(SgeEukrasia, 1)], // Eukrasia (toggle, no-expiry)
+        [24291] = [Gauge(SgeEukrasia, -1)],               // Eukrasian Diagnosis
+        [24292] = [Gauge(SgeEukrasia, -1)],               // Eukrasian Prognosis
+        [24293] = [Gauge(SgeEukrasia, -1)],               // Eukrasian Dosis
+        [24308] = [Gauge(SgeEukrasia, -1)],               // Eukrasian Dosis II
+        [24314] = [Gauge(SgeEukrasia, -1)],               // Eukrasian Dosis III
+        [37032] = [Gauge(SgeEukrasia, -1)],               // Eukrasian Dyskrasia
+        [37034] = [Gauge(SgeEukrasia, -1)],               // Eukrasian Prognosis II
         [37035] = [Status(3898, 20f), Status(3899, 20f)], // Philosophia + Eudaimonia
         [24309] = [Gauge(SgeAddersgall, 1)],              // Rhizomata → +1 Addersgall (passive fill in TimedGauges)
     };
