@@ -351,7 +351,7 @@ public sealed class UwuP1GarudaScenario : IScenario
             plume.BattleCharaPtr->Health = (uint)MathF.Ceiling(SatinPlumeMaxHp * MathF.Max(0f, hp));
     }
 
-    private void OnPlayerAction(ActionType actionType, uint actionId)
+    private void OnPlayerAction(ActionType actionType, uint actionId, ulong targetId)
     {
         if (actionType != ActionType.Action || satinPlumes.Count == 0 || !IsNewPlayerAction()) return;
         if (Plugin.DataManager.GetExcelSheet<LuminaAction>().GetRowOrDefault(actionId) is not { } action) return;

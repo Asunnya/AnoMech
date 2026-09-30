@@ -3,6 +3,7 @@ using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Native;
+using AnoMech.Core.UserActions;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 
@@ -20,6 +21,13 @@ public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
         Role = role;
         ClassJob = classJob;
         DisplayName = name;
+    }
+
+    // A bot's button press: the animation, then the same JobActions effects a player's press applies.
+    public void UseAction(uint actionId)
+    {
+        PlayAction(actionId);
+        JobActions.ApplyEffects(this, actionId, (ulong)GameObjectId, Random.Shared);
     }
 
     public void Knockback(Vector3 source, float distance, float speed) => Movement.Knockback(source, distance, speed);

@@ -6,12 +6,14 @@ using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Native;
 using AnoMech.Core.SimObjects;
+using AnoMech.Core.UserActions;
 
 namespace AnoMech.Scenarios;
 
 public class DamageSolver
 {
     private Dictionary<DamageType, List<ushort>> vulnUpStatuses = [];
+    private Dictionary<ushort, float> vulnUpRequiredMitigation = [];
     private Dictionary<ushort, int> statusStacksOverwrites = [];
 
     SimParty party;
@@ -28,7 +30,8 @@ public class DamageSolver
         ushort[]? removeStatus = null,
         int stackMinTargets = 0, int wildChargeTargets = 0, DamageType[]? wildChargeDamageType = null,
         float? size = null, float? coneRotationDelta = null, SimCharacter[]? excludeTargets = null,
-        bool killTargets = true, float tankBusterRawDamage = 0f, SimEnemy? tankBusterSource = null)
+        bool killTargets = true, float requiredMitigation = 0f, float lethalWithin = 0f,
+        float? understackedTankMitigation = null)
     {
         if (source == null) return [];
         var placement = source.Placement();
@@ -75,13 +78,23 @@ public class DamageSolver
         foreach (var target in targets)
         {
             bool wildCharge = i++ < wildChargeTargets;
-            if (targets.Count < stackMinTargets)
+            var understacked = targets.Count < stackMinTargets;
+            // A stack taken short kills everyone in it, unless a tank is allowed to eat it on cooldowns.
+            var tankSoaks = understacked && understackedTankMitigation != null && IsTank(target);
+            var needed = tankSoaks ? MathF.Max(requiredMitigation, understackedTankMitigation!.Value) : requiredMitigation;
+            if (understacked && !tankSoaks)
             {
                 deadTargets.Add(target);
                 if (killTargets)
                     target.Die($"Died to {ActionLookup.Name(actionId)} ({targets.Count}/{stackMinTargets} players in stack)");
             }
-            else if (CheckLethal(actionId, target, wildCharge ? damageTypeWildCharge : damageTypeBase, killTargets, tankBusterRawDamage, tankBusterSource))
+            else if (DistanceXZ(target.Position, placement.Position) is var distance && distance < lethalWithin)
+            {
+                deadTargets.Add(target);
+                if (killTargets)
+                    target.Die($"Died to {ActionLookup.Name(actionId)} ({distance:F0}y from it, lethal inside {lethalWithin:F0}y)");
+            }
+            else if (CheckLethal(actionId, target, wildCharge ? damageTypeWildCharge : damageTypeBase, killTargets, needed))
             {
                 deadTargets.Add(target);
             }
@@ -98,6 +111,9 @@ public class DamageSolver
         return killTargets ? targets : deadTargets;
     }
     
+    private static float DistanceXZ(System.Numerics.Vector3 a, System.Numerics.Vector3 b)
+        => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Z - b.Z) * (a.Z - b.Z));
+
     // Gaze resolver. Each member lives or dies by which way it faces the `target`.
     // lookAway == true: safe play is to face away, so anyone "looking" (target inside
     // the front 90° arc) dies. lookAway == false: safe play is to face the target, so
@@ -131,37 +147,47 @@ public class DamageSolver
         return killed;
     }
 
-    private bool CheckLethal(uint actionId, SimCharacter target, HashSet<DamageType> damageTypes, bool killTarget, float tankBusterRawDamage, SimEnemy? tankBusterSource)
+    private bool CheckLethal(uint actionId, SimCharacter target, HashSet<DamageType> damageTypes, bool killTarget, float requiredMitigation)
     {
-        if (damageTypes.Contains(DamageType.Lethal))
-        {
-            if (killTarget)  target.Die($"Died to {ActionLookup.Name(actionId)}");
-            return true;
-        }
-        else if (IsLethal(target, damageTypes))
-        {
-            if (killTarget) target.Die($"Died to {ActionLookup.Name(actionId)} (had vuln up debuff)");
-            return true;
-        }
-        else if (damageTypes.Contains(DamageType.TankBuster))
-        {
-            // Not a tank at all -- always lethal, no mitigation check needed.
-            if (target is not ISimPartyMember { Role: PartyRole.OffTank or PartyRole.MainTank })
-            {
-                if (killTarget) target.Die($"Died to {ActionLookup.Name(actionId)} (tank buster)");
-                return true;
-            }
-            var role = ((ISimPartyMember)target).Role;
-            if (TankMitigation.ApplyTankBusterDamage(party, role, tankBusterRawDamage, tankBusterSource, standInPartyMitigation: true)) return false;
-            if (killTarget) target.Die($"Died to {ActionLookup.Name(actionId)} (tank buster, not enough mitigation)");
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        var vulnMitigation = VulnUpRequiredMitigation(target, damageTypes);
+        var kind = damageTypes.Contains(DamageType.Magic) ? DamageKind.Magic : DamageKind.Physical;
+        string? cause;
+        if (damageTypes.Contains(DamageType.Lethal)) cause = "";
+        else if (vulnMitigation >= 1f) cause = " (had vuln up debuff)";
+        else if (damageTypes.Contains(DamageType.TankBuster) && !IsTank(target)) cause = " (tank buster)";
+        else if (Survives(target, MathF.Max(requiredMitigation, vulnMitigation ?? 0f), kind)) cause = null;
+        else cause = vulnMitigation != null ? " (not enough mitigation for a hit with vuln up)" : " (not enough mitigation)";
+
+        if (cause == null) return false;
+        if (killTarget) target.Die($"Died to {ActionLookup.Name(actionId)}{cause}");
+        return true;
     }
-    
+
+    private static bool IsTank(SimCharacter target) => target is ISimPartyMember { Role: PartyRole.OffTank or PartyRole.MainTank };
+
+    // The mitigation needed to live through a hit of this many times the target's max HP.
+    public static float RequiredMitigation(float hitAsShareOfMaxHp)
+        => hitAsShareOfMaxHp <= 1f ? 0f : 1f - 1f / hitAsShareOfMaxHp;
+
+    // Only a human's own statuses are ever checked: a bot always passes. Spends the target's shields.
+    public bool Survives(SimCharacter target, float requiredMitigation, DamageKind kind = DamageKind.Physical)
+    {
+        if (requiredMitigation <= 0f || !ChecksMitigation(target)) return true;
+        var effective = EffectiveMitigation(target, kind);
+        Mitigation.SpendShields(target);
+        var survives = effective >= requiredMitigation - 0.0005f;
+        DiagnosticLog.Info($"[DamageSolver] Mitigation check: {(target as ISimPartyMember)?.Role} has {effective:P1} {kind}, needs {requiredMitigation:P1} -- {(survives ? "survives" : "dies")}.");
+        return survives;
+    }
+
+    // Read-only, for anyone: what a hit's shown number should be scaled by.
+    public float EffectiveMitigation(SimCharacter target, DamageKind kind = DamageKind.Physical)
+        => Mitigation.Effective(target.ActiveStatusSnapshot.Select(s => s.StatusId), kind);
+
+    private bool ChecksMitigation(SimCharacter target)
+        => Plugin.Config.EnableTankMitigation && Plugin.UserActions.Enabled
+           && target is ISimPartyMember && !party.IsBotDriven(target);
+
     private List<ushort> VulnUps(DamageType damageType)
     {
         if (!vulnUpStatuses.ContainsKey(damageType))
@@ -175,15 +201,15 @@ public class DamageSolver
                .SelectMany(VulnUps);
     }
     
-    private bool IsLethal(SimCharacter target, HashSet<DamageType> damageType)
+    // Null without a vuln; 1 = lethal short of an invuln, which is what a vuln is unless
+    // SetMitigableStatuses said otherwise.
+    private float? VulnUpRequiredMitigation(SimCharacter target, HashSet<DamageType> damageType)
     {
-        var statusId = VulnUps(damageType.ToArray())
-            .FirstOrDefault(target.HasStatus);
-        if (statusId != 0)
-        {
-            Plugin.Log.Info($"{(target as ISimPartyMember)?.Role} got lethal damage due to {statusId}");
-        }
-        return statusId != 0;
+        var statusId = VulnUps(damageType.ToArray()).FirstOrDefault(target.HasStatus);
+        if (statusId == 0) return null;
+        var required = vulnUpRequiredMitigation.GetValueOrDefault(statusId, 1f);
+        DiagnosticLog.Info($"[DamageSolver] {(target as ISimPartyMember)?.Role} is hit carrying vuln up {statusId}: needs {required:P0} mitigation.");
+        return required;
     }
 
     // Damage feedback: a flytext number sized off the target's own max HP, plus — when the hit
@@ -206,6 +232,13 @@ public class DamageSolver
         var list = VulnUps(type);
         Array.ForEach(statuses, list.Add);
     }
+
+    // A vuln a carrier can live through on enough mitigation, instead of only on an invuln.
+    public void SetMitigableStatuses(DamageType type, float requiredMitigation, params ushort[] statuses)
+    {
+        SetStatuses(type, statuses);
+        foreach (var status in statuses) vulnUpRequiredMitigation[status] = requiredMitigation;
+    }
 }
 
 public enum DamageType
@@ -218,6 +251,7 @@ public enum DamageType
     Ice,
     Lightning,
     Earth,
+    Wind,
     Black,
     White,
 }

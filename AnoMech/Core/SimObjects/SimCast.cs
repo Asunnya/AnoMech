@@ -51,7 +51,17 @@ public sealed unsafe class SimCast : ISimObject
     public bool IsCasting => parent.BattleCharaPtr != null && parent.BattleCharaPtr->CastInfo.IsCasting;
 
     public uint ActionId { get; private set; }
-    public float Progress => total <= 0f ? 0f : Math.Clamp(elapsed / total, 0f, 1f);
+    // Read live from CastInfo: a bare NativeCast never enters Tick's `casting` path, so
+    // `elapsed` would stay frozen for it.
+    public float Progress
+    {
+        get
+        {
+            var chara = parent.BattleCharaPtr;
+            if (chara == null || total <= 0f) return 0f;
+            return Math.Clamp(chara->CastInfo.CurrentCastTime / total, 0f, 1f);
+        }
+    }
 
     // Scenario-local ground target, sampled for peers so a replayed Cast() lands in the same spot.
     public Vector3? TargetLocation => targetLocation;

@@ -53,12 +53,8 @@ public sealed class UmadP3BlackHoleScenario : IMultiplayerReplayable
     // The cleanse's recast cooldown (Tick) must stay longer than this.
     private const float EarthResistanceDownDuration = 1.960f;
 
-    // Observed in-game: 929,000 unmitigated, rolled +/-5% per hit.
-    private const float ThunderIIIRawDamage = 929_000f;
-
-    // A tank still carrying LightningResistanceDownII on the second hit took both without a
-    // swap: dies regardless of mitigation, short of a real invuln.
-    private const float ThunderIIIDoubleHitDamage = ThunderIIIRawDamage * 40f;
+    // 929,000 unmitigated against a 325,047 tank is 65%; eased while only self mitigation counts.
+    private const float ThunderIIIRequiredMitigation = 0.60f;
     private int PrimodialCrustsToResolve;
     private float CleanseCooldown;
     SimEnemy? CleanseHelper;
@@ -73,7 +69,6 @@ public sealed class UmadP3BlackHoleScenario : IMultiplayerReplayable
         party = worldParam.Party;
         state = new UmadP3BlackHoleState(world, settingsWindow.Overrides);
         LastState = state;
-        PopulateThunderIIIPlan();
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UmadP3BlackHoleState>)AiStrats[idx]).Run(state, world);
         damage = new DamageSolver(party);
@@ -282,106 +277,20 @@ public sealed class UmadP3BlackHoleScenario : IMultiplayerReplayable
         world.Events.Add(time, () =>
         {
             var target = party.Find.Closest(exdeath!.Position);
-            // Gives a bot-driven target whatever the host planned (invuln or ThunderShareKit)
-            // before the resolve below checks survival. No-op for a real player or unplanned bot.
-            ApplyPlannedThunderMitigation(target, setNumber, hitNumber: 1);
             helper?.Cast(ActionId.ThunderIII_Resolve, targetId: target?.GameObjectId);
-            // TankBuster only, not Lightning: LightningResistanceDownII is a lethal vuln-up here
-            // and would kill any carrier outright; the double-hit rule below covers that case.
-            damage.Resolve(target, ActionId.ThunderIII_Resolve, [DamageType.TankBuster], [(StatusId.LightningResistanceDownII, 3.96f)],
-                tankBusterRawDamage: ThunderIIIRawDamage, tankBusterSource: exdeath);
+            damage.Resolve(target, ActionId.ThunderIII_Resolve, [DamageType.TankBuster, DamageType.Magic, DamageType.Lightning], [(StatusId.LightningResistanceDownII, 3.96f)],
+                requiredMitigation: ThunderIIIRequiredMitigation);
         });
         world.Events.Add(time + 3f, () =>
         {
             var target = party.Find.Closest(exdeath!.Position);
-            // Still carrying the first hit's debuff (3.96s > the 3s gap) means both hits
-            // landed without a tank swap -- see ThunderIIIDoubleHitDamage.
-            var isDoubleHit = target?.HasStatus(StatusId.LightningResistanceDownII) ?? false;
-            ApplyPlannedThunderMitigation(target, setNumber, hitNumber: 2);
             helper?.Cast(ActionId.ThunderIII_Resolve, targetId: target?.GameObjectId);
-            damage.Resolve(target, ActionId.ThunderIII_Resolve, [DamageType.TankBuster], [(StatusId.LightningResistanceDownII, 3.96f)],
-                tankBusterRawDamage: isDoubleHit ? ThunderIIIDoubleHitDamage : ThunderIIIRawDamage,
-                tankBusterSource: exdeath);
+            // Still carrying the first hit's debuff (3.96s > the 3s gap) means both hits landed
+            // without a tank swap, which only an invuln lives through.
+            damage.Resolve(target, ActionId.ThunderIII_Resolve, [DamageType.TankBuster, DamageType.Magic, DamageType.Lightning], [(StatusId.LightningResistanceDownII, 3.96f)],
+                requiredMitigation: ThunderIIIRequiredMitigation);
         });
         world.Events.Add(time + 3.5f, () => exdeath?.Follow(party.Get(PartyRole.OffTank)));
-    }
-
-    // castId includes the ACTUAL resolved target's role, so a plan entry only ever fires for
-    // the tank it was written for -- a mismatched tank falls through to unmitigated instead of
-    // silently receiving someone else's kit.
-    private void ApplyPlannedThunderMitigation(SimCharacter? target, int setNumber, int hitNumber)
-    {
-        if (target is not ISimPartyMember member) return;
-        // A real, actively-played character presses their own mitigation -- not touched here.
-        if (!TankMitigation.IsBotDriven(party, target)) return;
-        var castId = $"p3-thunder3-set{setNumber}-hit{hitNumber}-{member.Role}";
-        if (Plugin.MultiplayerInstance?.Session.TankBusterPlan.GetValueOrDefault(castId) != ThunderSharePlanned) return;
-        ApplyThunderShareKit(target);
-    }
-
-    // Flag value written into TankBusterPlan for a Share hit -- not a real status id, just a
-    // non-zero marker. The actual kit is resolved fresh at apply time (job-dependent).
-    private const ushort ThunderSharePlanned = 1;
-
-    // Each job's real self-mit kit, 61-73% alone. Warrior and Dark Knight are the weak end and
-    // only survive a Share hit once TankMitigation's stand-in party mitigation is folded in.
-    // Job read live off the BattleChara; Paladin's kit if unrecognized.
-    private static readonly IReadOnlyDictionary<uint, ushort[]> ThunderShareKit = new Dictionary<uint, ushort[]>
-    {
-        [19] = [1191, 3829, 77, 2674],   // Paladin: Rampart, Sentinel ("Guardian"), Bulwark, Holy Sheltron
-        [21] = [1191, 3832, 2678, 1858], // Warrior: Rampart, Vengeance ("Damnation"), Bloodwhetting, Nascent Flash ("Nascent Glint")
-        [32] = [1191, 3835, 746, 2682],  // Dark Knight: Rampart, Shadow Wall ("Shadowed Vigil"), Dark Mind, Oblation
-        [37] = [1191, 3838, 1832, 2683], // Gunbreaker: Rampart, Nebula ("Great Nebula"), Camouflage, Heart of Corundum
-    };
-    private const uint ThunderShareFallbackJobId = 19; // Paladin
-
-    internal static unsafe void ApplyThunderShareKit(SimCharacter target)
-    {
-        var bc = target.BattleCharaPtr;
-        var jobId = bc != null ? (uint)bc->ClassJob : ThunderShareFallbackJobId;
-        var kit = ThunderShareKit.TryGetValue(jobId, out var jobKit) ? jobKit : ThunderShareKit[ThunderShareFallbackJobId];
-        foreach (var statusId in kit)
-        {
-            // Duration from the chart; 15f only if an id is missing there.
-            var duration = TankMitigationChart.All.FirstOrDefault(a => a.StatusId == statusId).Duration ?? 15f;
-            target.AddStatus(statusId, duration);
-        }
-    }
-
-    // Only the Share case; InvulnsBoth is the Ai's GiveInvuln. Skipped for a peer, whose plan
-    // the host's LobbyState overwrites.
-    private void PopulateThunderIIIPlan()
-    {
-        var mp = Plugin.MultiplayerInstance;
-        if (mp is { IsConnected: true, IsHost: false })
-        {
-            AnoMech.Core.DiagnosticLog.Info("[UmadP3BlackHoleScenario] Thunder III plan: not set here -- non-host peer, using whatever the host broadcasts.");
-            return;
-        }
-        var plan = mp?.Session.TankBusterPlan;
-        if (plan == null)
-        {
-            AnoMech.Core.DiagnosticLog.Warn("[UmadP3BlackHoleScenario] Thunder III plan: Plugin.MultiplayerInstance unavailable -- no plan written, bot tanks stay unmitigated for any Share hit.");
-            return;
-        }
-        plan.Clear();
-        var set1 = settingsWindow.Overrides.ThunderSet1;
-        var set2 = settingsWindow.Overrides.ThunderSet2;
-        SetThunderSetPlan(plan, 1, set1);
-        SetThunderSetPlan(plan, 2, set2);
-        AnoMech.Core.DiagnosticLog.Info($"[UmadP3BlackHoleScenario] Thunder III plan for this run: Set 1 = {set1}, Set 2 = {set2}.");
-    }
-
-    private static void SetThunderSetPlan(Dictionary<string, ushort> plan, int setNumber, ThunderIIIAssignment effective)
-    {
-        if (effective is not (ThunderIIIAssignment.ShareMtFirst or ThunderIIIAssignment.ShareOtFirst)) return;
-        // Both tanks get entries: whichever is closest for a hit gets the kit; MtFirst/OtFirst
-        // only affects ordering.
-        void Set(int hit, PartyRole role) => plan[$"p3-thunder3-set{setNumber}-hit{hit}-{role}"] = ThunderSharePlanned;
-        Set(1, PartyRole.MainTank);
-        Set(1, PartyRole.OffTank);
-        Set(2, PartyRole.MainTank);
-        Set(2, PartyRole.OffTank);
     }
 
     private void Run_Exdeath_4000414C()
@@ -849,29 +758,7 @@ public sealed class UmadP3BlackHoleScenario : IMultiplayerReplayable
             replayWorld, msg.Roles, msg.StackTargets, msg.SlapAttacks, msg.KefkaPositionRadians, msg.ImplosionAttack,
             msg.ThunderSet1, msg.ThunderSet2);
         ((IScenarioAi<UmadP3BlackHoleState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
-        SchedulePeerThunderMitigation(shadowState, replayWorld, myRole);
         return shadowState;
-    }
-
-    // RunThunder never runs on a peer, so a Share plan would apply nothing there. AddStatus
-    // writes through StatusManager, so the self-report poller picks it up.
-    private static void SchedulePeerThunderMitigation(UmadP3BlackHoleState state, SimWorld world, PartyRole myRole)
-    {
-        void ApplyIfMine(float time, ThunderIIIAssignment plan)
-        {
-            if (plan is not (ThunderIIIAssignment.ShareMtFirst or ThunderIIIAssignment.ShareOtFirst)) return;
-            var (first, second) = ThunderIIIPlanning.Roles(plan);
-            if (first != myRole && second != myRole) return;
-            world.Events.Add(time, () =>
-            {
-                if (world.Party.Player is { } player)
-                    ApplyThunderShareKit(player);
-            });
-        }
-        ApplyIfMine(38f, state.ThunderSet1);
-        ApplyIfMine(43.5f, state.ThunderSet1);
-        ApplyIfMine(79f, state.ThunderSet2);
-        ApplyIfMine(84.9f, state.ThunderSet2);
     }
 
     // Chaos/Exdeath may not be replicated yet when StartReplay runs.

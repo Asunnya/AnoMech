@@ -613,7 +613,7 @@ public sealed class UwuP3TitanScenario : IScenario
         chara->Health = (uint)MathF.Ceiling(maxHp * Math.Clamp(fraction, 0f, 1f));
     }
 
-    private void OnPlayerAction(ActionType actionType, uint actionId)
+    private void OnPlayerAction(ActionType actionType, uint actionId, ulong targetId)
     {
         if (actionType != ActionType.Action || healerGaol is not { IsActive: true } gaol || !IsNewPlayerAction()) return;
         if (Plugin.TargetManager.Target?.EntityId != gaol.EntityId) return;

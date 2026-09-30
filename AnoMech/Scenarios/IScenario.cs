@@ -23,11 +23,7 @@ public interface IScenario
     // from each strat's IScenarioAi.Group.
     IReadOnlyList<IScenarioAi> AiStrats { get; }
 
-    // Tankbusters the multiplayer host can pre-plan mitigation for (see TankMitigation).
-    IReadOnlyList<TankBusterCastInfo> TankBusters => [];
-
-    // Tanks spawn at this HP so TankMitigation's fixed numbers land against a real tank's
-    // pool; null = the generic doppel HP.
+    // Tanks spawn at this HP so their bar reads like a real tank's; null = the generic doppel HP.
     uint? TankMaxHealth => null;
 
     // How far into the phase's track the real fight is when this scenario starts.

@@ -350,7 +350,7 @@ public sealed class M9sFlailsScenario : IScenario
             chara->Health = (uint)MathF.Ceiling(DoornailMaxHp * MathF.Max(0f, doornailHp));
     }
 
-    private void OnPlayerAction(ActionType actionType, uint actionId)
+    private void OnPlayerAction(ActionType actionType, uint actionId, ulong targetId)
     {
         if (actionType != ActionType.Action || doornail is not { IsActive: true } nail) return;
         if (!IsNewPlayerAction()) return;

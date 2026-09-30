@@ -5,7 +5,6 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
-using AnoMech.Scenarios;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
@@ -38,7 +37,7 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
     // auto-attack-cancel general action is filtered out). The UserActions module
     // subscribes to resolve effects the sim firewall blocks; nothing here depends
     // on a subscriber.
-    public event Action<ActionType, uint>? ActionExecuted;
+    public event Action<ActionType, uint, ulong>? ActionExecuted;
 
     // --- Player activity signals (read by SimPlayer to drive Party.Player.IsMoving/IsActing) ---
     // The engine's own per-frame movement sample (the signal bossmod reads), captured before
@@ -165,7 +164,6 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
     {
         // Game.Dispose doesn't route through ResetInternal.
         RestoreGaugeIllusion();
-        if (Plugin.GameInstance is { } game) TankShieldTracker.ClearAllVisuals(game.World.Party);
         rmiWalkHook?.Dispose();
         checkStrafeKeybindHook?.Dispose();
         isInputIdPressedHook?.Dispose();
@@ -216,7 +214,6 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         updateHook.Original(self);
         ScanAndLogActiveStatuses();
         UpdateGaugeIllusion();
-        RefreshShieldVisuals();
         // A missed clear must not pin rotation outside an instance.
         if (LockedRotation is { } lockedRot)
         {
@@ -228,22 +225,6 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         if (!DisableAllActions) return;
         var autosOn = UIState.Instance()->WeaponState.AutoAttackState.IsAutoAttacking;
         if (autosOn) self->UseAction(ActionType.GeneralAction, 1);
-    }
-
-    // Every frame: TankShieldTracker never pushes updates. Also clears every visual once
-    // IsInInstance goes false.
-    private static void RefreshShieldVisuals()
-    {
-        if (Plugin.GameInstance is not { } game) return;
-        var party = game.World.Party;
-        if (!game.World.Map.IsInInstance)
-        {
-            TankShieldTracker.ClearAllVisuals(party);
-            return;
-        }
-        foreach (var role in Enum.GetValues<PartyRole>())
-            if (party.Get(role) is { } member)
-                TankShieldTracker.RefreshVisual(member, role);
     }
 
     // ---- Gauge illusion (client-side only) -----------------------------------
@@ -271,13 +252,12 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
 
     // Same for the limit break gauge, but only once a scenario asks for it (SimWorld.SetLimitBreakGauge):
     // solo in the inn the real gauge is empty. Client-side only; a press is intercepted or
-    // swallowed, so no LB packet ever leaves.
+    // swallowed, so no LB packet ever leaves. Spent by UserActions' LimitBreakHandler.
     private (byte BarCount, ushort CurrentUnits, ushort BarUnits)? savedLimitBreak;
     private const ushort LimitBreakUnitsPerBar = 10000;
     private const byte LimitBreakBars = 3;
     // Null until the scenario sets it; the gauge is then left alone and every LB press dropped.
     private ushort? limitBreakUnits;
-    private static readonly HashSet<uint> TankLimitBreakActionIds = [199, 4240, 4241, 17105];
 
     public void SetLimitBreakGauge(float bars)
         => limitBreakUnits = (ushort)(Math.Clamp(bars, 0f, LimitBreakBars) * LimitBreakUnitsPerBar);
@@ -342,6 +322,12 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
             Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, LB{level + 1}, job={job}) pressed -- only LB3 is simulated, press dropped.");
             return true;
         }
+        // UserActions is what applies the effect and spends the gauge.
+        if (!Plugin.UserActions.Enabled)
+        {
+            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed but user actions are disabled -- press dropped.");
+            return true;
+        }
         if (limitBreakUnits is not { } units)
         {
             Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed but this scenario grants no limit break -- press dropped.");
@@ -361,38 +347,7 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         return false;
     }
 
-    // The client's own refusal reason is the only way to see why a press did nothing.
-    private void NoteLimitBreakPress(uint actionId, ulong targetId, bool accepted, bool fired)
-    {
-        var name = Core.ActionLookup.Name(actionId);
-        var job = Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId;
-        if (!accepted)
-        {
-            var am = ActionManager.Instance();
-            var status = am == null ? 0u : am->GetActionStatus(ActionType.Action, actionId, targetId);
-            var reason = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.LogMessage>()
-                .GetRowOrDefault(status)?.Text.ExtractText() ?? "";
-            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) refused by the client -- status {status} \"{reason}\".");
-            return;
-        }
-        // A queued press comes back through UseAction (mode Queue) when the lock ends, and only
-        // that call is the LB going off.
-        if (!fired)
-        {
-            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, LB3, job={job}) queued by the client -- nothing happens until it fires.");
-            return;
-        }
-        if (TankLimitBreakActionIds.Contains(actionId)) ApplyTankLimitBreak(actionId, targetId);
-        var castSeconds = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>().TryGetRow(actionId, out var row)
-            ? row.Cast100ms / 10f
-            : 0f;
-        // A cast cancelled before the slidecast window costs nothing, as in retail, so SimPlayer
-        // spends the gauge only once it lands; anything else lands as it fires.
-        var watcher = castSeconds > 0f ? Plugin.GameInstance?.World.Party.Player : null;
-        if (watcher == null) SpendLimitBreak();
-        Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, LB3, job={job}) fired by the client, UseAction target 0x{targetId:X}{(watcher == null ? " -- the gauge is spent" : "")}.");
-        watcher?.WatchLimitBreak(actionId, castSeconds);
-    }
+    public bool LimitBreakReady => limitBreakUnits >= LimitBreakUnitsPerBar * LimitBreakBars;
 
     public void SpendLimitBreak()
     {
@@ -405,177 +360,14 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         if (DisableAllActions && !IsStopAutosAction(actionType, actionId)) return false;
         var limitBreakLevel = LimitBreakLevel(actionType, actionId);
         if (limitBreakLevel is { } level && RefuseLimitBreak(level, actionId)) return false;
-        if (limitBreakLevel is null && actionType == ActionType.Action && TryInterceptTankMitigation(actionId, targetId))
-        {
-            actionUsedSincePoll = true;
-            return true;
-        }
-        // Advances only when the client actually sends the action, not when it queues it.
-        var sequence = self->LastUsedActionSequence;
         var result = useActionHook.Original(self, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
-        if (!result && actionType == ActionType.Action)
-            Plugin.Log.Debug($"[PlayerInput] client refused action {actionId}: ActionStatus {self->GetActionStatus(actionType, actionId)}");
-        if (limitBreakLevel == 2) NoteLimitBreakPress(actionId, targetId, result, fired: self->LastUsedActionSequence != sequence);
         // Ignore the auto-attack-cancel general action that UpdateDetour issues while stunned.
         if (result && !IsStopAutosAction(actionType, actionId))
         {
             actionUsedSincePoll = true;
-            ActionExecuted?.Invoke(actionType, actionId);
+            ActionExecuted?.Invoke(actionType, actionId, targetId);
         }
         return result;
-    }
-
-    // Blocks a tracked mitigation's real UseAction while a sim runs, so the real ability and
-    // its recast group are never touched; applies the synthetic status, fakes the hotbar sweep
-    // and records the sim-only cooldown instead. False for anything untracked or outside an
-    // instance; a press still on the sim cooldown is swallowed silently.
-    private bool TryInterceptTankMitigation(uint actionId, ulong targetId)
-    {
-        if (Plugin.GameInstance is not { } game || !game.World.Map.IsInInstance) return false;
-        if (!TankMitigation.ByActionId.TryGetValue(actionId, out var ability)) return false;
-        var party = game.World.Party;
-        var role = party.PlayerRole;
-        if (party.Player is not { } player) return false;
-
-        if (!TankMitigationTracker.IsAvailable(role, ability.StatusId, ability.Charges))
-            return true; // still on the sim's own cooldown -- swallow the press, nothing happens
-
-        var appliedRoles = ApplyTankMitigation(game.World, player, ability, targetId);
-        ForceRecastSweep(actionId, ability.Cooldown ?? 0f);
-        var jobId = Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId;
-        Core.DiagnosticLog.Info($"[LocalPlayerInputHooks] Intercepted {ability.Name} (actionId={actionId}) for {role} (job={jobId}), scope={ability.Scope} -- applied synthetic status {ability.StatusId} to [{string.Join(",", appliedRoles)}], real ability never touched.");
-        return true;
-    }
-
-    // A tank LB3 spends the gauge, not a recast group, and the client plays it; only its
-    // mitigation is ours, applied as it fires.
-    private static void ApplyTankLimitBreak(uint actionId, ulong targetId)
-    {
-        if (Plugin.GameInstance is not { } game) return;
-        if (!TankMitigation.ByActionId.TryGetValue(actionId, out var ability)) return;
-        var party = game.World.Party;
-        if (party.Player is not { } player) return;
-        var appliedRoles = ApplyTankMitigation(game.World, player, ability, targetId);
-        var jobId = Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId;
-        Core.DiagnosticLog.Info($"[LocalPlayerInputHooks] Applied {ability.Name} (actionId={actionId}) for {party.PlayerRole} (job={jobId}) -- status {ability.StatusId} on [{string.Join(",", appliedRoles)}].");
-    }
-
-    private static List<PartyRole> ApplyTankMitigation(SimWorld world, SimPlayer player, TankMitigationAbility ability, ulong targetId)
-    {
-        var party = world.Party;
-        var role = party.PlayerRole;
-        var appliedRoles = new List<PartyRole>();
-        if (ability.SourceSide)
-        {
-            var affected = ApplySourceSideMitigation(world, player, ability);
-            // A peer's enemy doppel is cosmetic; the host's copy needs the debuff too.
-            Plugin.MultiplayerInstance?.ReportAppliedEnemyStatus(affected, ability.StatusId, ability.Duration ?? 0f);
-        }
-        else if (ability.Scope == MitigationScope.Party)
-        {
-            foreach (var r in Enum.GetValues<PartyRole>())
-            {
-                if (party.Get(r) is not { } member) continue;
-                member.AddStatus(ability.StatusId, ability.Duration ?? 0f);
-                appliedRoles.Add(r);
-            }
-        }
-        else if (ability.Scope == MitigationScope.Ally)
-        {
-            var targetRole = ResolveTargetRole(party, targetId);
-            if (targetRole is { } r && party.Get(r) is { } member)
-            {
-                member.AddStatus(ability.StatusId, ability.Duration ?? 0f);
-                appliedRoles.Add(r);
-            }
-            else
-            {
-                Core.DiagnosticLog.Warn($"[LocalPlayerInputHooks] {ability.Name} pressed with no resolvable party-member target -- swallowed, nothing applied.");
-            }
-        }
-        else
-        {
-            // Self scope is reported by SendSelfMitigationIfChanged.
-            player.AddStatus(ability.StatusId, ability.Duration ?? 0f);
-            appliedRoles.Add(role);
-        }
-        // Banks + visualizes any shield component this ability carries; no-op if it has none.
-        var shieldFraction = GrantShield(party, player, ability, appliedRoles);
-
-        // Party/Ally scope touches roles whose puppets are cosmetic on a peer.
-        if (ability.Scope is MitigationScope.Party or MitigationScope.Ally)
-            Plugin.MultiplayerInstance?.ReportAppliedRoleStatus(appliedRoles, ability.StatusId, ability.Duration ?? 0f, shieldFraction);
-
-        TankMitigationTracker.RecordUse(role, ability.StatusId, ability.Cooldown ?? 0f);
-        return appliedRoles;
-    }
-
-    // Reprisal-style: debuffs every active enemy within the ability's radius of the caster.
-    private static List<SimEnemy> ApplySourceSideMitigation(SimWorld world, SimCharacter caster, TankMitigationAbility ability)
-    {
-        var affected = new List<SimEnemy>();
-        var radius = ability.Radius ?? 0f;
-        if (radius <= 0f) return affected;
-        var radiusSq = radius * radius;
-        foreach (var enemy in world.Children.OfType<SimEnemy>())
-        {
-            if (!enemy.IsActive) continue;
-            if (Vector3.DistanceSquared(caster.Position, enemy.Position) > radiusSq) continue;
-            enemy.AddStatus(ability.StatusId, ability.Duration ?? 0f);
-            affected.Add(enemy);
-        }
-        return affected;
-    }
-
-    // Shield % is of the caster's max HP: converted to HP once, then re-expressed against each
-    // recipient's own max HP. Returns the granted fraction (0f if none).
-    private static float GrantShield(SimParty party, SimCharacter caster, TankMitigationAbility ability, IReadOnlyList<PartyRole> appliedRoles)
-    {
-        var casterPercent = ability.ShieldPercentOfMaxHp
-            ?? (ability.ShieldPotency is { } potency ? TankShieldEstimate.PercentOfCasterMaxHp(potency) : (float?)null);
-        if (casterPercent is not { } percent) return 0f; // this ability carries no shield component at all
-        var casterBc = caster.BattleCharaPtr;
-        if (casterBc == null) return 0f;
-        var casterShieldHp = casterBc->MaxHealth * percent;
-
-        var lastGrantedFraction = 0f;
-        foreach (var role in appliedRoles)
-        {
-            if (party.Get(role) is not { } member) continue;
-            var recipientBc = member.BattleCharaPtr;
-            if (recipientBc == null || recipientBc->MaxHealth == 0) continue;
-            var fraction = casterShieldHp / recipientBc->MaxHealth;
-            if (fraction <= 0f) continue;
-            TankShieldTracker.Grant(role, fraction, ability.Duration ?? 0f);
-            TankShieldTracker.RefreshVisual(member, role);
-            lastGrantedFraction = fraction;
-        }
-        return lastGrantedFraction;
-    }
-
-    // Ally-scope mitigations (Oblation, Intervention, ...) are cast on a specific member.
-    private static PartyRole? ResolveTargetRole(SimParty party, ulong targetId)
-    {
-        if (targetId == 0) return null;
-        foreach (var role in Enum.GetValues<PartyRole>())
-            if (party.Get(role) is { } member && (ulong)member.GameObjectId == targetId)
-                return role;
-        return null;
-    }
-
-    // Total must be set explicitly: a never-started group can have a zero Total, and
-    // IsActive alone renders no sweep.
-    private static void ForceRecastSweep(uint actionId, float cooldownSeconds)
-    {
-        var am = ActionManager.Instance();
-        if (am == null) return;
-        var group = am->GetRecastGroup((int)ActionType.Action, actionId);
-        if (group < 0) return;
-        var detail = am->GetRecastGroupDetail(group);
-        if (detail == null) return;
-        detail->IsActive = true;
-        detail->Elapsed = 0f;
-        detail->Total = cooldownSeconds;
     }
 
     private bool UseActionLocationDetour(ActionManager* self, ActionType actionType, uint actionId, ulong targetId, Vector3* location, uint extraParam, byte a7)
@@ -585,7 +377,7 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         if (result)
         {
             actionUsedSincePoll = true;
-            ActionExecuted?.Invoke(actionType, actionId);
+            ActionExecuted?.Invoke(actionType, actionId, targetId);
         }
         return result;
     }

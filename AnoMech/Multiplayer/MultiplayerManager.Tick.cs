@@ -240,7 +240,6 @@ public sealed partial class MultiplayerManager
                 replayable.TickReplay(debugShadowStateGeneric, deltaSeconds);
             SyncClocksToHost();
             SendSelfPose();
-            SendSelfMitigationIfChanged();
         }
     }
 

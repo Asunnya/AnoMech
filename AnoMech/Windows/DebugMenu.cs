@@ -410,8 +410,8 @@ internal sealed unsafe class DebugMenu
         ImGui.TextUnformatted("Tank mitigation id lookup");
         ImGui.Separator();
         ImGui.TextWrapped("Press a mitigation cooldown in-game, then read its real id off " +
-                           "these two lists -- use them to fill in TankMitigationChart's " +
-                           "StatusId/ActionId for whichever ability you just pressed.");
+                           "these two lists -- use them to fill in the Mitigation and " +
+                           "JobActions tables for whichever ability you just pressed.");
         var myStatuses = MyActiveStatuses();
         ImGui.TextUnformatted("My active statuses:");
         ImGui.SameLine();

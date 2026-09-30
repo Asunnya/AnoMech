@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
 
@@ -12,11 +14,15 @@ internal interface IActionEffect
     void Apply(ActionContext ctx);
 }
 
-// Per-dispatch state an effect may need.
-internal sealed class ActionContext(uint actionId, SimPlayer player, Random rng)
+// Per-dispatch state an effect may need. The caster is the local player for a real press, or
+// a bot for SimPartyNpc.UseAction.
+internal sealed class ActionContext(uint actionId, ulong targetId, SimCharacter caster, Random rng)
 {
+    public ulong TargetId { get; } = targetId;
     public uint ActionId { get; } = actionId;
-    public SimPlayer Player { get; } = player;
+    public SimCharacter Caster { get; } = caster;
+    // The job gauge and combo state are the local player's alone.
+    public bool CasterIsPlayer => Caster is SimPlayer;
     public Random Rng { get; } = rng;
 }
 
@@ -25,6 +31,7 @@ internal sealed unsafe class GaugeEffect(ResourceGauge gauge, int amount) : IAct
 {
     public void Apply(ActionContext ctx)
     {
+        if (!ctx.CasterIsPlayer) return;
         var jgm = JobGaugeManager.Instance();
         if (jgm != null) gauge.Add(jgm, amount);
     }
@@ -37,8 +44,51 @@ internal sealed class StatusEffect(ushort statusId, float duration, int stacks =
 {
     public void Apply(ActionContext ctx)
     {
-        ctx.Player.RemoveStatus(statusId);
-        ctx.Player.AddStatusParam(statusId, stacks, duration);
+        ctx.Caster.RemoveStatus(statusId);
+        ctx.Caster.AddStatusParam(statusId, stacks, duration);
+        if (ctx.Caster is ISimPartyMember member) HostReport.RoleStatus([member.Role], statusId, duration);
+    }
+}
+
+// A peer runs no scenario logic: the host decides who lives, from the statuses on its own copy
+// of each character. Only mitigation is sent, the one kind of status the host acts on.
+internal static class HostReport
+{
+    public static void RoleStatus(IReadOnlyList<PartyRole> roles, ushort statusId, float duration)
+    {
+        if (Mitigation.ByStatusId.ContainsKey(statusId))
+            Plugin.MultiplayerInstance?.ReportAppliedRoleStatus(roles, statusId, duration);
+    }
+}
+
+// Leaf: grant a status to the action's friendly recipients (see ActionTargets).
+internal sealed class TargetStatusEffect(ushort statusId, float duration, int stacks = 0) : IActionEffect
+{
+    public void Apply(ActionContext ctx)
+    {
+        var roles = new List<PartyRole>();
+        foreach (var member in ActionTargets.Friendly(ctx))
+        {
+            member.RemoveStatus(statusId);
+            member.AddStatusParam(statusId, stacks, duration);
+            if (member is ISimPartyMember slot) roles.Add(slot.Role);
+        }
+        HostReport.RoleStatus(roles, statusId, duration);
+    }
+}
+
+// Leaf: debuff the enemies the action hits (Reprisal).
+internal sealed class EnemyStatusEffect(ushort statusId, float duration, int stacks = 0) : IActionEffect
+{
+    public void Apply(ActionContext ctx)
+    {
+        var enemies = ActionTargets.Hostile(ctx);
+        foreach (var enemy in enemies)
+        {
+            enemy.RemoveStatus(statusId);
+            enemy.AddStatusParam(statusId, stacks, duration);
+        }
+        Plugin.MultiplayerInstance?.ReportAppliedEnemyStatus(enemies, statusId, duration);
     }
 }
 
@@ -47,7 +97,7 @@ internal sealed class ComboEffect(IActionEffect[] inner) : IActionEffect
 {
     public void Apply(ActionContext ctx)
     {
-        if (!PlayerCombo.IsActiveContinuation(ctx.ActionId)) return;
+        if (!ctx.CasterIsPlayer || !PlayerCombo.IsActiveContinuation(ctx.ActionId)) return;
         foreach (var e in inner) e.Apply(ctx);
     }
 }

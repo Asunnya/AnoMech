@@ -38,25 +38,6 @@ public sealed partial class MultiplayerManager
         pendingSelfPoseSend = relay!.SendAsync(new SelfPoseMessage(MyPeerId, player.Position.X, player.Position.Y, player.Position.Z, player.Rotation));
     }
 
-    // Reads the native StatusManager (ActiveTrackedStatusIds), not ActiveStatusSnapshot: a real
-    // button press never populates the latter.
-    private HashSet<ushort> lastSentMitigationStatusIds = new();
-    private float lastSentShieldFraction;
-
-    private void SendSelfMitigationIfChanged()
-    {
-        var party = Plugin.GameInstance.World.Party;
-        var player = party.Player;
-        if (player == null) return;
-        var current = TankMitigation.ActiveTrackedStatusIds(player).ToHashSet();
-        var shieldFraction = TankShieldTracker.RemainingFraction(party.PlayerRole);
-        if (current.SetEquals(lastSentMitigationStatusIds) && MathF.Abs(shieldFraction - lastSentShieldFraction) < 0.001f)
-            return;
-        lastSentMitigationStatusIds = current;
-        lastSentShieldFraction = shieldFraction;
-        _ = relay!.SendAsync(new SelfMitigationMessage(MyPeerId, current.ToList(), shieldFraction));
-    }
-
     public void ReportAppliedEnemyStatus(IReadOnlyList<SimEnemy> enemies, ushort statusId, float duration)
     {
         if (IsHost || relay is not { IsConnected: true } || enemies.Count == 0) return;
@@ -66,12 +47,11 @@ public sealed partial class MultiplayerManager
         _ = relay.SendAsync(new PeerAppliedEnemyStatusMessage(MyPeerId, netIds, statusId, duration));
     }
 
-    public void ReportAppliedRoleStatus(IReadOnlyList<PartyRole> roles, ushort statusId, float duration, float shieldFraction = 0f)
+    public void ReportAppliedRoleStatus(IReadOnlyList<PartyRole> roles, ushort statusId, float duration)
     {
         if (IsHost || relay is not { IsConnected: true } || roles.Count == 0) return;
-        DiagnosticLog.Info($"[Multiplayer] Peer: reporting applied status {statusId} on roles [{string.Join(",", roles)}] to host" +
-                            (shieldFraction > 0f ? $" (shieldFraction={shieldFraction:F3})." : "."));
-        _ = relay.SendAsync(new PeerAppliedRoleStatusMessage(MyPeerId, roles.ToList(), statusId, duration, shieldFraction));
+        DiagnosticLog.Info($"[Multiplayer] Peer: reporting applied status {statusId} on roles [{string.Join(",", roles)}] to host.");
+        _ = relay.SendAsync(new PeerAppliedRoleStatusMessage(MyPeerId, roles.ToList(), statusId, duration));
     }
 
     // ---- Host: applying a peer's reported pose to their puppet -------------
