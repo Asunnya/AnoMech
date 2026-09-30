@@ -23,14 +23,8 @@ public sealed class UwuP2IfritScenario : IScenario
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new UwuP2IfritAi()];
 
-    private const float CrimsonCycloneLength = 44f;
-    private const float RadiantPlumeRadius = 8f;
-    private const float EruptionRadius = 8f;
-    private const float SearingWindRadius = 14f;
-    private const float FlamingCrushRadius = 4f;
-    private const float FlamingCrushTotal = 2.8f;
+    private const int FlamingCrushMinStack = 5;
     private const float IncinerateHalfAngle = MathF.PI / 4f;
-    private const float IncinerateLength = 15f;
     private const float HazardStep = 0.2f;
     private const uint NailMaxHp = 26870;
     private const float NailDrainFrom = 45f;
@@ -83,7 +77,7 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(2.93f, () => Arrive(ifrit));
         world.Events.Add(5.12f, () => CastSelf(ifrit, ActionId.CrimsonCyclone, 2.7f));
         world.Events.Add(5.16f, CastRadiantPlumes);
-        world.Events.Add(8.10f, () => ResolveCrimsonCyclone(ifrit, state.OpenerBearing, ActionId.CrimsonCyclone, CrimsonCycloneHalfWidth));
+        world.Events.Add(8.10f, () => ResolveCrimsonCyclone(ifrit, state.OpenerBearing, ActionId.CrimsonCyclone));
         world.Events.Add(9.13f, ResolveRadiantPlumes);
         world.Events.Add(9.10f, () => ifrit?.SetVisible(false));
         world.Events.Add(10.15f, PlaceIfritFacingSouth);
@@ -242,7 +236,6 @@ public sealed class UwuP2IfritScenario : IScenario
 
     private SimCharacter? Get(PartyRole role) => party.Get(role);
 
-    private static bool IsTank(SimCharacter member) => member is ISimPartyMember { Role: PartyRole.MainTank or PartyRole.OffTank };
 
     private SimEnemy? SpawnEnemy(uint baseId, uint nameId, Placement placement, bool targetable, bool visible, EnemyListMode enemyList) =>
         world.SpawnEnemy(new EnemySpawnConfig(
@@ -315,24 +308,24 @@ public sealed class UwuP2IfritScenario : IScenario
         foreach (var caster in radiantPlumeCasters)
         {
             PlayEffect(caster, ActionId.RadiantPlumePuddle, 0.1f, at: caster.Position);
-            utils.ResolveSnapshot(party.Find.InsideCircle(caster.Position, RadiantPlumeRadius).ToList(), "Radiant Plume");
+            damage.Resolve(caster, ActionId.RadiantPlumePuddle, [DamageType.Lethal], []);
         }
         radiantPlumeCasters.Clear();
     }
 
-    private void ResolveCrimsonCyclone(SimEnemy? caster, float fromBearing, uint actionId, float halfWidth)
+    private void ResolveCrimsonCyclone(SimEnemy? caster, float fromBearing, uint actionId)
     {
         var edge = EdgeSpot(fromBearing);
         var rotation = FacingCentre(edge);
         PlayEffect(caster, actionId, 2.1f, rotation);
-        utils.ResolveSnapshot(party.Find.InsideRect(new Placement(edge, rotation), halfWidth, CrimsonCycloneLength).ToList(), "Crimson Cyclone");
+        damage.Resolve(IPositioned.From(new Placement(edge, rotation)), actionId, [DamageType.Lethal], []);
     }
 
     private void Hellfire()
     {
         PlayEffect(ifrit, ActionId.Hellfire, 2.1f);
         foreach (var member in AliveMembers())
-            damage.ApplyDamage(member, IsTank(member) ? 0.25f : 0.65f, ActionId.Hellfire, "Raidwide", false);
+            damage.ApplyDamage(member, 0.65f, ActionId.Hellfire, "Raidwide", false);
     }
 
     private void VulcanBurst()
@@ -348,16 +341,10 @@ public sealed class UwuP2IfritScenario : IScenario
         var rotation = Facing(ifrit.Position, facing);
         ifrit.SetPosition(new Placement(ifrit.Position, rotation));
         PlayEffect(ifrit, ActionId.Incinerate, 1.1f, rotation, mainTank.GameObjectId);
-        foreach (var hit in party.Find.InsideCone(new Placement(ifrit.Position, rotation), IncinerateHalfAngle, IncinerateLength).ToList())
-        {
-            if (!IsTank(hit))
-            {
-                hit.Die("Died to Incinerate (stood in Ifrit's cleave)");
-                continue;
-            }
-            damage.ApplyDamage(hit, 0.4f, ActionId.Incinerate, "Tankbuster", false);
-            hit.AddStatus(StatusId.FireResistanceDownII, 5f);
-        }
+        var hits = damage.Resolve(ifrit, ActionId.Incinerate, [DamageType.TankBuster], [(StatusId.FireResistanceDownII, 5f)],
+            size: IncinerateHalfAngle, extraRange: ifrit.HitboxRadius);
+        foreach (var tank in hits.Where(h => h.IsAlive()))
+            damage.ApplyDamage(tank, 0.4f, ActionId.Incinerate, "Tankbuster", false);
     }
 
     private void SpawnNails()
@@ -410,7 +397,7 @@ public sealed class UwuP2IfritScenario : IScenario
         PlayEffect(nail, ActionId.InfernalSurge, 1.1f);
         foreach (var member in AliveMembers())
         {
-            damage.ApplyDamage(member, IsTank(member) ? 0.1f : 0.22f, ActionId.InfernalSurge, "Raidwide", false);
+            damage.ApplyDamage(member, 0.22f, ActionId.InfernalSurge, "Raidwide", false);
             member.AddStatus(StatusId.VulnerabilityUp, 1f);
         }
         nails.Remove(bearing);
@@ -439,12 +426,7 @@ public sealed class UwuP2IfritScenario : IScenario
         if (Get(healer) is not { } holder || !holder.IsAlive()) return;
         var caster = SpawnDummy(holder.Position);
         PlayEffect(caster, ActionId.SearingWind, 1.1f, target: holder.GameObjectId);
-        foreach (var hit in party.Find.InsideCircle(holder.Position, SearingWindRadius).ToList())
-        {
-            if (hit == holder) continue;
-            if (IsTank(hit)) damage.ApplyDamage(hit, 0.45f, ActionId.SearingWind, "Searing Wind", false);
-            else hit.Die("Died to Searing Wind (stood near the healer holding it)");
-        }
+        damage.Resolve(holder, ActionId.SearingWind, [DamageType.Lethal], [], excludeTargets: [holder]);
         world.Events.Add(1.5f, () => DespawnHelper(caster));
     }
 
@@ -481,11 +463,7 @@ public sealed class UwuP2IfritScenario : IScenario
             var slot = pair * 2 + i;
             if (eruptionSpots[slot] is not { } at) continue;
             PlayEffect(eruptionCasters[slot], ActionId.EruptionPuddle, 0.1f, at: at);
-            foreach (var hit in party.Find.InsideCircle(at, EruptionRadius).ToList())
-            {
-                if (IsTank(hit)) damage.ApplyDamage(hit, 0.5f, ActionId.EruptionPuddle, "Eruption", false);
-                else hit.Die("Died to Eruption");
-            }
+            damage.Resolve(IPositioned.From(at), ActionId.EruptionPuddle, [DamageType.Lethal], []);
             eruptionSpots[slot] = null;
         }
     }
@@ -502,7 +480,7 @@ public sealed class UwuP2IfritScenario : IScenario
     private void CastDash(float fromBearing) => CastSelf(dashClones.GetValueOrDefault(fromBearing), ActionId.CrimsonCyclone, 2.7f);
 
     private void ResolveDash(float fromBearing) =>
-        ResolveCrimsonCyclone(dashClones.GetValueOrDefault(fromBearing), fromBearing, ActionId.CrimsonCyclone, CrimsonCycloneHalfWidth);
+        ResolveCrimsonCyclone(dashClones.GetValueOrDefault(fromBearing), fromBearing, ActionId.CrimsonCyclone);
 
     private void DespawnDashClone(float fromBearing)
     {
@@ -519,7 +497,7 @@ public sealed class UwuP2IfritScenario : IScenario
             var edge = EdgeSpot(lanes[i].Bearing);
             crossCasters[i] ??= SpawnDummy(edge);
             crossCasters[i]?.SetPosition(new Placement(edge, FacingCentre(edge)));
-            ResolveCrimsonCyclone(crossCasters[i], lanes[i].Bearing, ActionId.CrimsonCycloneAwaken, AwakenedCrossHalfWidth);
+            ResolveCrimsonCyclone(crossCasters[i], lanes[i].Bearing, ActionId.CrimsonCycloneAwaken);
         }
     }
 
@@ -527,13 +505,7 @@ public sealed class UwuP2IfritScenario : IScenario
     {
         if (Get(role) is not { } target || !target.IsAlive()) return;
         PlayEffect(ifrit, ActionId.FlamingCrush, 1.1f, target: target.GameObjectId);
-        var stack = party.Find.InsideCircle(target.Position, FlamingCrushRadius).ToList();
-        var share = FlamingCrushTotal / Math.Max(1, stack.Count);
-        foreach (var hit in stack)
-        {
-            if (share >= 1f) hit.Die("Died to Flaming Crush (too few players in the stack)");
-            else damage.ApplyDamage(hit, share, ActionId.FlamingCrush, "Stack", false);
-        }
+        damage.Resolve(target, ActionId.FlamingCrush, [DamageType.Magic], [], stackMinTargets: FlamingCrushMinStack);
     }
 
     private IEnumerable<SimCharacter> AliveMembers()

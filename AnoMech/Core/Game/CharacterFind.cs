@@ -224,7 +224,9 @@ public sealed class CharacterFind<T> where T : IPositioned
     // 3, 13 (cones) -> halfAngleRad default PI/6
     // 8 (charge) -> charge length default 100
     // 10 (donut) -> inner safe radius default 0
-    public IReadOnlyList<T> InsideActionAoe(uint actionId, Placement target, float omenRotate = 0f, float? size = null)
+    // extraRange is added to the sheet's EffectRange, e.g. the caster's hitbox, which the game
+    // counts for shapes cast around or in front of the caster.
+    public IReadOnlyList<T> InsideActionAoe(uint actionId, Placement target, float omenRotate = 0f, float? size = null, float extraRange = 0f)
     {
         var actionSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
         if (!actionSheet.TryGetRow(actionId, out var action))
@@ -232,7 +234,7 @@ public sealed class CharacterFind<T> where T : IPositioned
             Plugin.Log.Warning($"InsideActionAoe: action {actionId} not found");
             return Array.Empty<T>();
         }
-        var range = (float)action.EffectRange;
+        var range = action.EffectRange + extraRange;
         var halfWidth = action.XAxisModifier > 0 ? action.XAxisModifier * 0.5f : range;
         var forward = new Placement(target.Position, target.Rotation + omenRotate);
         var hits = action.CastType switch
@@ -321,14 +323,15 @@ public sealed class CharacterFind<T> where T : IPositioned
 // exactly one place (Run), so any parameter it grows is carried to both callers
 // automatically — the debug picture can't drift from the resolved AOE.
 public readonly struct AoeQuery(uint actionId, Placement source,
-    float omenRotate = 0f, float? size = null)
+    float omenRotate = 0f, float? size = null, float extraRange = 0f)
 {
     public uint ActionId { get; } = actionId;
     public Placement Source { get; } = source;
     public float OmenRotate { get; } = omenRotate;
     public float? Size { get; } = size;
+    public float ExtraRange { get; } = extraRange;
 
     public IReadOnlyList<T> Run<T>(CharacterFind<T> find) where T : IPositioned =>
-        find.InsideActionAoe(ActionId, Source, OmenRotate, Size);
+        find.InsideActionAoe(ActionId, Source, OmenRotate, Size, ExtraRange);
 }
 

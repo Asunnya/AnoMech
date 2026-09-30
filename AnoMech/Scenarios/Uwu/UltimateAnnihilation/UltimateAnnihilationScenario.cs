@@ -33,7 +33,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
     // UNVERIFIED: what an orb nobody pops does; treated as a wipe.
     private const float OrbUnpoppedWipeAfter = 6f;
     private const float TankPurgeDamage = 0.56f;
-    private const float FlamingCrushTotalDamage = 8 * 0.18f;
+    private const int FlamingCrushMinStack = 5;
     private const float AetheroplasmDamage = 0.16f;
     private const float MesohighDamage = 0.16f;
     private const float SuperCycloneDamage = 0.03f;
@@ -144,7 +144,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
         world.Events.Add(23.53f, SuperCyclone);
         world.Events.Add(24.29f, () => Get(state.SearingWindTarget)?.AddStatus(StatusId.SearingWind, 30f));
         world.Events.Add(24.60f, () => garuda?.PlayActionTimeline(ActionTimelineId.WarpStart2));
-        utils.FeatherRain(FeatherRainDummyGetters(), 25.95f, 26.11f, 27.10f, at => AddPuddle(at, FeatherRainRadius, 26.81f));
+        utils.FeatherRain(FeatherRainDummyGetters(), 25.95f, 26.11f, 27.10f, at => AddPuddle(at, FeatherRainRadius, 26.81f), KillFeatherRain);
         world.Events.Add(26.52f, SpawnOrb);
         world.Events.Add(27.10f, () => titan?.PlayActionTimeline(ActionTimelineId.WarpEnd));
         world.Events.Add(28.65f, () => CastSelf(ifrit, ActionId.CrimsonCyclone, 2.7f));
@@ -153,7 +153,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
         utils.LandslideLines(() => titan, DummyGetters(LandslideDummies, 5), 30.25f, 32.44f, LandslideType.Normal);
         world.Events.Add(31.35f, SnapshotCrimsonCyclone);
         world.Events.Add(31.63f, () => PlayEffect(ifrit, ActionId.CrimsonCyclone, 2.1f));
-        world.Events.Add(31.90f, () => utils.ResolveSnapshot(crimsonCycloneSnapshot, "Crimson Cyclone"));
+        world.Events.Add(31.90f, () => UwuUtils.KillSnapshot(damage, crimsonCycloneSnapshot, ActionId.CrimsonCyclone, "stood in Ifrit's path"));
         world.Events.Add(32.44f, () => PlayEffect(titan, ActionId.LandslideTitan, 4.1f));
         utils.LandslideLines(() => titan, DummyGetters(LandslideAwakenDummies, 5), 32.44f, 34.44f, LandslideType.Awaken);
         world.Events.Add(32.75f, () => garuda?.PlayActionTimeline(ActionTimelineId.WarpEnd));
@@ -171,7 +171,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
         world.Events.Add(41.39f, SearingWindPulse);
         world.Events.Add(42.01f, () => garuda?.PlayActionTimeline(ActionTimelineId.WarpStart2));
         world.Events.Add(42.68f, () => Raidwide(ultima, ActionId.TankPurge, TankPurgeDamage, 2.1f));
-        utils.FeatherRain(FeatherRainDummyGetters(), 43.32f, 43.52f, 44.50f, at => AddPuddle(at, FeatherRainRadius, 44.22f));
+        utils.FeatherRain(FeatherRainDummyGetters(), 43.32f, 43.52f, 44.50f, at => AddPuddle(at, FeatherRainRadius, 44.22f), KillFeatherRain);
         world.Events.Add(46.73f, () => ultima?.SetTargetable(false));
         world.Events.Add(46.82f, () => ultima?.PlayActionTimeline(ActionTimelineId.WarpStart));
         world.Events.Add(47.40f, SearingWindPulse);
@@ -312,7 +312,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
                 castAt, new() { ActionId = ActionId.WeightOfTheLand, ActionType = ActionType.Action, CastTime = WeightOfTheLandCastTime },
                 effectAt, new() { ActionId = ActionId.WeightOfTheLand, AnimationLock = 1.1f, SpellId = (ushort)ActionId.WeightOfTheLand, ActionType = ActionType.Action },
                 new() { CastPosition = spot, ActionEffectPosition = spot },
-                0.2f, snapshot => utils.ResolveSnapshot(snapshot, "Weight of the Land"));
+                0.2f, snapshot => UwuUtils.KillSnapshot(damage, snapshot, ActionId.WeightOfTheLand, "stood in a puddle"));
         }
     }
 
@@ -320,26 +320,23 @@ public sealed class UltimateAnnihilationScenario : IScenario
     private void AddPuddle(Vector3 at, float radius, float snapshotAt) =>
         state.Puddles.Add(new UltimateAnnihilationState.Puddle(new Vector2(at.X, at.Z), radius, snapshotAt));
 
+    private void KillFeatherRain(IReadOnlyList<SimCharacter> snapshot) =>
+        UwuUtils.KillSnapshot(damage, snapshot, ActionId.FeatherRain, "stood under a feather");
+
     private void CastEyeOfTheStorm() => CastSelf(Dummy(EyeOfTheStormDummy), ActionId.EyeOfTheStorm, 2.7f);
 
     private void ResolveEyeOfTheStorm()
     {
         PlayEffect(Dummy(EyeOfTheStormDummy), ActionId.EyeOfTheStorm, 2.1f);
-        utils.ResolveSnapshot(party.Find.InsideRing(Vector3.Zero, EyeOfTheStormInner, EyeOfTheStormOuter).ToList(), "Eye of the Storm");
+        // The sheet row is a plain circle; the safe eye in the middle isn't data, so the ring is found here.
+        UwuUtils.KillSnapshot(damage, party.Find.InsideRing(Vector3.Zero, EyeOfTheStormInner, EyeOfTheStormOuter), ActionId.EyeOfTheStorm, "outside the eye");
     }
 
-    // A thinner stack splits the same total damage between fewer players.
     private void ResolveFlamingCrush()
     {
         if (Get(state.FlamingCrushTarget) is not { } target || !target.IsAlive()) return;
         PlayEffect(ifrit, ActionId.FlamingCrush, 2.1f, target: target.GameObjectId);
-        var stack = party.Find.InsideActionAoe(ActionId.FlamingCrush, target.Placement());
-        var share = FlamingCrushTotalDamage / Math.Max(1, stack.Count);
-        foreach (var hit in stack)
-        {
-            hit.AddStatusParam(StatusId.AccursedFlame, 0, 3f);
-            damage.ApplyDamage(hit, share, ActionId.FlamingCrush, $"{stack.Count} in the stack", share >= 1f);
-        }
+        damage.Resolve(target, ActionId.FlamingCrush, [DamageType.Magic], [(StatusId.AccursedFlame, 3f)], stackMinTargets: FlamingCrushMinStack);
     }
 
     private void TetherMesohigh() => state.Mesohigh = world.Tether(garuda, End.ClosestPlayer(), TetherId.Mesohigh);
@@ -353,7 +350,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
         {
             if (!hit.HasStatus(StatusId.ThermalLow))
             {
-                hit.Die("Died to Mesohigh (took it without Thermal Low)");
+                damage.ApplyDamage(hit, 1f, ActionId.Mesohigh, "took it without Thermal Low", lethal: true);
                 continue;
             }
             damage.ApplyDamage(hit, MesohighDamage, ActionId.Mesohigh, "Mesohigh", false);
@@ -418,7 +415,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
             var dummy = Dummy(CrimsonCycloneAwakenDummies + i);
             dummy?.SetPosition(from);
             PlayEffect(dummy, ActionId.CrimsonCycloneAwaken, 2.1f, from.Rotation);
-            utils.ResolveSnapshot(party.Find.InsideActionAoe(ActionId.CrimsonCycloneAwaken, from), "Crimson Cyclone (Awaken)");
+            damage.Resolve(IPositioned.From(from), ActionId.CrimsonCycloneAwaken, [DamageType.Lethal], []);
         }
     }
 
@@ -465,8 +462,6 @@ public sealed class UltimateAnnihilationScenario : IScenario
 
     private void ResolveHomingLasers()
     {
-        foreach (var hit in homingLasersSnapshot)
-            if (!IsTank(hit))
-                hit.Die("Died to Homing Lasers (tankbuster)");
+        UwuUtils.KillSnapshot(damage, homingLasersSnapshot.Where(hit => !IsTank(hit)), ActionId.HomingLasers, "tank buster");
     }
 }
