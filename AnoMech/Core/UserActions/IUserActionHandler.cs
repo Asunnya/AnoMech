@@ -12,6 +12,9 @@ internal interface IUserActionHandler
     // (a queued/spammed press or our own re-entrant fire won't call it again).
     void OnAction(ActionType actionType, uint actionId) { }
 
+    // Same, for a handler that needs who the action was aimed at.
+    void OnAction(ActionType actionType, uint actionId, ulong targetId) => OnAction(actionType, actionId);
+
     // A scenario started — reset cooldowns/gauges the server would otherwise track.
     void OnScenarioStart() { }
 

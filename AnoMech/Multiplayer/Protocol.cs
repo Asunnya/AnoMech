@@ -62,7 +62,6 @@ namespace AnoMech.Multiplayer;
 [JsonDerivedType(typeof(UltimateSuppressionAiReplayStateMessage), "ultimateSuppressionAiReplayState")]
 [JsonDerivedType(typeof(TopP5DeltaBeyondDefenseUpdateMessage), "topP5DeltaBeyondDefenseUpdate")]
 [JsonDerivedType(typeof(TopP5OmegaHelloWorld2UpdateMessage), "topP5OmegaHelloWorld2Update")]
-[JsonDerivedType(typeof(SelfMitigationMessage), "selfMitigation")]
 [JsonDerivedType(typeof(PeerAppliedEnemyStatusMessage), "peerAppliedEnemyStatus")]
 [JsonDerivedType(typeof(PeerAppliedRoleStatusMessage), "peerAppliedRoleStatus")]
 [JsonDerivedType(typeof(KickMessage), "kick")]
@@ -98,7 +97,6 @@ public sealed record LobbyStateMessage(
     int ScenarioIndex,
     int SelectedAi,
     int SelectedWaymark,
-    Dictionary<string, ushort> TankBusterPlan,
     List<string>? ScenarioSettings = null,
     string? ScenarioSettingsJson = null,
     RunClockState? Clock = null) : MpMessage, IHostOnlyMessage;
@@ -181,7 +179,7 @@ public sealed record EnemyState(
 public sealed record TetherState(int NetId, ushort TetherId, int? AEnemyNetId, PartyRole? ARole, int? BEnemyNetId, PartyRole? BRole);
 
 // Host-authoritative even for a peer's own role: a peer runs no scenario logic, so statuses,
-// lockons and HP (TankMitigation/TankHpRegen are host-only) all come from here. The animation
+// lockons and HP all come from here. The animation
 // timeline is a scripted pose (Umad P1's sleep, a confused member's swing); the KO pose travels
 // as RoleKilledMessage, so a dead role's timeline is not replayed. PlayedAction is a doppel's
 // own action animation (a bot tank's limit break), edge-triggered on its seq.
@@ -387,14 +385,10 @@ public sealed record UltimatePredationAiReplayStateMessage(
     float SafeFirstSetX, float SafeFirstSetY, float SafeFirstSetZ, float SafeFirstSetRotation,
     float SafeSecondSetX, float SafeSecondSetY, float SafeSecondSetZ, float SafeSecondSetRotation) : MpMessage, IScenarioReplayStateMessage;
 
-// Peer -> host, on change. A real Rampart/invuln press never touches the host's puppet copy.
-// SelfShieldFraction is the current total (TankShieldTracker.SetFromPeerReport), not an increment.
-public sealed record SelfMitigationMessage(Guid PeerId, List<ushort> ActiveMitigationStatusIds, float SelfShieldFraction = 0f) : MpMessage;
-
-// Peer -> host: a SourceSide mitigation (Reprisal) applied locally; the peer's enemy doppels
+// Peer -> host: an enemy debuff (Reprisal) applied locally; the peer's enemy doppels
 // are cosmetic, so this is how the host's enemy gets the debuff.
 public sealed record PeerAppliedEnemyStatusMessage(Guid PeerId, List<int> EnemyNetIds, ushort StatusId, float Duration) : MpMessage;
 
-// Party/Ally-scope counterpart: a party-wide mitigation touches roles whose puppets are
-// cosmetic. Self-scope presses use SelfMitigationMessage.
-public sealed record PeerAppliedRoleStatusMessage(Guid PeerId, List<PartyRole> Roles, ushort StatusId, float Duration, float ShieldFraction = 0f) : MpMessage;
+// Party counterpart, the peer's own role included: a peer's presses land only on its own
+// client, and the host decides who lives from the statuses on its own copies.
+public sealed record PeerAppliedRoleStatusMessage(Guid PeerId, List<PartyRole> Roles, ushort StatusId, float Duration) : MpMessage;

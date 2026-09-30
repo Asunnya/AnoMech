@@ -69,15 +69,6 @@ public static class UmadP3LimitCutConstants
     // sph_lockon2_num01-08, given to all eight players at once as the sixth clone appears.
     public static readonly uint[] BlasterLockons = [336, 337, 338, 339, 437, 438, 439, 440];
 
-    // (action, status) by ClassJob row: Paladin, Warrior, Dark Knight, Gunbreaker. A tank LB3 is
-    // mandatory here, never optional.
-    public static readonly IReadOnlyDictionary<byte, (uint ActionId, ushort StatusId)> TankLimitBreakByJob =
-        new Dictionary<byte, (uint, ushort)> { [19] = (199, 196), [21] = (4240, 863), [32] = (4241, 864), [37] = (17105, 1931) };
-
-    // The same ids flat, for the multiplayer allowlist: it harvests declared constants and
-    // arrays, and can't see inside the dictionary above (see SimAssets).
-    public static readonly uint[] TankLimitBreakActionIds = TankLimitBreakByJob.Values.Select(v => v.ActionId).ToArray();
-
     public static class Geometry
     {
         public const float ArenaRadius = 20f;
@@ -103,7 +94,6 @@ public static class UmadP3LimitCutConstants
         // within 2.3y of one another.
         public const float CycloneStackRadius = 4.3f;
         public const float BaitRadius = 17.7f;
-        public const float CycloneRadius = 6f;
         // BossMod's ProximityAOEs(UmbraSmash, 20); the one real hit inside it was 312k at 17y.
         public const float UmbraLethalRadius = 20f;
         // Within 45 deg of the wind's direction is the 10y push (BossMod's cone; real players sat
@@ -118,37 +108,27 @@ public static class UmadP3LimitCutConstants
         private static readonly string[] SpotNames = ["S", "SE", "E", "NE", "N", "NW", "W", "SW"];
     }
 
-    // Fractions of a non-tank's max HP (216k in the logs, ~30% party mitigation baked in).
-    // Non-tanks die at a full bar; tanks go through the HP model at that basis.
+    // Shown hits are fractions of max HP (a non-tank's 216k in the logs, ~30% party mitigation baked in).
     public static class Damage
     {
-        public const float CalibrationMaxHealth = 216_000f;
         // ~27k on a non-tank, ~6k under the LB3.
         public const float CloneAppear = 0.13f;
-        // Beyond the 20y circle: 2-8k.
-        public const float UmbraFar = 0.03f;
-        // One pool per cyclone, split evenly among everyone inside its 6y: ~221k under the LB3
-        // (27.7k a head with all eight; 224 real cyclones fit 221k/N within 3%). Raw = that pool
-        // over the LB3's 20%.
-        public const float CycloneTotalRaw = 5.1f;
-        // The real 221k is lived through on shields and heals the sim does not model.
-        public const float CycloneLethalTotal = 1.25f;
-        // Linear falloff from 20x max HP at the clone to a 0.35x floor from ~36.5y (230 real
-        // hits): a non-tank dies inside ~35y, a tank on cooldowns inside ~33y.
-        public const float ChargeFull = 20.3f;
-        public const float ChargeFalloffRange = 37.2f;
-        public const float ChargeFloor = 0.35f;
-        public static float ChargeFraction(float distanceFromClone)
-            => MathF.Max(ChargeFloor, ChargeFull * (1f - distanceFromClone / ChargeFalloffRange));
+        // A second cyclone lands on the first's Wind Resistance Down II; the tank LB3's 80% is
+        // exactly enough to live through it.
+        public const float CycloneVulnMitigation = 0.80f;
+        // A tank alone in one needs the LB3 and a major cooldown of its own.
+        public const float CycloneSoloTankMitigation = 0.85f;
+        // The charge falls off with distance from 20x max HP at the clone; an unmitigated
+        // non-tank dies inside ~35y.
+        public const float ChargeLethalRange = 35f;
         // A second hit inside it landed at x9-10 in all seven real cases.
         public const float MagicVulnerabilityUpSeconds = 2.96f;
         // Black Hole's buster: two hits 3.0s apart on whoever is closest to Exdeath, 929k raw
-        // each, the second unsurvivable while Lightning Resistance Down II is still up.
-        public const float ThunderIIIRawDamage = 929_000f;
-        public const float ThunderIIIDoubleHitDamage = ThunderIIIRawDamage * 40f;
+        // each against a 325k tank, the second unsurvivable short of an invuln while Lightning
+        // Resistance Down II is still up.
+        public const float ThunderIIIRequiredMitigation = 0.60f;
         public const float LightningResistanceDownSeconds = 3.96f;
         public const float WindResistanceDownSeconds = 0.96f;
-        public const float LimitBreakSeconds = 8f;
     }
 
     // The real track starts 116.67s before the Umbra Smash cast.
@@ -170,9 +150,8 @@ public static class UmadP3LimitCutConstants
         public const float IconsAfterUmbra = 10.83f;
         public const float CyclonesAfterUmbra = 11.967f;
         public const float AetherlinkAfterUmbra = 13.379f;
-        // The status lands 1.34s after the press.
-        public const float TankLimitBreakAfterUmbra = 5.6f;
-        public const float TankLimitBreakStatusDelay = 1.34f;
+        // When the real LB3's status landed, 1.34s after its press.
+        public const float TankLimitBreakAfterUmbra = 6.94f;
         // Clone k is teleported to its spot, then fires its appearance ~0.1s later, ~2.0s apart.
         public static readonly float[] PlacementAfterUmbra = [0.803f, 2.808f, 4.815f, 6.821f, 8.830f, 10.836f, 12.840f, 14.846f];
         public static readonly float[] AppearAfterUmbra = [0.892f, 2.898f, 4.904f, 6.910f, 8.919f, 10.925f, 12.929f, 14.933f];

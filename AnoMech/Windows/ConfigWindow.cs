@@ -64,6 +64,15 @@ public class ConfigWindow : Window, IDisposable
                 configuration.CastInterruptThreshold = Math.Clamp(threshold, 0f, 5f);
                 configuration.Save();
             }
+
+            var tankMitigation = configuration.EnableTankMitigation;
+            if (ImGui.Checkbox("Require tank mitigation", ref tankMitigation))
+            {
+                configuration.EnableTankMitigation = tankMitigation;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Some tankbusters (depending on scenario support) will check your mitigation.");
         }
 
         ImGui.Separator();

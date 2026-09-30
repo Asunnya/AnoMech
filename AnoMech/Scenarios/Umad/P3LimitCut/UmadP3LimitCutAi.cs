@@ -57,7 +57,7 @@ public sealed class UmadP3LimitCutAi : IScenarioAi<UmadP3LimitCutState>
     private void InvulnPlannedTank()
     {
         if (ThunderIIIPlanning.InvulnRole(state.ThunderPlan) is not { } role) return;
-        if (world.Party.Get(role) is { } tank && tank.IsAlive() && TankMitigation.IsBotDriven(world.Party, tank))
+        if (world.Party.Get(role) is { } tank && tank.IsAlive() && world.Party.IsBotDriven(tank))
             world.Party.GiveInvuln(role, 10f);
     }
 

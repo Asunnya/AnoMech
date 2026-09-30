@@ -68,6 +68,9 @@ public class Configuration : IPluginConfiguration
     // EnableUserActions.
     public float CastInterruptThreshold { get; set; } = 0.5f;
 
+    // Tankbusters check the tank's mitigation cooldowns and HP. Gated by EnableUserActions.
+    public bool EnableTankMitigation { get; set; } = true;
+
     // Firewall opcode config — updated automatically by OpcodeUpdater on game version change.
     public uint[] ZoneDownOpcodes { get; set; } = [];
     public string ZoneFirewallGameVersion { get; set; } = "";

@@ -28,6 +28,7 @@ public sealed unsafe class UserActions : IDisposable
     private readonly List<IUserActionHandler> effectHandlers =
     [
         new JobActionHandler(),
+        new LimitBreakHandler(),
         new SamuraiStateHandler(),
         new BlackMageStateHandler(),
         new SummonerStateHandler(),
@@ -51,6 +52,7 @@ public sealed unsafe class UserActions : IDisposable
     private bool pendingResolve;
     private ActionType pendingType;
     private uint pendingAction;
+    private ulong pendingTarget;
     private float pendingTotal, pendingMax;
 
     // Dedup gate: LastUsedActionSequence advances only at an action's actual execution,
@@ -137,7 +139,7 @@ public sealed unsafe class UserActions : IDisposable
         ResolvePendingCast();
     }
 
-    private void OnActionExecuted(ActionType actionType, uint actionId)
+    private void OnActionExecuted(ActionType actionType, uint actionId, ulong targetId)
     {
         if (!SimActive) return;
         var am = ActionManager.Instance();
@@ -163,12 +165,13 @@ public sealed unsafe class UserActions : IDisposable
             pendingResolve = true;
             pendingType = actionType;
             pendingAction = actionId;
+            pendingTarget = targetId;
             pendingTotal = bc->CastInfo.TotalCastTime;
             pendingMax = bc->CastInfo.CurrentCastTime;
         }
         else
         {
-            foreach (var handler in effectHandlers) handler.OnAction(actionType, actionId);
+            foreach (var handler in effectHandlers) handler.OnAction(actionType, actionId, targetId);
         }
     }
 
@@ -185,12 +188,12 @@ public sealed unsafe class UserActions : IDisposable
             return;
         }
 
-        // Cast ended: apply only if it reached completion (an interrupt stops short of the slidecast window).
-        if (pendingMax >= pendingTotal - 0.4f)
+        // Cast ended: apply only if it reached the slidecast window, which an interrupt never does.
+        if (pendingMax >= pendingTotal - Plugin.Config.CastInterruptThreshold)
         {
             var am = ActionManager.Instance();
             if (am != null) processedSeq = am->LastUsedActionSequence; // dedup any re-entrant combo fire during dispatch
-            foreach (var handler in effectHandlers) handler.OnAction(pendingType, pendingAction);
+            foreach (var handler in effectHandlers) handler.OnAction(pendingType, pendingAction, pendingTarget);
         }
         pendingResolve = false;
         pendingMax = 0;

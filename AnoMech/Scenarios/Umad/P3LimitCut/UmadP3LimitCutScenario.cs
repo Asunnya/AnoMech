@@ -55,8 +55,10 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
         party = world.Party;
         state = new UmadP3LimitCutState(party, settingsWindow.Overrides);
         LastState = state;
-        PopulateThunderPlan();
         damage = new DamageSolver(party);
+        damage.SetStatuses(DamageType.Lightning, UmadConstants.StatusId.LightningResistanceDownII);
+        damage.SetStatuses(DamageType.Magic, UmadConstants.StatusId.MagicVulnerabilityUp);
+        damage.SetMitigableStatuses(DamageType.Wind, Constants.Damage.CycloneVulnMitigation, Constants.StatusId.WindResistanceDownII);
         cycloneTargets.Clear();
         Array.Clear(chargeTargets);
         DiagnosticLog.Info(
@@ -175,56 +177,7 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
         if (message is not UmadP3LimitCutAiReplayStateMessage msg || aiIndex < 0 || aiIndex >= AiStrats.Count) return null;
         if (UmadP3LimitCutState.FromNetworkReplay(msg.StartSpot, msg.Clockwise, msg.Numbers, msg.Headwinds, msg.BossSpot, msg.BaitRole, msg.ThunderPlan) is not { } shadowState) return null;
         ((IScenarioAi<UmadP3LimitCutState>)AiStrats[aiIndex]).Run(shadowState, replayWorld);
-        SchedulePeerThunderMitigation(shadowState, replayWorld, myRole);
         return shadowState;
-    }
-
-    // Black Hole's Thunder III plan plumbing for the one set here; a peer applies the kit to its
-    // own character, since ResolveThunder never runs there. InvulnsBoth needs no entry: the Ai
-    // grants the invuln.
-    private const ushort ThunderSharePlanned = 1;
-    private static string ThunderPlanKey(int hitNumber, PartyRole role) => $"p3-limitcut-thunder3-hit{hitNumber}-{role}";
-
-    private void PopulateThunderPlan()
-    {
-        var mp = Plugin.MultiplayerInstance;
-        if (mp is { IsConnected: true, IsHost: false })
-        {
-            DiagnosticLog.Info("[UmadP3LimitCut] Thunder III plan: not set here -- non-host peer, using whatever the host broadcasts.");
-            return;
-        }
-        var plan = mp?.Session.TankBusterPlan;
-        if (plan == null)
-        {
-            DiagnosticLog.Warn("[UmadP3LimitCut] Thunder III plan: Plugin.MultiplayerInstance unavailable -- no plan written, bot tanks stay unmitigated for a Share hit.");
-            return;
-        }
-        plan.Clear();
-        if (state.ThunderPlan is ThunderIIIAssignment.ShareMtFirst or ThunderIIIAssignment.ShareOtFirst)
-            foreach (var hit in new[] { 1, 2 })
-                foreach (var role in new[] { PartyRole.MainTank, PartyRole.OffTank })
-                    plan[ThunderPlanKey(hit, role)] = ThunderSharePlanned;
-        DiagnosticLog.Info($"[UmadP3LimitCut] Thunder III plan for this run: {state.ThunderPlan}.");
-    }
-
-    private void ApplyPlannedThunderMitigation(SimCharacter? target, int hitNumber)
-    {
-        if (target is not ISimPartyMember member || !TankMitigation.IsBotDriven(party, target)) return;
-        if (Plugin.MultiplayerInstance?.Session.TankBusterPlan.GetValueOrDefault(ThunderPlanKey(hitNumber, member.Role)) != ThunderSharePlanned) return;
-        UmadP3BlackHoleScenario.ApplyThunderShareKit(target);
-    }
-
-    private static void SchedulePeerThunderMitigation(UmadP3LimitCutState shadow, SimWorld peerWorld, PartyRole myRole)
-    {
-        if (shadow.ThunderPlan is not (ThunderIIIAssignment.ShareMtFirst or ThunderIIIAssignment.ShareOtFirst)) return;
-        var (first, second) = ThunderIIIPlanning.Roles(shadow.ThunderPlan);
-        if (first != myRole && second != myRole) return;
-        foreach (var at in new[] { Constants.Timing.ThunderHit1AfterUmbra, Constants.Timing.ThunderHit2AfterUmbra })
-            peerWorld.Events.Add(Constants.Timing.UmbraCastAt + at - 0.05f, () =>
-            {
-                if (peerWorld.Party.Player is { } player)
-                    UmadP3BlackHoleScenario.ApplyThunderShareKit(player);
-            });
     }
 
     // Chaos/Exdeath may not be replicated yet when StartReplay runs.
@@ -307,19 +260,16 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
         });
     }
 
-    // Black Hole's rules: whoever is closest to Exdeath, a tank buster through the HP model, the
-    // second hit forty-fold while Lightning Resistance Down II is still up.
+    // Black Hole's rules: whoever is closest to Exdeath, a tank buster, the second hit lethal
+    // short of an invuln while Lightning Resistance Down II is still up.
     private void ResolveThunder(int hitNumber)
     {
         if (state.Objects.Exdeath is not { } exdeath) return;
         var target = party.Find.Closest(exdeath.Position);
-        var doubleHit = hitNumber == 2 && (target?.HasStatus(UmadConstants.StatusId.LightningResistanceDownII) ?? false);
-        ApplyPlannedThunderMitigation(target, hitNumber);
         thunderHelper?.Cast(UmadConstants.ActionId.ThunderIII_Resolve, castSeconds: 0f, targetId: target?.GameObjectId, animationLock: Constants.AnimationLock.ThunderHit);
-        damage.Resolve(target, UmadConstants.ActionId.ThunderIII_Resolve, [DamageType.TankBuster],
+        damage.Resolve(target, UmadConstants.ActionId.ThunderIII_Resolve, [DamageType.TankBuster, DamageType.Magic, DamageType.Lightning],
             [(UmadConstants.StatusId.LightningResistanceDownII, Constants.Damage.LightningResistanceDownSeconds)],
-            tankBusterRawDamage: doubleHit ? Constants.Damage.ThunderIIIDoubleHitDamage : Constants.Damage.ThunderIIIRawDamage,
-            tankBusterSource: exdeath);
+            requiredMitigation: Constants.Damage.ThunderIIIRequiredMitigation);
     }
 
     private void ResolveDecisiveBattle()
@@ -335,28 +285,7 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     // A survivable hit, shown after the member's own active mitigation, so the LB3 at 13.6s makes
     // the appearance raidwides read as the real 80%-cut numbers.
     private void Hit(SimCharacter member, float fraction, uint actionId, string context)
-    {
-        var survive = member is ISimPartyMember pm ? TankMitigation.SurvivalFraction(party, pm.Role) : 1f;
-        damage.ApplyDamage(member, fraction * survive, actionId, context, lethal: false);
-    }
-
-    // A hit that can kill: a tank takes it through the HP model, anyone else is shown it after
-    // their tracked mitigation and dies at a full bar. Returns whether the member is still standing.
-    private bool TakeHit(SimCharacter member, float fraction, uint actionId, string context)
-    {
-        if (member is not ISimPartyMember pm) return true;
-        if (pm.Role.IsTank())
-        {
-            if (TankMitigation.ApplyTankBusterDamage(party, pm.Role, fraction * Constants.Damage.CalibrationMaxHealth)) return true;
-            member.Die($"Died to {ActionLookup.Name(actionId)} ({context})");
-            return false;
-        }
-        var shown = fraction * TankMitigation.SurvivalFraction(party, pm.Role);
-        damage.ApplyDamage(member, shown, actionId, context, lethal: shown >= 1f);
-        return shown < 1f;
-    }
-
-    private static float Distance2D(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
+        => damage.ApplyDamage(member, fraction * (1f - damage.EffectiveMitigation(member)), actionId, context, lethal: false);
 
     private void StartUmbraSmash()
     {
@@ -369,40 +298,14 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     }
 
     private void ResolveUmbraSmash()
-    {
-        foreach (var member in party.ActiveMembers().ToList())
-        {
-            var d = Vector2.Distance(new Vector2(member.Position.X, member.Position.Z), new Vector2(umbraImpact.X, umbraImpact.Z));
-            if (d < Constants.Geometry.UmbraLethalRadius)
-                damage.ApplyDamage(member, 1f, Constants.ActionId.UmbraSmash, $"{d:F1}y from the impact, inside 20y", lethal: true);
-            else
-                Hit(member, Constants.Damage.UmbraFar, Constants.ActionId.UmbraSmash, "proximity");
-        }
-    }
+        => damage.Resolve(IPositioned.From(umbraImpact), Constants.ActionId.UmbraSmash, [], [],
+            lethalWithin: Constants.Geometry.UmbraLethalRadius);
 
     // Skipped by default when the human is a tank, so the press is theirs to make.
     private void BotTankLimitBreak()
     {
-        var wanted = settingsWindow.Overrides.BotTankLimitBreak ?? !party.PlayerRole.IsTank();
-        if (!wanted)
-        {
-            DiagnosticLog.Info("[UmadP3LimitCut] Bot tank LB3 skipped (the real player is a tank, or the setting is off).");
-            return;
-        }
-        foreach (var role in new[] { PartyRole.MainTank, PartyRole.OffTank })
-        {
-            if (party.Get(role) is not SimPartyNpc tank || !tank.IsAlive()) continue;
-            if (!Constants.TankLimitBreakByJob.TryGetValue(tank.ClassJob, out var lb)) continue;
-            tank.PlayAction(lb.ActionId);
-            world.Events.Add(Constants.Timing.TankLimitBreakStatusDelay, () =>
-            {
-                foreach (var member in party.ActiveMembers().ToList())
-                    member.AddStatus(lb.StatusId, Constants.Damage.LimitBreakSeconds);
-            });
-            DiagnosticLog.Info($"[UmadP3LimitCut] {role} (job {tank.ClassJob}) pops tank LB3 {ActionLookup.Name(lb.ActionId)}: status {lb.StatusId} on the party for {Constants.Damage.LimitBreakSeconds:F0}s from {Constants.Timing.TankLimitBreakStatusDelay:F2}s after the press.");
-            return;
-        }
-        DiagnosticLog.Warn("[UmadP3LimitCut] No bot tank alive to pop LB3.");
+        if (settingsWindow.Overrides.BotTankLimitBreak ?? !party.PlayerRole.IsTank())
+            party.BotTankLimitBreak();
     }
 
     private void ChaosLands()
@@ -486,53 +389,18 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
         }
     }
 
-    // One Cyclone per player that carried a wind into the knockback, each a fixed pool split
-    // evenly among everyone inside its 6y: eight-way splits are the real 8 x 27.7k under the
-    // LB3, without it the same stack is 5x max HP, and nobody inside means the whole pool, a
-    // death for a non-tank: only a tank on cooldowns survives soaking one alone.
+    // One Cyclone per player that carried a wind into the knockback: a two-person stack that
+    // only a tank on cooldowns survives alone, each leaving a vuln the next one lands on.
     private void ResolveCyclones()
     {
         windCrystal?.FadeOut();
         var centres = cycloneTargets.Where(t => t.IsAlive()).ToList();
-        var shares = new Dictionary<SimCharacter, List<float>>();
-        var alone = new HashSet<SimCharacter>();
         for (var i = 0; i < centres.Count; i++)
         {
             cycloneHelpers[i % cycloneHelpers.Length]?.Cast(UmadConstants.ActionId.Cyclone, castSeconds: 0f, targetId: centres[i].GameObjectId, animationLock: Constants.AnimationLock.Cyclone);
-            var inside = party.Find.InsideCircle(centres[i].Position, Constants.Geometry.CycloneRadius).Where(h => h.IsAlive()).ToList();
-            if (inside.Count <= 1) alone.Add(centres[i]);
-            var share = Constants.Damage.CycloneTotalRaw / Math.Max(1, inside.Count);
-            foreach (var hit in inside)
-            {
-                if (!shares.TryGetValue(hit, out var list)) shares[hit] = list = [];
-                list.Add(share);
-            }
-        }
-        foreach (var (member, list) in shares)
-        {
-            if (member is not ISimPartyMember pm) continue;
-            var raw = list.Sum();
-            if (pm.Role.IsTank())
-            {
-                if (!TankMitigation.ApplyTankBusterDamage(party, pm.Role, raw * Constants.Damage.CalibrationMaxHealth))
-                    member.Die($"Died to Cyclone ({list.Count} cyclone{(list.Count == 1 ? "" : "s")} for {raw:F1}x a non-tank's HP before cooldowns{(alone.Contains(member) ? ", alone in your own" : "")})");
-                else
-                    member.AddStatus(Constants.StatusId.WindResistanceDownII, Constants.Damage.WindResistanceDownSeconds);
-                continue;
-            }
-            if (alone.Contains(member))
-            {
-                member.Die("Died to Cyclone (nobody inside 6y to split your own with -- the whole pool)");
-                continue;
-            }
-            var survive = TankMitigation.SurvivalFraction(party, pm.Role);
-            foreach (var share in list)
-                damage.ApplyDamage(member, share * survive, UmadConstants.ActionId.Cyclone, "wind stack", lethal: false);
-            var total = raw * survive;
-            if (total >= Constants.Damage.CycloneLethalTotal)
-                member.Die($"Died to Cyclone ({list.Count} cyclones totalling {total:F1}x max HP: {(survive > 0.5f ? "no tank LB3 up" : "inside more circles than your stack mates, stack tighter")})");
-            else
-                member.AddStatus(Constants.StatusId.WindResistanceDownII, Constants.Damage.WindResistanceDownSeconds);
+            damage.Resolve(centres[i], UmadConstants.ActionId.Cyclone, [DamageType.Wind],
+                [(Constants.StatusId.WindResistanceDownII, Constants.Damage.WindResistanceDownSeconds)],
+                stackMinTargets: 2, understackedTankMitigation: Constants.Damage.CycloneSoloTankMitigation);
         }
     }
 
@@ -564,23 +432,8 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
         var target = chargeTargets[k] is { } t && t.IsAlive() ? t : ChargeTarget(k);
         if (target != null) clone.Face(target.Position);
         clone.Cast(Constants.ActionId.UltimaBlasterCharge, castSeconds: 0f, animationLock: Constants.AnimationLock.CloneCharge);
-        var hits = damage.Resolve(clone, Constants.ActionId.UltimaBlasterCharge, [DamageType.Lethal], [], killTargets: false);
-        foreach (var hit in hits)
-        {
-            var distance = Distance2D(hit.Position, clone.Position);
-            var where = ReferenceEquals(hit, target)
-                ? $"#{k + 1}'s charge from {distance:F0}y"
-                : $"in the path of #{k + 1}'s charge, {distance:F0}y from its clone";
-            if (hit.HasStatus(UmadConstants.StatusId.MagicVulnerabilityUp))
-            {
-                hit.Die($"Died to Ultima Blaster ({where}: a second hit inside Magic Vulnerability Up's 3s)");
-                continue;
-            }
-            var fraction = Constants.Damage.ChargeFraction(distance);
-            var survived = TakeHit(hit, fraction, Constants.ActionId.UltimaBlasterCharge,
-                fraction > Constants.Damage.ChargeFloor ? $"{where}: it hits harder the nearer you stand, stand straight across the arena" : where);
-            if (survived)
-                hit.AddStatus(UmadConstants.StatusId.MagicVulnerabilityUp, Constants.Damage.MagicVulnerabilityUpSeconds);
-        }
+        damage.Resolve(clone, Constants.ActionId.UltimaBlasterCharge, [DamageType.Magic],
+            [(UmadConstants.StatusId.MagicVulnerabilityUp, Constants.Damage.MagicVulnerabilityUpSeconds)],
+            lethalWithin: Constants.Damage.ChargeLethalRange);
     }
 }

@@ -124,7 +124,6 @@ public sealed partial class MultiplayerManager
         SessionEndedMessage m => m.PeerId,
         ResetRequestMessage m => m.PeerId,
         LeaveRequestMessage m => m.PeerId,
-        SelfMitigationMessage m => m.PeerId,
         PeerAppliedEnemyStatusMessage m => m.PeerId,
         PeerAppliedRoleStatusMessage m => m.PeerId,
         _ => null,
@@ -224,27 +223,12 @@ public sealed partial class MultiplayerManager
                 peerLatencyMs[pong.PeerId] = PingClockMs() - pong.SentAtMs;
                 break;
             // Mitigation reports put statuses on the host's own characters: seated peers only,
-            // chart ids only, durations and shields clamped.
-            case SelfMitigationMessage mit when IsHost:
-            {
-                if (Session.RoleOf(mit.PeerId) is not { } selfRole) break;
-                var previous = peerMitigationStatusIds.GetValueOrDefault(mit.PeerId, []);
-                var current = NetGuard.Cap(mit.ActiveMitigationStatusIds, NetGuard.MaxStatusesPerEntity)
-                    .Where(TankMitigation.IsKnownTargetSideStatus).ToHashSet();
-                var who = Session.NameOf(mit.PeerId);
-                foreach (var gained in current.Except(previous))
-                    DiagnosticLog.Info($"[Multiplayer] Host: {who} ({selfRole}) reported mitigation status {gained} gained.");
-                foreach (var lost in previous.Except(current))
-                    DiagnosticLog.Info($"[Multiplayer] Host: {who} ({selfRole}) reported mitigation status {lost} lost.");
-                peerMitigationStatusIds[mit.PeerId] = current;
-                TankShieldTracker.SetFromPeerReport(selfRole, NetGuard.Clamp(mit.SelfShieldFraction, 0f, 1f));
-                break;
-            }
+            // known ids only, durations clamped.
             case PeerAppliedEnemyStatusMessage applied when IsHost:
             {
                 var who = Session.NameOf(applied.PeerId);
                 if (Session.RoleOf(applied.PeerId) is null) break;
-                if (!TankMitigation.IsKnownSourceSideStatus(applied.StatusId))
+                if (!AnoMech.Core.UserActions.Mitigation.ByStatusId.ContainsKey(applied.StatusId))
                 {
                     DiagnosticLog.Warn($"[Multiplayer] Host: {who} reported enemy status {applied.StatusId}, which is no known mitigation -- dropping.");
                     break;
@@ -267,13 +251,12 @@ public sealed partial class MultiplayerManager
             {
                 var who = Session.NameOf(applied.PeerId);
                 if (Session.RoleOf(applied.PeerId) is null) break;
-                if (!TankMitigation.IsKnownTargetSideStatus(applied.StatusId))
+                if (!AnoMech.Core.UserActions.Mitigation.ByStatusId.ContainsKey(applied.StatusId))
                 {
                     DiagnosticLog.Warn($"[Multiplayer] Host: {who} reported role status {applied.StatusId}, which is no known mitigation -- dropping.");
                     break;
                 }
                 var duration = NetGuard.Clamp(applied.Duration, 0f, NetGuard.MaxMitigationSeconds);
-                var shieldFraction = NetGuard.Clamp(applied.ShieldFraction, 0f, 1f);
                 foreach (var role in NetGuard.Cap(applied.Roles, 8).Where(Enum.IsDefined))
                 {
                     if (Plugin.GameInstance.World.Party.Get(role) is not { } member)
@@ -281,10 +264,10 @@ public sealed partial class MultiplayerManager
                         DiagnosticLog.Warn($"[Multiplayer] Host: {who} reported status {applied.StatusId} on role {role}, but that slot is empty -- dropping.");
                         continue;
                     }
+                    // A re-press replaces the status, as it does on the peer; AddStatus alone would stack it.
+                    member.RemoveStatus(applied.StatusId);
                     member.AddStatus(applied.StatusId, duration);
                     DiagnosticLog.Info($"[Multiplayer] Host: applied {who}'s reported status {applied.StatusId} (duration={duration:F1}) to role {role}.");
-                    if (shieldFraction > 0f)
-                        TankShieldTracker.Grant(role, shieldFraction, duration);
                 }
                 break;
             }

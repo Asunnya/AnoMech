@@ -110,9 +110,6 @@ public sealed partial class MultiplayerManager : IDisposable
     private readonly Dictionary<Guid, long> deferredLeaveMs = new();
     private readonly Dictionary<Guid, float> peerLatencyMs = new();
     private readonly HashSet<Guid> warnedStalePeers = new();
-    // Host-only: each peer's self-reported mitigation statuses (SelfMitigationMessage); read by
-    // TankMitigation.ComputeMitigation.
-    private readonly Dictionary<Guid, HashSet<ushort>> peerMitigationStatusIds = new();
     // Rebuilt by the host each ping cycle and broadcast (PeerStatusMessage).
     private readonly Dictionary<Guid, PeerStatusEntry> peerStatuses = new();
     // Peer-only: the host never pings itself, so its liveness is the time since any host broadcast.
@@ -228,13 +225,6 @@ public sealed partial class MultiplayerManager : IDisposable
     public event Action? LobbyChanged;
 
     public PeerStatusEntry? GetPeerStatus(Guid peerId) => peerStatuses.GetValueOrDefault(peerId);
-
-    // Host-only (a peer has no view of other peers' statuses); empty if unclaimed or unreported.
-    public IReadOnlyCollection<ushort> PeerMitigationStatusIds(PartyRole role)
-    {
-        if (!IsHost || !Session.ClaimedBy.TryGetValue(role, out var peerId)) return [];
-        return peerMitigationStatusIds.TryGetValue(peerId, out var ids) ? ids : [];
-    }
 
     public float SecondsSinceHostMessage => (Environment.TickCount64 - lastHostMessageMs) / 1000f;
     // SessionCode is set synchronously on Join; this is what confirms a host is actually there.
@@ -411,10 +401,6 @@ public sealed partial class MultiplayerManager : IDisposable
         deferredLeaveMs.Clear();
         peerLatencyMs.Clear();
         peerStatuses.Clear();
-        peerMitigationStatusIds.Clear();
-        lastSentMitigationStatusIds.Clear();
-        lastSentShieldFraction = 0f;
-        TankShieldTracker.Reset();
         warnedStalePeers.Clear();
         pingTimer = 0f;
         pendingStartResponses = null;
@@ -703,11 +689,7 @@ public sealed partial class MultiplayerManager : IDisposable
         var who = Session.NameOf(peerId);
         DiagnosticLog.Info($"[Multiplayer] Removing {who} ({peerId}) from the session (running={running}).");
         foreach (var r in Session.ClaimedBy.Where(kv => kv.Value == peerId).Select(kv => kv.Key).ToList())
-        {
             Session.ClaimedBy.Remove(r);
-            // Their banked shield must not linger onto the role's next claimant.
-            TankShieldTracker.SetFromPeerReport(r, 0f);
-        }
         Session.Names.Remove(peerId);
         Session.Builds.Remove(peerId);
         peerConnectionIds.Remove(peerId);
@@ -716,7 +698,6 @@ public sealed partial class MultiplayerManager : IDisposable
         deferredLeaveMs.Remove(peerId);
         peerLatencyMs.Remove(peerId);
         peerStatuses.Remove(peerId);
-        peerMitigationStatusIds.Remove(peerId);
         warnedStalePeers.Remove(peerId);
         startCheckFailures.Remove(peerId);
         if (pendingStartResponses?.Remove(peerId) == true && pendingStartResponses.Count == 0)

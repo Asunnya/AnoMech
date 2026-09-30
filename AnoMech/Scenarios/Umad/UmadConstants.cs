@@ -230,9 +230,8 @@ public static class UmadConstants
 
     public static class Tunables
     {
-        // A real level-100 tank's own max HP -- every Umad scenario's
-        // IScenario.TankMaxHealth points here so TankMitigation's fixed-HP tankbuster numbers
-        // (calibrated against this) land as intended, not against the generic doppel HP.
+        // A real level-100 tank's own max HP -- every Umad scenario's IScenario.TankMaxHealth
+        // points here, and the mitigation thresholds are calibrated against it.
         // Scoped to this namespace deliberately -- not a universal constant to reach for.
         public const uint RealTankMaxHealth = 325_047;
     }
