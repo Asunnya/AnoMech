@@ -250,7 +250,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     private IAiMove GroupDodgesKnownHazards(float now, int[] excluded, bool holderJoinsTheGroup)
     {
         if (state.AwakenedLandslide is { } landslide && now < landslide.SecondHitAt
-            && WedgePlanFor(landslide, now, excluded) is { } wedge)
+            && WedgePlanDecidedOncePerCast(landslide, now, excluded) is { } wedge)
         {
             groupTarget = null;
             for (var slot = 0; slot < 8; slot++)
@@ -303,8 +303,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
             .Select(x => (x.slot, x.member!))
             .ToList();
 
-    // Decided once per cast: re-checking a bot already on its way would count its reaction delay twice.
-    private Vector2?[]? WedgePlanFor(UwuP3TitanState.AwakenedLandslideCast landslide, float now, int[] excluded)
+    private Vector2?[]? WedgePlanDecidedOncePerCast(UwuP3TitanState.AwakenedLandslideCast landslide, float now, int[] excluded)
     {
         if (wedgePlan is { } decided && decided.SecondHitAt == landslide.SecondHitAt)
         {
@@ -318,7 +317,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         if (members.Count > 0)
         {
             var anchor = CentreOfTheBots(members.Select(x => x.Member).ToList());
-            if (NearestWedgeSpot(landslide, anchor, now) is { } wedge)
+            if (NearestSpotInAWedgeBothHitsMiss(landslide, anchor, now) is { } wedge)
             {
                 spots = new Vector2?[8];
                 var upcoming = state.Hazards.Where(h => h.At > now).ToList();
@@ -351,8 +350,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         }
     }
 
-    // Both hits leave the four wedges at 67.5 degrees either side of the first lines untouched, far enough out.
-    private Vector2? NearestWedgeSpot(UwuP3TitanState.AwakenedLandslideCast landslide, Vector2 from, float now)
+    private Vector2? NearestSpotInAWedgeBothHitsMiss(UwuP3TitanState.AwakenedLandslideCast landslide, Vector2 from, float now)
     {
         var upcoming = state.Hazards.Where(h => h.At > now).ToList();
         var reach = ArenaRadiusAt(now) - 1f - TightSpread;
