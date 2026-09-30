@@ -473,13 +473,10 @@ public sealed class UwuP3TitanScenario : IScenario
             foreach (var hit in party.Find.InsideCircle(bomb.Position, BurstRadius).ToList())
                 if (!IsJailed(hit)) hit.Die("Died to a bomb's Burst");
             set[i] = null;
-            world.Events.Add(0.3f, () => FadeOut(bomb));
+            world.Events.Add(0.3f, bomb.FadeOut);
             world.Events.Add(1.5f, bomb.Despawn);
         }
     }
-
-    private static void FadeOut(SimEnemy enemy) =>
-        PacketDispatcher.HandleActorControlPacket(enemy.EntityId, 607, enemy.EntityId, 1, 0, 100, 0, 0, 0, 0, 0xE0000000, false);
 
     private void Upheaval()
     {

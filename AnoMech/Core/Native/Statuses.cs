@@ -33,6 +33,11 @@ internal static unsafe class Statuses
     public static bool LocksControl(ushort statusId) =>
         Sheet.TryGetRow(statusId, out var row) && (row.LockMovement || row.LockActions || row.LockControl || row.Transfiguration);
 
+    // Sim statuses never reach the server, so SimPlayer applies their sheet locks (e.g. Fetters) itself.
+    public static bool LocksMovement(ushort statusId) => Sheet.TryGetRow(statusId, out var row) && row.LockMovement;
+
+    public static bool LocksActions(ushort statusId) => Sheet.TryGetRow(statusId, out var row) && row.LockActions;
+
     private static bool IsLocalPlayer(Character* chara) =>
         Plugin.ObjectTable.LocalPlayer is { Address: var address } && address == (nint)chara;
 

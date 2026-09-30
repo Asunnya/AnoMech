@@ -12,7 +12,7 @@ _✅ works · ⚠️ partial · ❌ not simulated · ➖ nothing to simulate (pu
 | Egeiro | 24287 | ➖ | Raise. |
 | Physis | 24288 | ➖ | |
 | Phlegma | 24289 | ➖ | |
-| Eukrasia | 24290 | ✅ | Grants Eukrasia status (2606) and sets the gauge byte (SageStateHandler); every Eukrasian spell clears both. |
+| Eukrasia | 24290 | ✅ | Grants Eukrasia status (2606) and sets the gauge byte (`SgeEukrasia` in `JobActions`); every Eukrasian spell clears both. |
 | Eukrasian Diagnosis | 24291 | ✅ | Consumes Eukrasia (in clear list). |
 | Eukrasian Prognosis | 24292 | ✅ | Consumes Eukrasia (in clear list); at cap resolves to 37034. |
 | Eukrasian Dosis | 24293 | ✅ | Consumes Eukrasia (in clear list) — the level-synced version, e.g. UWU at 70; at cap resolves to 24314. |
