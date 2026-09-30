@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
@@ -158,8 +159,8 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
         var confused = !Dead && HasStatus(StatusIdConfused);
         var bound = !Dead && HasStatus(StatusIdBind);
         var incapacitated = asleep || confused;
-        hooks.ZeroMovement = Dead || Movement.IsMoving || incapacitated || bound;
-        hooks.DisableAllActions = Dead || incapacitated;
+        hooks.ZeroMovement = Dead || Movement.IsMoving || incapacitated || bound || HasAnyStatus(LocksMovement);
+        hooks.DisableAllActions = Dead || incapacitated || HasAnyStatus(LocksActions);
         // A knockback slide still lets you turn, so this isn't folded into ZeroMovement.
         hooks.ZeroRotation = Dead || incapacitated;
         // Sleep pins the rotation it landed at; Confused re-pins every tick, since the
@@ -168,4 +169,18 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
         else if (confused) hooks.LockedRotation = Rotation;
         else hooks.LockedRotation = null;
     }
+
+    // Sim statuses never reach the server, so their Status sheet locks (e.g. Fetters) are applied here.
+    private static readonly Dictionary<ushort, (bool Movement, bool Actions)> statusLocks = [];
+
+    private static (bool Movement, bool Actions) LocksOf(ushort statusId)
+    {
+        if (statusLocks.TryGetValue(statusId, out var locks)) return locks;
+        var row = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>().GetRowOrDefault(statusId);
+        return statusLocks[statusId] = (row?.LockMovement ?? false, row?.LockActions ?? false);
+    }
+
+    private static bool LocksMovement(ushort statusId) => LocksOf(statusId).Movement;
+
+    private static bool LocksActions(ushort statusId) => LocksOf(statusId).Actions;
 }

@@ -38,6 +38,7 @@ public sealed unsafe class UserActions : IDisposable
         new DancerStateHandler(),
         new ViperStateHandler(),
         new NinjaStateHandler(),
+        new SageStateHandler(),
         new ComboHandler(),
     ];
 

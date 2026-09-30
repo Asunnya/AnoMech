@@ -682,7 +682,7 @@ internal static unsafe class JobActions
         [155]  = [ActionId(135)],     // Freecure: consumed by Cure II
 
         [3882] = [ActionId(37012)], [1896] = [ActionId(185), ActionId(37013), ActionId(3583), ActionId(7434), ActionId(37015), ActionId(37016)],
-        [2606] = [ActionId(24314), ActionId(37032), ActionId(24291), ActionId(37034)],
+        [2606] = [ActionId(24291), ActionId(24292), ActionId(24293), ActionId(24308), ActionId(24314), ActionId(37032), ActionId(37034)],
         // VPR
         [3772] = [ActionId(34607), ActionId(34615)], [3672] = [ActionId(34606), ActionId(34614)],
         [3645] = [ActionId(34610)], [3646] = [ActionId(34611)], [3647] = [ActionId(34612)], [3648] = [ActionId(34613)],

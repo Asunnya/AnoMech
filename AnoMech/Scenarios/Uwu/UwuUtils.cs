@@ -7,6 +7,8 @@ using AnoMech.Core.SimObjects;
 using AnoMech.Helpers;
 using AnoMech.Pointers;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.Network;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
 
 namespace AnoMech.Scenarios.Uwu;
@@ -27,6 +29,51 @@ public unsafe class UwuUtils(SimWorld world)
         byte[] unionData = [value];
         InstanceContentDirectorHelper.SetDirectorData(1, 0, unionData, true);
     }
+
+    // Server-spawned floor EObj; the sky itself comes from the phase weather.
+    public SimEventObject? SpawnArenaFloor() => world.SpawnEventObject(new EventObjectSpawnConfig
+    {
+        EObjId = 2007457,
+        Placement = new(new(0.16f, 0, 1.4434f), 0),
+        ObjectIndex = 1,
+        TargetableStatus = 5,
+        EntityId = 0x4000829C,
+        LayoutId = 7538913,
+        GimmickId = 7538258,
+        TimelineState = 1,
+    });
+
+    // Titan's arena EObj (LVD_Battle_Titan): its yellow ring shows up and shrinks on the jumps.
+    public SimEventObject? SpawnTitanArena() => world.SpawnEventObject(new EventObjectSpawnConfig
+    {
+        EObjId = 2007457,
+        Placement = new(Vector3.Zero, 0),
+        ObjectIndex = 2,
+        TargetableStatus = 5,
+        EntityId = 0x4000829D,
+        LayoutId = 7372736,
+        GimmickId = 7372735,
+        TimelineState = 1,
+        RestoreStateOnDespawn = true,
+        ForceSharedGroupActive = true,
+    });
+
+    // Native head marker; its AVFX ends on its own, so it isn't tracked as a SimVfx.
+    public static void Lockon(SimCharacter? target, uint lockonId)
+    {
+        if (target == null) return;
+        PacketDispatcher.HandleActorControlPacket(target.EntityId, SetLockonControl, lockonId, target.GameObjectId.ObjectId, 0, 0, 0, 0, 0, 0, 0xE0000000, false);
+    }
+
+    private const uint SetLockonControl = 34;
+
+    public static void CastSelf(SimEnemy? caster, uint actionId, float castSeconds) =>
+        caster?.NativeCast(actionId, ActionType.Action, 0f, castSeconds, false, targetId: caster.GameObjectId);
+
+    // An effect without a position plays at the arena centre, so default it to the caster.
+    public static void PlayEffect(SimEnemy? caster, uint actionId, float animationLock, float? rotation = null, GameObjectId? target = null, Vector3? at = null) =>
+        caster?.NativeActionEffect(actionId, animationLock, (ushort)actionId, 0, ActionType.Action, 0,
+            rotation: rotation, position: at ?? caster.Position, animationTargetId: target ?? caster.GameObjectId);
 
     public void Awaken(SimEnemy? enemy, bool isUltima)
     {
@@ -124,13 +171,17 @@ public unsafe class UwuUtils(SimWorld world)
         }
     }
 
-    public void FeatherRain(Func<SimEnemy?>[] getDummies, float snapshotOffset, float castOffset, float effectOffset)
+    public void FeatherRain(Func<SimEnemy?>[] getDummies, float snapshotOffset, float castOffset, float effectOffset, Action<Vector3>? onTargeted = null)
     {
         var positions = new List<Vector3>();
 
-        world.Events.Add(snapshotOffset, () => positions.AddRange(
-            RoleList.Random(world.Party, getDummies.Length).List
-            .Select(x => world.Party.Get(x)!.Position)));
+        world.Events.Add(snapshotOffset, () =>
+        {
+            positions.AddRange(
+                RoleList.Random(world.Party, getDummies.Length).List
+                .Select(x => world.Party.Get(x)!.Position));
+            if (onTargeted != null) positions.ForEach(onTargeted);
+        });
 
         var castInfo = new UwuUtilsRecords
         {

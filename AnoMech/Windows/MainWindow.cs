@@ -467,9 +467,7 @@ public unsafe class MainWindow : Window, IDisposable
         var game = plugin.Game;
         var mpGuest = IsGuest;
         ReconcileSetup(inSession, mpGuest);
-#if DEBUG
         if (inSession) game.EventTimeScale = 1f;
-#endif
 
         DrawScenarioHeader(game);
         if (inSession) DrawSession();
@@ -477,6 +475,7 @@ public unsafe class MainWindow : Window, IDisposable
         if (!inSession) DrawSoloOption(game);
         DrawLocationHint();
         DrawRunOptions(game, inSession);
+        DrawSpeedOption(game, inSession);
 
         ImGui.Spacing();
         DrawSections(_selectedScenario, inSession, mpGuest);
@@ -836,6 +835,20 @@ public unsafe class MainWindow : Window, IDisposable
             ImGui.SetTooltip(game.IsScenarioActive
                 ? "Stop the current scenario before changing the run mode."
                 : "Run without simulated party members or party AI.");
+    }
+
+    private readonly SpeedControl speedControl = new();
+
+    private void DrawSpeedOption(AnoMech.Core.Game.Game game, bool mpActive)
+    {
+        if (!Plugin.Config.ShowSpeedControl) return;
+        ImGui.BeginDisabled(mpActive);
+        ImGui.BeginGroup();
+        speedControl.Draw(game, "main-speed");
+        ImGui.EndGroup();
+        ImGui.EndDisabled();
+        if (mpActive && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(MpDisabledReason);
     }
 
     // God mode and auto-restart are disabled while a session is being set up or is live; forced
