@@ -611,7 +611,7 @@ public sealed unsafe class SimEnemy : SimNpc
 
     public void SetVisible(bool visible) => desiredVisible = visible;
 
-    // ActorControl 607 (self, 1, 0, 100), the same fade SimEventObject.FadeOut sends to props.
+    // Same ActorControl 607 fade as SimEventObject.FadeOut.
     public void FadeOut()
     {
         if (EntityId == 0) return;

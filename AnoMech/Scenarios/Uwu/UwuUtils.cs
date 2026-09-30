@@ -81,7 +81,7 @@ public unsafe class UwuUtils(SimWorld world)
         enemy?.SetAnimationState(0, 1);
     }
 
-    // For a hit list snapshotted before the effect lands; a prisoner in a gaol is spared, as in ResolveSnapshot.
+    // Kills a snapshotted hit list, sparing gaol prisoners.
     public static void KillSnapshot(DamageSolver damage, IEnumerable<SimCharacter> snapshot, uint actionId, string context)
     {
         foreach (var hit in snapshot.Where(h => !h.HasStatus(StatusId.Fetters)).ToList())

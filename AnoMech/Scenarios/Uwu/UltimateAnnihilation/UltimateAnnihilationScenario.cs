@@ -324,7 +324,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
     private void ResolveEyeOfTheStorm()
     {
         PlayEffect(Dummy(EyeOfTheStormDummy), ActionId.EyeOfTheStorm, 2.1f);
-        // The sheet row is a plain circle; the safe eye in the middle isn't data, so the ring is found here.
+        // The sheet only has the circle; the safe eye is cut out here.
         UwuUtils.KillSnapshot(damage, party.Find.InsideRing(Vector3.Zero, EyeOfTheStormInner, EyeOfTheStormOuter), ActionId.EyeOfTheStorm, "outside the eye");
     }
 

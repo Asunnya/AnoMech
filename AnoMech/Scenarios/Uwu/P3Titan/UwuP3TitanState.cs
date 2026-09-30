@@ -32,9 +32,9 @@ public sealed class UwuP3TitanState
     public PartyRole JailedHealer { get; }
     public IReadOnlyList<IReadOnlyList<PartyRole>> WeightTargets { get; }
     public int LateBombStart { get; }
-    // Both Landslides of the gaol window go down this one player's line; never a gaol target.
+    // Both gaol-window Landslides aim here; never a gaol target.
     public PartyRole GaolWindowLandslideTarget { get; }
-    // The awakened Landslides outside the gaols (76s, 134s); the one at 104.84s always goes to the jailed healer.
+    // Awakened Landslides at 76s and 134s; the 104.84s one takes the jailed healer.
     public IReadOnlyList<PartyRole> AwakenedLandslideTargets { get; }
 
     public List<Hazard> Hazards { get; } = [];
