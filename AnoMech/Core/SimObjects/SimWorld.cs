@@ -118,8 +118,7 @@ public sealed class SimWorld : ISimObject, IDisposable
         if (hidden != null) children.Add(hidden);
     }
 
-    // Per-frame arena fence around ScenarioOrigin. Kills any active party member
-    // (player included) who leaves `shape`; a circle also gets a VFX border.
+    // Kills anyone (player included) outside `shape`; a circle also gets a VFX ring.
     public void EnforceArenaBoundary(IArenaShape shape, string cause = "Walked out of arena")
         => children.Add(new SimArenaBoundary(Party, this, shape, cause, showVfx: !Map.IsInInstance));
 

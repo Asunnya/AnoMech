@@ -224,8 +224,7 @@ public sealed class CharacterFind<T> where T : IPositioned
     // 3, 13 (cones) -> halfAngleRad default PI/6
     // 8 (charge) -> charge length default 100
     // 10 (donut) -> inner safe radius default 0
-    // extraRange is added to the sheet's EffectRange, e.g. the caster's hitbox, which the game
-    // counts for shapes cast around or in front of the caster.
+    // extraRange: the caster's hitbox, which the game adds to caster-centred shapes.
     public IReadOnlyList<T> InsideActionAoe(uint actionId, Placement target, float omenRotate = 0f, float? size = null, float extraRange = 0f)
     {
         var actionSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
