@@ -38,8 +38,6 @@ public sealed class UwuP3TitanScenario : IScenario
     private const float GaolChainDelay = 0.7f;
     private const float PrisonerFreedAfter = 1.1f;
     private const float TankBusterHalfAngle = MathF.PI / 4f;
-    private const float RockBusterLength = 11f;
-    private const float MountainBusterLength = 16f;
     private const uint HealerGaolMaxHp = 1_300_000;
     private const float HealerGaolDrainFrom = 99.5f;
     private const float HealerGaolDrainTo = 102.0f;
@@ -104,9 +102,9 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(5.55f, () => Geocrush(ActionId.GeocrushLanding, 0.5f, 20f));
         world.Events.Add(7.91f, () => TitanTargetable(true));
         world.Events.Add(8.00f, () => CastSelf(titan, ActionId.EarthenFury, 2.7f));
-        world.Events.Add(10.98f, () => Raidwide(ActionId.EarthenFury, 0.57f, 0.13f));
-        world.Events.Add(19.17f, () => TankBuster(PartyRole.MainTank, ActionId.RockBuster, RockBusterLength, 0.28f));
-        world.Events.Add(22.29f, () => TankBuster(PartyRole.MainTank, ActionId.MountainBuster, MountainBusterLength, 0.6f));
+        world.Events.Add(10.98f, () => Raidwide(ActionId.EarthenFury, 0.57f));
+        world.Events.Add(19.17f, () => TankBuster(PartyRole.MainTank, ActionId.RockBuster, 0.28f));
+        world.Events.Add(22.29f, () => TankBuster(PartyRole.MainTank, ActionId.MountainBuster, 0.6f));
 
         world.Events.Add(24.39f, () => CastWeights(0, 27.37f));
         world.Events.Add(26.88f, () => PlayEffect(titan, ActionId.WeightOfTheLandTitan, 1.1f));
@@ -194,8 +192,8 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(116.64f, Tumult);
         world.Events.Add(117.75f, Tumult);
         world.Events.Add(116.00f, () => busterTank = PartyRole.OffTank);
-        world.Events.Add(119.88f, () => TankBuster(PartyRole.OffTank, ActionId.RockBuster, RockBusterLength, 0.28f));
-        world.Events.Add(123.98f, () => TankBuster(PartyRole.OffTank, ActionId.MountainBuster, MountainBusterLength, 0.6f));
+        world.Events.Add(119.88f, () => TankBuster(PartyRole.OffTank, ActionId.RockBuster, 0.28f));
+        world.Events.Add(123.98f, () => TankBuster(PartyRole.OffTank, ActionId.MountainBuster, 0.6f));
         world.Events.Add(125.50f, () => busterTank = null);
         world.Events.Add(125.60f, () => titan?.MoveTo(AtBearing(state.SecondJumpBearing, 7.5f), 3f));
 
@@ -228,7 +226,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(138.69f, () => ResolveBursts(lateBombs, 2, 1));
         world.Events.Add(140.70f, () => ResolveBursts(lateBombs, 3, 1));
         world.Events.Add(141.00f, () => busterTank = PartyRole.MainTank);
-        world.Events.Add(144.80f, () => TankBuster(PartyRole.MainTank, ActionId.RockBuster, RockBusterLength, 0.28f));
+        world.Events.Add(144.80f, () => TankBuster(PartyRole.MainTank, ActionId.RockBuster, 0.28f));
 
         world.Events.Add(148.05f, () => Leave(titan));
         world.Events.Add(148.05f, () => AnimateFloor(4, 8));
@@ -251,9 +249,10 @@ public sealed class UwuP3TitanScenario : IScenario
     // The main tank holds Titan until the gaol marks tell the tanks whether to swap.
     private PartyRole AggroTank => gaolsMarked ? state.Holder : PartyRole.MainTank;
 
-    private static bool IsTank(SimCharacter member) => member is ISimPartyMember { Role: PartyRole.MainTank or PartyRole.OffTank };
 
     private static bool IsJailed(SimCharacter member) => member.HasStatus(StatusId.Fetters);
+
+    private SimCharacter[] Jailed() => AliveMembers().Where(IsJailed).ToArray();
 
     private SimEnemy? SpawnEnemy(uint baseId, uint nameId, Placement placement, bool targetable, bool visible, EnemyListMode enemyList) =>
         world.SpawnEnemy(new EnemySpawnConfig(
@@ -353,30 +352,28 @@ public sealed class UwuP3TitanScenario : IScenario
         {
             var distance = Vector2.Distance(Flat(member.Position), Flat(titan.Position));
             var fraction = peak * MathF.Max(0f, 1f - distance / falloff);
-            damage.ApplyDamage(member, IsTank(member) ? fraction * 0.3f : fraction, actionId, "Proximity", false);
+            damage.ApplyDamage(member, fraction, actionId, "Proximity", false);
         }
     }
 
-    private void Raidwide(uint actionId, float fraction, float tankFraction)
+    private void Raidwide(uint actionId, float fraction)
     {
         PlayEffect(titan, actionId, 2.1f);
         foreach (var member in AliveMembers())
-            damage.ApplyDamage(member, IsTank(member) ? tankFraction : fraction, actionId, "Raidwide", false);
+            damage.ApplyDamage(member, fraction, actionId, "Raidwide", false);
     }
 
-    private void Tumult() => Raidwide(ActionId.Tumult, 0.13f, 0.04f);
+    private void Tumult() => Raidwide(ActionId.Tumult, 0.13f);
 
-    private void TankBuster(PartyRole role, uint actionId, float length, float fraction)
+    private void TankBuster(PartyRole role, uint actionId, float fraction)
     {
         if (titan == null || Get(role) is not { } tank || !tank.IsAlive()) return;
         var rotation = Facing(titan.Position, tank.Position);
         titan.SetPosition(new Placement(titan.Position, rotation));
         PlayEffect(titan, actionId, 1.1f, rotation, tank.GameObjectId);
-        foreach (var hit in party.Find.InsideCone(new Placement(titan.Position, rotation), TankBusterHalfAngle, length).ToList())
-        {
-            if (!IsTank(hit)) hit.Die("Died to Titan's tankbuster cleave");
-            else damage.ApplyDamage(hit, fraction, actionId, "Tankbuster", false);
-        }
+        var hits = damage.Resolve(titan, actionId, [DamageType.TankBuster], [], size: TankBusterHalfAngle, extraRange: titan.HitboxRadius);
+        foreach (var survivor in hits.Where(h => h.IsAlive()))
+            damage.ApplyDamage(survivor, fraction, actionId, "Tankbuster", false);
     }
 
     private readonly Dictionary<int, List<(SimEnemy? Caster, Vector3 At)>> weightPuddles = [];
@@ -403,12 +400,7 @@ public sealed class UwuP3TitanScenario : IScenario
         foreach (var (caster, at) in puddles)
         {
             PlayEffect(caster, ActionId.WeightOfTheLand, 0.1f, at: at);
-            foreach (var hit in party.Find.InsideCircle(at, WeightRadius).ToList())
-            {
-                if (IsJailed(hit)) continue;
-                if (IsTank(hit)) damage.ApplyDamage(hit, 0.72f, ActionId.WeightOfTheLand, "Weight of the Land", false);
-                else hit.Die("Died to Weight of the Land");
-            }
+            damage.Resolve(IPositioned.From(at), ActionId.WeightOfTheLand, [DamageType.Lethal], [], excludeTargets: Jailed());
             world.Events.Add(1.5f, () => DespawnHelper(caster));
         }
     }
@@ -435,8 +427,7 @@ public sealed class UwuP3TitanScenario : IScenario
             if (set[i] is not { } bomb) continue;
             bomb.SetVisible(true);
             PlayEffect(bomb, ActionId.Bury, 0.6f);
-            foreach (var hit in party.Find.InsideCircle(bomb.Position, BuryRadius).ToList())
-                if (!IsJailed(hit)) hit.Die("Crushed by a falling bomb");
+            damage.Resolve(bomb, ActionId.Bury, [DamageType.Lethal], [], excludeTargets: Jailed());
         }
     }
 
@@ -469,8 +460,7 @@ public sealed class UwuP3TitanScenario : IScenario
         {
             if (set[i] is not { } bomb) continue;
             PlayEffect(bomb, ActionId.Burst, 2.1f);
-            foreach (var hit in party.Find.InsideCircle(bomb.Position, BurstRadius).ToList())
-                if (!IsJailed(hit)) hit.Die("Died to a bomb's Burst");
+            damage.Resolve(bomb, ActionId.Burst, [DamageType.Lethal], [], excludeTargets: Jailed());
             set[i] = null;
             world.Events.Add(0.3f, bomb.FadeOut);
             world.Events.Add(1.5f, bomb.Despawn);
@@ -482,7 +472,7 @@ public sealed class UwuP3TitanScenario : IScenario
         if (titan == null) return;
         PlayEffect(titan, ActionId.Upheaval, 2.1f);
         foreach (var member in AliveMembers())
-            damage.ApplyDamage(member, IsTank(member) ? 0.09f : 0.26f, ActionId.Upheaval, "Knockback", false);
+            damage.ApplyDamage(member, 0.26f, ActionId.Upheaval, "Knockback", false);
         party.Knockback(titan.Position, UpheavalKnockback);
     }
 
@@ -565,8 +555,7 @@ public sealed class UwuP3TitanScenario : IScenario
         {
             PlayEffect(gaol, ActionId.Freefire, 1.1f);
             var at = gaol.Position;
-            foreach (var hit in party.Find.InsideCircle(at, FreefireRadius).ToList())
-                if (!IsJailed(hit)) hit.Die("Died to Freefire (stood by a breaking gaol)");
+            damage.Resolve(gaol, ActionId.Freefire, [DamageType.Lethal], [], excludeTargets: Jailed());
             foreach (var next in gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(at)) <= GaolChainReach).ToList())
                 world.Events.Add(GaolChainDelay, () => BreakGaol(next, explode: true));
         }
@@ -723,7 +712,7 @@ public sealed class UwuP3TitanScenario : IScenario
         }
         foreach (var member in hit)
         {
-            damage.ApplyDamage(member, IsTank(member) ? 0.32f : 0.76f, ActionId.LandslideLine, "Landslide", false);
+            damage.ApplyDamage(member, 0.76f, ActionId.LandslideLine, "Landslide", false);
             (member as ISimPartyMember)?.Knockback(titan.Position, LandslideKnockback, 20f);
         }
         foreach (var caster in landslideCasters) world.Events.Add(1.5f, () => DespawnHelper(caster.Caster));

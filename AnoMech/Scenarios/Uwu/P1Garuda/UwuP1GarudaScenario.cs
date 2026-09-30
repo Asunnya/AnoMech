@@ -27,11 +27,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     private static readonly MistralSongDamage GarudaSongDamage = new(Intercept: 0.59f, Behind: 0.60f);
     private static readonly MistralSongDamage SistersSongDamage = new(Intercept: 0.48f, Behind: 0.28f);
     private const float SlipstreamHalfAngle = MathF.PI / 4f;
-    private const float SlipstreamLength = 11.7f;
-    private const float GreatWhirlwindRadius = 8f;
     private const float FrictionRadius = 5f;
-    private const float GigastormRadius = 6.5f;
-    private const float WickedWheelRadius = 8.7f;
     private const float EyeOfTheStormInner = 12f;
     private const float EyeOfTheStormOuter = 25f;
     private const float MesohighRadius = 3f;
@@ -105,7 +101,7 @@ public sealed class UwuP1GarudaScenario : IScenario
 
         world.Events.Add(5.20f, () => Lockon(Get(state.MistralSongTarget), LockonId.MistralSong));
         world.Events.Add(5.29f, () => CastSelf(garuda, ActionId.Slipstream, 2.2f));
-        world.Events.Add(7.78f, () => ResolveCone(garuda, ActionId.Slipstream, garuda?.Rotation ?? MathF.PI, 2.1f, "Slipstream"));
+        world.Events.Add(7.78f, () => ResolveCone(garuda, ActionId.Slipstream, garuda?.Rotation ?? MathF.PI, 2.1f));
         world.Events.Add(10.32f, () => ResolveMistralSong(garuda, ActionId.MistralSongBoss, Get(state.MistralSongTarget), GreatWhirlwindSpot.Boss, GarudaSongDamage));
         world.Events.Add(12.60f, () => garuda?.MoveTo(new Vector3(-6.3f, 0f, -0.5f), 8f, MathF.PI));
         world.Events.Add(13.44f, () => CastGreatWhirlwind(GreatWhirlwindSpot.Boss));
@@ -118,7 +114,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(22.57f, () => ResolveGreatWhirlwind(GreatWhirlwindSpot.Boss));
         world.Events.Add(23.10f, () => SatinPlumesWalkTo(FirstPlumesGather));
         world.Events.Add(24.50f, () => SatinPlumesGathered(24.50f, [33.9f, 35.0f, 35.8f, 37.5f]));
-        world.Events.Add(23.11f, () => ResolveCone(garuda, ActionId.Slipstream, garuda?.Rotation ?? MathF.PI, 2.1f, "Slipstream"));
+        world.Events.Add(23.11f, () => ResolveCone(garuda, ActionId.Slipstream, garuda?.Rotation ?? MathF.PI, 2.1f));
         world.Events.Add(25.73f, () => CastGreatWhirlwind(GreatWhirlwindSpot.Boss));
         world.Events.Add(26.58f, () => ResolveDownburst());
         world.Events.Add(26.71f, SpinyCyclone);
@@ -127,7 +123,7 @@ public sealed class UwuP1GarudaScenario : IScenario
 
         world.Events.Add(33.93f, () => garuda?.SetTargetable(false));
         world.Events.Add(34.02f, () => garuda?.PlayActionTimeline(ActionTimelineId.WarpStart2));
-        utils.FeatherRain(FeatherRainDummies, 34.02f, 35.53f, 36.52f);
+        utils.FeatherRain(FeatherRainDummies, 34.02f, 35.53f, 36.52f, resolve: KillFeatherRain);
         world.Events.Add(35.17f, () => garuda?.SetVisible(false));
         world.Events.Add(35.85f, SpinyCyclone);
         world.Events.Add(35.90f, () => spiny?.MoveTo(UwuP1GarudaState.GigastormSpot, 2f));
@@ -151,7 +147,7 @@ public sealed class UwuP1GarudaScenario : IScenario
 
         world.Events.Add(68.81f, () => garuda?.SetTargetable(false));
         world.Events.Add(68.90f, () => garuda?.PlayActionTimeline(ActionTimelineId.WarpStart2));
-        utils.FeatherRain(FeatherRainDummies, 68.90f, 70.42f, 71.40f);
+        utils.FeatherRain(FeatherRainDummies, 68.90f, 70.42f, 71.40f, resolve: KillFeatherRain);
         world.Events.Add(69.63f, () => bubble?.Despawn());
         world.Events.Add(70.37f, () => garuda?.SetVisible(false));
         world.Events.Add(70.91f, () => garuda?.SetVisible(true));
@@ -165,7 +161,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(87.71f, () => PlaySisters(ActionTimelineId.SistersArrive));
         world.Events.Add(89.52f, () => ShowSisters(true));
         world.Events.Add(89.85f, () => PlaySisters(ActionTimelineId.WarpStart2));
-        utils.FeatherRain(FeatherRainDummies, 89.85f, 91.36f, 92.34f);
+        utils.FeatherRain(FeatherRainDummies, 89.85f, 91.36f, 92.34f, resolve: KillFeatherRain);
         world.Events.Add(91.57f, () => ShowSisters(false));
         world.Events.Add(91.90f, () => PlaceSisters(state.SuparnaSongSpot, state.ChiradaSongSpot));
         world.Events.Add(91.99f, () => PlaySisters(ActionTimelineId.WarpEnd));
@@ -177,7 +173,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(99.56f, ResolveEyeOfTheStorm);
         world.Events.Add(99.69f, ResolveWickedWheel);
         world.Events.Add(101.29f, () => PlaySisters(ActionTimelineId.WarpStart2));
-        utils.FeatherRain(FeatherRainDummies, 101.29f, 102.81f, 103.79f);
+        utils.FeatherRain(FeatherRainDummies, 101.29f, 102.81f, 103.79f, resolve: KillFeatherRain);
         world.Events.Add(102.32f, () => CastGreatWhirlwind(GreatWhirlwindSpot.Suparna));
         world.Events.Add(102.32f, () => CastGreatWhirlwind(GreatWhirlwindSpot.Chirada));
         world.Events.Add(102.57f, () => ShowSisters(false));
@@ -194,12 +190,12 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(119.28f, () => ShowSisters(true));
         world.Events.Add(119.56f, TetherMesohigh);
         world.Events.Add(119.61f, CastEyeOfTheStorm);
-        world.Events.Add(121.26f, () => ResolveCone(garuda, ActionId.Slipstream, garuda?.Rotation ?? MathF.PI, 2.1f, "Slipstream"));
+        world.Events.Add(121.26f, () => ResolveCone(garuda, ActionId.Slipstream, garuda?.Rotation ?? MathF.PI, 2.1f));
         world.Events.Add(122.59f, ResolveEyeOfTheStorm);
         world.Events.Add(124.64f, ResolveMesohigh);
         world.Events.Add(124.73f, () => ResolveDownburst());
         world.Events.Add(126.74f, () => PlaySisters(ActionTimelineId.WarpStart2));
-        utils.FeatherRain(FeatherRainDummies, 126.74f, 128.25f, 129.23f);
+        utils.FeatherRain(FeatherRainDummies, 126.74f, 128.25f, 129.23f, resolve: KillFeatherRain);
         world.Events.Add(134.50f, KillGaruda);
         world.Events.Add(136f, DespawnAll);
     }
@@ -231,19 +227,22 @@ public sealed class UwuP1GarudaScenario : IScenario
         for (var i = 0; i < featherDummies.Length; i++) featherDummies[i] = SpawnDummy(Vector3.Zero);
     }
 
-    private void ResolveCone(SimEnemy? caster, uint actionId, float rotation, float animationLock, string cause)
+    private void ResolveCone(SimEnemy? caster, uint actionId, float rotation, float animationLock)
     {
         if (caster == null) return;
         PlayEffect(caster, actionId, animationLock, rotation);
-        foreach (var hit in party.Find.InsideCone(new Placement(caster.Position, rotation), SlipstreamHalfAngle, SlipstreamLength).ToList())
-            if (!IsTank(hit)) hit.Die($"Died to {cause} (stood in front of Garuda)");
+        damage.Resolve(caster, actionId, [DamageType.TankBuster], [], size: SlipstreamHalfAngle,
+            coneRotationDelta: rotation - caster.Rotation, extraRange: caster.HitboxRadius);
     }
+
+    private void KillFeatherRain(IReadOnlyList<SimCharacter> snapshot) =>
+        UwuUtils.KillSnapshot(damage, snapshot, ActionId.FeatherRain, "stood under a feather");
 
     private void ResolveDownburst()
     {
         if (garuda == null || Get(PartyRole.MainTank) is not { } mainTank) return;
         var toTank = mainTank.Position - garuda.Position;
-        ResolveCone(garuda, ActionId.Downburst, MathF.Atan2(toTank.X, toTank.Z), 2.1f, "Downburst");
+        ResolveCone(garuda, ActionId.Downburst, MathF.Atan2(toTank.X, toTank.Z), 2.1f);
     }
 
     private enum GreatWhirlwindSpot { Boss, Suparna, Chirada }
@@ -266,8 +265,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         PlayEffect(caster, actionId, 1.1f, rotation, (first ?? target).GameObjectId);
         greatWhirlwindSpots[spot] = first?.Position ?? target.Position;
         if (first == null) return;
-        if (!IsTank(first)) first.Die("Died to Mistral Song (no tank intercepted it)");
-        else damage.ApplyDamage(first, songDamage.Intercept, actionId, "Mistral Song", false);
+        damage.ApplyDamage(first, songDamage.Intercept, actionId, "no tank intercepted it", lethal: !IsTank(first));
         foreach (var behind in line.Skip(1))
             damage.ApplyDamage(behind, songDamage.Behind, actionId, "Mistral Song", false);
     }
@@ -285,7 +283,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     {
         if (!greatWhirlwindSpots.TryGetValue(spot, out var at)) return;
         if (greatWhirlwindCasters.GetValueOrDefault(spot) is { } caster) PlayEffect(caster, ActionId.GreatWhirlwind, 2.1f, at: at);
-        utils.ResolveSnapshot(party.Find.InsideCircle(at, GreatWhirlwindRadius).ToList(), "Great Whirlwind");
+        damage.Resolve(IPositioned.From(at), ActionId.GreatWhirlwind, [DamageType.Lethal], []);
     }
 
     private unsafe void SpawnPlumes(IReadOnlyList<Vector3> satinSpots, bool withSpiny)
@@ -413,7 +411,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     {
         if (spiny == null) return;
         PlayEffect(spiny, ActionId.Gigastorm, 2.1f);
-        utils.ResolveSnapshot(party.Find.InsideCircle(spiny.Position, GigastormRadius).ToList(), "Gigastorm");
+        damage.Resolve(spiny, ActionId.Gigastorm, [DamageType.Lethal], [], extraRange: spiny.HitboxRadius);
         spiny.Despawn();
     }
 
@@ -559,14 +557,15 @@ public sealed class UwuP1GarudaScenario : IScenario
     private void ResolveEyeOfTheStorm()
     {
         PlayEffect(eyeOfTheStorm, ActionId.EyeOfTheStorm, 2.1f);
-        utils.ResolveSnapshot(party.Find.InsideRing(Vector3.Zero, EyeOfTheStormInner, EyeOfTheStormOuter).ToList(), "Eye of the Storm");
+        // The sheet row is a plain circle; the safe eye in the middle isn't data, so the ring is found here.
+        UwuUtils.KillSnapshot(damage, party.Find.InsideRing(Vector3.Zero, EyeOfTheStormInner, EyeOfTheStormOuter), ActionId.EyeOfTheStorm, "outside the eye");
     }
 
     private void ResolveWickedWheel()
     {
         if (garuda == null) return;
         PlayEffect(garuda, ActionId.WickedWheelAwaken, 2.1f);
-        utils.ResolveSnapshot(party.Find.InsideCircle(garuda.Position, WickedWheelRadius).ToList(), "Wicked Wheel");
+        damage.Resolve(garuda, ActionId.WickedWheelAwaken, [DamageType.Lethal], [], extraRange: garuda.HitboxRadius);
     }
 
     private void TetherMesohigh()
@@ -588,7 +587,7 @@ public sealed class UwuP1GarudaScenario : IScenario
             foreach (var hit in party.Find.InsideCircle(holder.Position, MesohighRadius).ToList())
             {
                 if (hit.HasStatus(StatusId.ThermalLow)) CleanseThermalLow(hit);
-                else hit.Die("Died to Mesohigh (took it without Thermal Low)");
+                else damage.ApplyDamage(hit, 1f, ActionId.Mesohigh, "took it without Thermal Low", lethal: true);
             }
             tether.Despawn();
         }

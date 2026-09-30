@@ -81,6 +81,13 @@ public unsafe class UwuUtils(SimWorld world)
         enemy?.SetAnimationState(0, 1);
     }
 
+    // For a hit list snapshotted before the effect lands; a prisoner in a gaol is spared, as in ResolveSnapshot.
+    public static void KillSnapshot(DamageSolver damage, IEnumerable<SimCharacter> snapshot, uint actionId, string context)
+    {
+        foreach (var hit in snapshot.Where(h => !h.HasStatus(StatusId.Fetters)).ToList())
+            damage.ApplyDamage(hit, 1f, actionId, context, lethal: true);
+    }
+
     public void ResolveSnapshot(IReadOnlyList<SimCharacter> snapshot, string dieCause)
     {
         foreach (var character in snapshot)
@@ -171,7 +178,8 @@ public unsafe class UwuUtils(SimWorld world)
         }
     }
 
-    public void FeatherRain(Func<SimEnemy?>[] getDummies, float snapshotOffset, float castOffset, float effectOffset, Action<Vector3>? onTargeted = null)
+    public void FeatherRain(Func<SimEnemy?>[] getDummies, float snapshotOffset, float castOffset, float effectOffset, Action<Vector3>? onTargeted = null,
+        Action<IReadOnlyList<SimCharacter>>? resolve = null)
     {
         var positions = new List<Vector3>();
 
@@ -221,7 +229,7 @@ public unsafe class UwuUtils(SimWorld world)
                         ));
             });
 
-            Cast(getDummy, castOffset, castInfo, effectOffset, actionEffectInfo, dynamicInfo, 0.2f, snapshot => ResolveSnapshot(snapshot, "Feather Rain"));
+            Cast(getDummy, castOffset, castInfo, effectOffset, actionEffectInfo, dynamicInfo, 0.2f, resolve ?? (snapshot => ResolveSnapshot(snapshot, "Feather Rain")));
         }
     }
 
