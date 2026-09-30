@@ -61,13 +61,11 @@ public sealed class UwuP2IfritState
         FettersDps = Dps[rng.Next(Dps.Length)];
         var playerRole = party.PlayerRole;
         var playerIsHealer = Healers.Contains(playerRole);
-        HowlFirst = overrides.SearingWindOnPlayer switch
-        {
-            SearingWindChoice.FirstAndThirdHowl when playerIsHealer => playerRole,
-            SearingWindChoice.SecondHowl when playerIsHealer => OtherHealer(playerRole),
-            _ => Healers[rng.Next(Healers.Length)],
-        };
-        HowlSecond = OtherHealer(HowlFirst);
+        // The second howl picks either healer, whoever took the first.
+        HowlFirst = Healers[rng.Next(Healers.Length)];
+        HowlSecond = Healers[rng.Next(Healers.Length)];
+        if (playerIsHealer && overrides.SearingWindOnPlayer == SearingWindChoice.FirstAndThirdHowl) HowlFirst = playerRole;
+        if (playerIsHealer && overrides.SearingWindOnPlayer == SearingWindChoice.SecondHowl) HowlSecond = playerRole;
         FlamingCrushTargets = [Dps[rng.Next(Dps.Length)], Dps[rng.Next(Dps.Length)]];
 
         AwakenedDash = rng.Next(4);
@@ -82,9 +80,6 @@ public sealed class UwuP2IfritState
         lanes.AddRange(AwakenedCrossLanes);
         FinalLanes = lanes.OrderBy(l => l.At).ToList();
     }
-
-    private static PartyRole OtherHealer(PartyRole healer) =>
-        healer == PartyRole.RegenHealer ? PartyRole.ShieldHealer : PartyRole.RegenHealer;
 
     public Vector2 FromReference(Vector2 reference)
     {

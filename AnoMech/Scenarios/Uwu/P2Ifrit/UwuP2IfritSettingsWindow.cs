@@ -20,7 +20,7 @@ public class UwuP2IfritSettingsWindow
         }
     }
 
-    // The two Searing Winds overlap, so the player can only hold one of them.
+    // Pins the player to one of the howls; the other one stays random and can land on them too.
     private void DrawSearingWind()
     {
         var v = Overrides.SearingWindOnPlayer;

@@ -25,9 +25,9 @@ public sealed class UwuP2IfritScenario : IScenario
 
     private const int FlamingCrushMinStack = 5;
     private const float IncinerateHalfAngle = MathF.PI / 4f;
-    private const float HazardStep = 0.2f;
     private const uint NailMaxHp = 26870;
     private const float NailDrainFrom = 45f;
+    private const float NailDrainTo = 69.46f;
 
     private readonly UwuP2IfritSettingsWindow settingsWindow = new();
     private SimWorld world = null!;
@@ -97,7 +97,6 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(45.76f, TetherInfernalFetters);
         world.Events.Add(46.03f, () => CastInfernoHowl(state.HowlFirst));
         world.Events.Add(47.99f, () => ResolveInfernoHowl(state.HowlFirst, 18f));
-        ScheduleNailDrain();
 
         world.Events.Add(51.16f, MarkEruptionBaits);
         world.Events.Add(51.16f, () => CastSelf(ifrit, ActionId.EruptionIfrit, 2.2f));
@@ -217,6 +216,8 @@ public sealed class UwuP2IfritScenario : IScenario
     // A scripted drag walks Ifrit to his spot first; he picks the tank back up once there.
     public void Tick(float delta, float elapsed)
     {
+        var timeline = world.Events.Elapsed;
+        if (timeline >= NailDrainFrom && timeline < NailDrainTo) DrainNails(timeline);
         if (!followTankAfterMove || ifrit is not { IsMoving: false } boss) return;
         followTankAfterMove = false;
         if (ifritTanked) boss.Follow(Get(PartyRole.MainTank));
@@ -365,15 +366,6 @@ public sealed class UwuP2IfritScenario : IScenario
         foreach (var nail in nails.Values) nail?.SetTargetable(targetable);
     }
 
-    private void ScheduleNailDrain()
-    {
-        for (var t = NailDrainFrom; t < 69.46f; t += HazardStep)
-        {
-            var at = t;
-            world.Events.Add(at, () => DrainNails(at));
-        }
-    }
-
     private void DrainNails(float now)
     {
         foreach (var (bearing, nail) in nails)
@@ -433,12 +425,7 @@ public sealed class UwuP2IfritScenario : IScenario
     private void MarkEruptionBaits()
     {
         if (ifrit == null) return;
-        var ifritAt = new Vector2(ifrit.Position.X, ifrit.Position.Z);
-        eruptionBaits = AliveMembers()
-            .Where(m => !m.HasStatus(StatusId.SearingWind))
-            .OrderByDescending(m => Vector2.DistanceSquared(new Vector2(m.Position.X, m.Position.Z), ifritAt))
-            .Take(2)
-            .ToList();
+        eruptionBaits = party.Find.FarestN(ifrit.Position, 8).Where(m => !m.HasStatus(StatusId.SearingWind)).Take(2).ToList();
     }
 
     private void CastEruptions(int pair)
