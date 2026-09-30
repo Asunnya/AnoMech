@@ -98,7 +98,7 @@ public sealed class UwuP2IfritAi : IScenarioAi<UwuP2IfritState>
     private IAiMove SurroundNailsWithIfritPulledBetweenTheClosePair()
     {
         var spots = SpreadAround(NailPhasePartySpot(), 1.2f);
-        spots[(int)PartyRole.MainTank] = Reference(-11.5f, -3.5f);
+        spots[(int)PartyRole.MainTank] = Reference(-9.5f, -3.5f);
         return AiMove.Create(spots).NaturalOrder();
     }
 
