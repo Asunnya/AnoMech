@@ -22,7 +22,6 @@ public sealed class UwuP3TitanScenario : IScenario
 {
     public string Name => "Titan";
     public IPhase Phase => UwuZone.Titan;
-    public bool SupportsSolo => true;
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new UwuP3TitanAi()];
     public void DrawSettings() => settingsWindow.Draw();

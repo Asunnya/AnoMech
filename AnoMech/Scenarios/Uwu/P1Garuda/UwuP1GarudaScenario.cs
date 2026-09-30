@@ -19,7 +19,6 @@ public sealed class UwuP1GarudaScenario : IScenario
 {
     public string Name => "Garuda";
     public IPhase Phase => UwuZone.Garuda;
-    public bool SupportsSolo => true;
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new UwuP1GarudaAi()];
 
