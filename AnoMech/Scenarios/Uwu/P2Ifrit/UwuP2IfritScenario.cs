@@ -18,7 +18,6 @@ public sealed class UwuP2IfritScenario : IScenario
 {
     public string Name => "Ifrit";
     public IPhase Phase => UwuZone.Ifrit;
-    public bool SupportsSolo => true;
     public void DrawSettings() => settingsWindow.Draw();
     public object SettingsOverrides => settingsWindow.Overrides;
 
