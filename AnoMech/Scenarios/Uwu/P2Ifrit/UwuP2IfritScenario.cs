@@ -38,7 +38,7 @@ public sealed class UwuP2IfritScenario : IScenario
 
     private SimEnemy? ifrit;
     private bool ifritTanked;
-    private Vector3? ifritFaces;
+    private bool followTankAfterMove;
     private readonly List<SimEnemy> helpers = [];
     private readonly List<SimEnemy> radiantPlumeCasters = [];
     private readonly Dictionary<float, SimEnemy?> nails = [];
@@ -66,7 +66,7 @@ public sealed class UwuP2IfritScenario : IScenario
         Array.Clear(crossCasters);
         eruptionBaits = [];
         ifritTanked = false;
-        ifritFaces = null;
+        followTankAfterMove = false;
 
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UwuP2IfritState>)AiStrats[idx]).Run(state, world);
@@ -81,7 +81,6 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(9.13f, ResolveRadiantPlumes);
         world.Events.Add(9.10f, () => ifrit?.SetVisible(false));
         world.Events.Add(10.15f, PlaceIfritFacingSouth);
-        world.Events.Add(10.15f, () => ifritFaces = MarkerC);
         world.Events.Add(10.24f, () => Arrive(ifrit));
         world.Events.Add(12.29f, () => TankIfrit(true));
         world.Events.Add(12.38f, () => CastSelf(ifrit, ActionId.Hellfire, 2.7f));
@@ -94,7 +93,6 @@ public sealed class UwuP2IfritScenario : IScenario
 
         world.Events.Add(39.89f, SpawnNails);
         world.Events.Add(40.82f, () => SetNailsTargetable(true));
-        world.Events.Add(41.50f, () => ifritFaces = null);
         world.Events.Add(41.50f, () => MoveIfrit(state.FromReference(IfritAtNailsReference)));
         world.Events.Add(45.76f, TetherInfernalFetters);
         world.Events.Add(46.03f, () => CastInfernoHowl(state.HowlFirst));
@@ -216,22 +214,20 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(168.00f, DespawnAll);
     }
 
-    // Keeps Ifrit facing his tank; targeted casts would turn him.
+    // A scripted drag walks Ifrit to his spot first; he picks the tank back up once there.
     public void Tick(float delta, float elapsed)
     {
-        if (ifritTanked && ifrit is { IsMoving: false } boss && FacingTarget() is { } at)
-            boss.Face(at);
+        if (!followTankAfterMove || ifrit is not { IsMoving: false } boss) return;
+        followTankAfterMove = false;
+        if (ifritTanked) boss.Follow(Get(PartyRole.MainTank));
     }
-
-    private static readonly Vector3 MarkerC = new(0f, 0f, 6.699f);
-
-    private Vector3? FacingTarget() =>
-        ifritFaces ?? (Get(PartyRole.MainTank) is { } tank && tank.IsAlive() ? tank.Position : null);
 
     private void TankIfrit(bool tanked)
     {
         ifritTanked = tanked;
         ifrit?.SetTargetable(tanked);
+        if (tanked) ifrit?.Follow(Get(PartyRole.MainTank));
+        else ifrit?.Follow();
     }
 
     private SimCharacter? Get(PartyRole role) => party.Get(role);
@@ -289,8 +285,11 @@ public sealed class UwuP2IfritScenario : IScenario
 
     private void MoveIfrit(Vector3 to)
     {
+        if (ifrit == null) return;
         var mainTank = Get(PartyRole.MainTank);
-        ifrit?.MoveTo(to, 4f, mainTank == null ? null : Facing(to, mainTank.Position));
+        ifrit.Follow();
+        ifrit.MoveTo(to, 4f, mainTank == null ? null : Facing(to, mainTank.Position));
+        followTankAfterMove = true;
     }
 
     private void CastRadiantPlumes()
@@ -337,8 +336,8 @@ public sealed class UwuP2IfritScenario : IScenario
 
     private void Incinerate()
     {
-        if (ifrit == null || Get(PartyRole.MainTank) is not { } mainTank || FacingTarget() is not { } facing) return;
-        var rotation = Facing(ifrit.Position, facing);
+        if (ifrit == null || Get(PartyRole.MainTank) is not { } mainTank) return;
+        var rotation = Facing(ifrit.Position, mainTank.Position);
         ifrit.SetPosition(new Placement(ifrit.Position, rotation));
         PlayEffect(ifrit, ActionId.Incinerate, 1.1f, rotation, mainTank.GameObjectId);
         var hits = damage.Resolve(ifrit, ActionId.Incinerate, [DamageType.TankBuster], [(StatusId.FireResistanceDownII, 5f)],
