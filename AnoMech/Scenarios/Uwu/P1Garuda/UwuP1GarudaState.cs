@@ -41,6 +41,7 @@ public sealed class UwuP1GarudaState
     public IReadOnlyList<PartyRole> FrictionTargets { get; }
     public IReadOnlyList<Vector3> SatinPlumesFirst { get; }
     public IReadOnlyList<Vector3> SatinPlumesSecond { get; }
+    public IReadOnlyList<PartyRole> MesohighTargets { get; }
 
     public Vector3 SuparnaSongIntercept { get; set; }
     public Vector3 ChiradaSongIntercept { get; set; }
@@ -58,6 +59,7 @@ public sealed class UwuP1GarudaState
         FrictionTargets = [NonTanks[rng.Next(NonTanks.Length)], NonTanks[rng.Next(NonTanks.Length)]];
         SatinPlumesFirst = SatinPlumeSpots.OrderBy(_ => rng.Next()).Take(4).ToList();
         SatinPlumesSecond = SatinPlumeSpots.OrderBy(_ => rng.Next()).Take(4).ToList();
+        MesohighTargets = Enum.GetValues<PartyRole>().OrderBy(_ => rng.Next()).Take(2).ToList();
     }
 
     // Compass degrees: 0 = north (-Z), 90 = east (+X).

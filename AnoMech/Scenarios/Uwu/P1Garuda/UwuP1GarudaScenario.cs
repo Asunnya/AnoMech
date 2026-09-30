@@ -7,7 +7,6 @@ using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using LuminaAction = Lumina.Excel.Sheets.Action;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
 using static AnoMech.Scenarios.Uwu.UwuUtils;
 
@@ -34,14 +33,9 @@ public sealed class UwuP1GarudaScenario : IScenario
     private const float PassableHalfWidth = 1f;
     private const int MaxThermalLow = 2;
     private const uint BubbleEObjId = 0x1E8F68;
-    private const float HazardStep = 0.1f;
     private const int ChargesToWake = 4;
     private const uint SatinPlumeMaxHp = 35827;
     private const float SatinPlumeWalkSpeed = 7f;
-    private const float SatinPlumeHitbox = 1f;
-    private const float PlayerGcdHit = 0.06f;
-    private const float PlayerOgcdHit = 0.02f;
-    private const byte GcdCooldownGroup = 58;
     private static readonly Vector3 FirstPlumesGather = new(-7f, 0f, 3f);
     private static readonly Vector3 SecondPlumesGather = new(0f, 0f, 3.5f);
 
@@ -61,8 +55,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     private readonly List<SimEnemy> satinPlumes = [];
     private readonly Dictionary<SimEnemy, float> satinPlumeHp = [];
     private readonly Dictionary<SimEnemy, float> satinPlumeBotDrain = [];
-    private bool satinPlumesGathered;
-    private int lastPlayerActionSequence = -1;
+    private float lastTimelineTick;
     private readonly List<SimEnemy> helpers = [];
     private readonly SimEnemy?[] featherDummies = new SimEnemy?[5];
     private readonly Dictionary<SimCharacter, float> bubbleDwell = [];
@@ -80,7 +73,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         satinPlumes.Clear();
         satinPlumeHp.Clear();
         satinPlumeBotDrain.Clear();
-        satinPlumesGathered = false;
+        lastTimelineTick = 0f;
         helpers.Clear();
         greatWhirlwindCasters.Clear();
         greatWhirlwindSpots.Clear();
@@ -88,8 +81,6 @@ public sealed class UwuP1GarudaScenario : IScenario
         bubbleDwell.Clear();
         bubbleActive = false;
         aetherialCharges = 0;
-        Plugin.PlayerInputHooks.ActionExecuted -= OnPlayerAction;
-        Plugin.PlayerInputHooks.ActionExecuted += OnPlayerAction;
 
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UwuP1GarudaState>)AiStrats[idx]).Run(state, world);
@@ -98,7 +89,6 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(0f, SpawnGaruda);
         world.Events.Add(0.2f, () => garuda?.MoveTo(new Vector3(0f, 0f, -0.7f), 8f, MathF.PI));
         world.Events.Add(0.2f, () => garuda?.SetTarget(Get(PartyRole.MainTank), follow: false));
-        ScheduleHazards();
 
         world.Events.Add(5.20f, () => Lockon(Get(state.MistralSongTarget), LockonId.MistralSong));
         world.Events.Add(5.29f, () => CastSelf(garuda, ActionId.Slipstream, 2.2f));
@@ -223,10 +213,15 @@ public sealed class UwuP1GarudaScenario : IScenario
     }
 
     // Garuda's walks are scripted, so she keeps her spots and only turns to the main tank.
+    // The plumes drain on the timeline's clock; standing in the bubble counts real time.
     public void Tick(float delta, float elapsed)
     {
         if (garuda is { Targetable: true, IsMoving: false, IsCasting: false } boss && Get(PartyRole.MainTank) is { } tank && tank.IsAlive())
             boss.Face(tank);
+        var timeline = world.Events.Elapsed;
+        DrainSatinPlumes(timeline - lastTimelineTick);
+        lastTimelineTick = timeline;
+        CleanseInBubble(delta);
     }
 
     private void SpawnGaruda()
@@ -299,7 +294,6 @@ public sealed class UwuP1GarudaScenario : IScenario
         satinPlumes.Clear();
         satinPlumeHp.Clear();
         satinPlumeBotDrain.Clear();
-        satinPlumesGathered = false;
         foreach (var at in satinSpots)
         {
             if (SpawnEnemy(BNpcBaseId.SatinPlume, BNpcNameId.SatinPlume, new Placement(at, 0f), true, true, EnemyListMode.Always) is not { } plume) continue;
@@ -322,20 +316,17 @@ public sealed class UwuP1GarudaScenario : IScenario
         }
     }
 
-    // The bots AoE the plumes down on the log's schedule; the player's hits only speed that up.
+    // The bots AoE the plumes down on the log's schedule.
     private void SatinPlumesGathered(float at, float[] botKillAt)
     {
-        satinPlumesGathered = true;
         for (var i = 0; i < satinPlumes.Count && i < botKillAt.Length; i++)
             satinPlumeBotDrain[satinPlumes[i]] = 1f / (botKillAt[i] - at);
-        for (var t = at + HazardStep; t <= botKillAt.Max() + HazardStep; t += HazardStep)
-            world.Events.Add(t - at, ChipSatinPlumesWithBots);
     }
 
-    private void ChipSatinPlumesWithBots()
+    private void DrainSatinPlumes(float seconds)
     {
         foreach (var plume in satinPlumes.ToList())
-            DamageSatinPlume(plume, satinPlumeBotDrain.GetValueOrDefault(plume) * HazardStep);
+            DamageSatinPlume(plume, satinPlumeBotDrain.GetValueOrDefault(plume) * seconds);
     }
 
     private void DamageSatinPlume(SimEnemy plume, float fraction)
@@ -354,51 +345,6 @@ public sealed class UwuP1GarudaScenario : IScenario
     {
         if (plume.BattleCharaPtr != null)
             plume.BattleCharaPtr->Health = (uint)MathF.Ceiling(SatinPlumeMaxHp * MathF.Max(0f, hp));
-    }
-
-    private void OnPlayerAction(ActionType actionType, uint actionId, ulong targetId)
-    {
-        if (actionType != ActionType.Action || satinPlumes.Count == 0 || !IsNewPlayerAction()) return;
-        if (Plugin.DataManager.GetExcelSheet<LuminaAction>().GetRowOrDefault(actionId) is not { } action) return;
-        var hits = SatinPlumesHitBy(action);
-        if (hits.Count == 0) return;
-        if (!satinPlumesGathered)
-        {
-            party.WipeAllPlayers("Hit a Satin Plume before the plumes gathered");
-            return;
-        }
-        var isGcd = action.CooldownGroup == GcdCooldownGroup || action.AdditionalCooldownGroup == GcdCooldownGroup;
-        foreach (var plume in hits) DamageSatinPlume(plume, isGcd ? PlayerGcdHit : PlayerOgcdHit);
-    }
-
-    private unsafe bool IsNewPlayerAction()
-    {
-        var am = ActionManager.Instance();
-        if (am == null) return false;
-        var seq = (int)am->LastUsedActionSequence;
-        if (seq == lastPlayerActionSequence) return false;
-        lastPlayerActionSequence = seq;
-        return true;
-    }
-
-    // Cones and lines count as circles of their length, to catch early hits.
-    private List<SimEnemy> SatinPlumesHitBy(LuminaAction action)
-    {
-        if (party.Player is not { } player) return [];
-        var selfAoe = action.CanTargetSelf && action.NeedToFaceTarget && action.CastType == 2 && action.EffectRange > 0;
-        if (!action.CanTargetHostile && !selfAoe) return [];
-        var targetId = Plugin.TargetManager.Target?.EntityId;
-        var target = new[] { garuda, spiny, suparna, chirada }.Concat(satinPlumes).FirstOrDefault(e => e != null && e.EntityId == targetId);
-        if (action.CanTargetHostile && target == null) return [];
-
-        var hits = new List<SimEnemy>();
-        if (action.CanTargetHostile && satinPlumes.Contains(target!)) hits.Add(target!);
-        if (action.EffectRange == 0 || action.CastType == 1) return hits;
-        var centre = selfAoe || action.CastType is not (2 or 5 or 6) ? player.Position : target!.Position;
-        foreach (var plume in satinPlumes)
-            if (!hits.Contains(plume) && FlatDistance(plume.Position, centre) <= action.EffectRange + SatinPlumeHitbox)
-                hits.Add(plume);
-        return hits;
     }
 
     private void FixateSpinyOnOffTank()
@@ -479,25 +425,16 @@ public sealed class UwuP1GarudaScenario : IScenario
         if (aetherialCharges == ChargesToWake) utils.Awaken(garuda, false);
     }
 
-    private void ScheduleHazards()
-    {
-        for (var t = 43.5f; t <= 66.2f; t += HazardStep)
-            world.Events.Add(t, CleanseInBubble);
-    }
-
-    private void CleanseInBubble()
+    private void CleanseInBubble(float delta)
     {
         if (!bubbleActive) return;
-        for (var slot = 0; slot < 8; slot++)
+        var inside = party.Find.InsideCircle(UwuP1GarudaState.GigastormSpot, UwuP1GarudaState.BubbleRadius)
+            .Where(m => m.HasStatus(StatusId.ThermalLow)).ToHashSet();
+        foreach (var member in bubbleDwell.Keys.Where(m => !inside.Contains(m)).ToList())
+            bubbleDwell.Remove(member);
+        foreach (var member in inside)
         {
-            if (party.Get(slot) is not { } member || !member.IsAlive()) continue;
-            var inside = FlatDistance(member.Position, UwuP1GarudaState.GigastormSpot) <= UwuP1GarudaState.BubbleRadius;
-            if (!inside || !member.HasStatus(StatusId.ThermalLow))
-            {
-                bubbleDwell.Remove(member);
-                continue;
-            }
-            var dwell = bubbleDwell.GetValueOrDefault(member) + HazardStep;
+            var dwell = bubbleDwell.GetValueOrDefault(member) + delta;
             if (dwell < UwuP1GarudaState.BubbleCleanseSeconds)
             {
                 bubbleDwell[member] = dwell;
@@ -578,11 +515,10 @@ public sealed class UwuP1GarudaScenario : IScenario
 
     private void TetherMesohigh()
     {
-        var seeds = Enumerable.Range(0, 8).Select(party.Get).Where(m => m is { } c && c.IsAlive()).OrderBy(_ => Random.Shared.Next()).ToList();
-        if (suparna != null && seeds.Count > 0)
-            state.SuparnaMesohigh = world.Tether(suparna, End.Passable(seeds[0], PassableHalfWidth), TetherId.Mesohigh);
-        if (chirada != null && seeds.Count > 1)
-            state.ChiradaMesohigh = world.Tether(chirada, End.Passable(seeds[1], PassableHalfWidth), TetherId.Mesohigh);
+        if (suparna != null && Get(state.MesohighTargets[0]) is { } suparnaTarget)
+            state.SuparnaMesohigh = world.Tether(suparna, End.Passable(suparnaTarget, PassableHalfWidth), TetherId.Mesohigh);
+        if (chirada != null && Get(state.MesohighTargets[1]) is { } chiradaTarget)
+            state.ChiradaMesohigh = world.Tether(chirada, End.Passable(chiradaTarget, PassableHalfWidth), TetherId.Mesohigh);
     }
 
     // Kills holders without Thermal Low, cleanses those with it.
