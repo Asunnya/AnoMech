@@ -97,6 +97,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         world.Events.Add(0f, () => utils.SpawnArenaFloor());
         world.Events.Add(0f, SpawnGaruda);
         world.Events.Add(0.2f, () => garuda?.MoveTo(new Vector3(0f, 0f, -0.7f), 8f, MathF.PI));
+        world.Events.Add(0.2f, () => garuda?.SetTarget(Get(PartyRole.MainTank), follow: false));
         ScheduleHazards();
 
         world.Events.Add(5.20f, () => Lockon(Get(state.MistralSongTarget), LockonId.MistralSong));
@@ -219,6 +220,13 @@ public sealed class UwuP1GarudaScenario : IScenario
         var dummy = SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.Dummy, new Placement(at, 0f), false, true, EnemyListMode.Never);
         if (dummy != null) helpers.Add(dummy);
         return dummy;
+    }
+
+    // Garuda's walks are scripted, so she keeps her spots and only turns to the main tank.
+    public void Tick(float delta, float elapsed)
+    {
+        if (garuda is { Targetable: true, IsMoving: false, IsCasting: false } boss && Get(PartyRole.MainTank) is { } tank && tank.IsAlive())
+            boss.Face(tank);
     }
 
     private void SpawnGaruda()
