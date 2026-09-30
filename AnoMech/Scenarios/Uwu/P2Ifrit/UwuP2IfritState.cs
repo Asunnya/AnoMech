@@ -7,7 +7,7 @@ using AnoMech.Core.SimObjects;
 
 namespace AnoMech.Scenarios.Uwu.P2Ifrit;
 
-// Ifrit randomization, from 23 pulls. AI positions are authored with C1 south (the clear) and rotated by FromReference.
+// AI positions are authored with C1 south and rotated by FromReference.
 public sealed class UwuP2IfritState
 {
     public const float EdgeRadius = 19.5f;

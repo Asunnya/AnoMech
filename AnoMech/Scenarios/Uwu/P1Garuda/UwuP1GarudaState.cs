@@ -7,7 +7,7 @@ using AnoMech.Core.SimObjects;
 
 namespace AnoMech.Scenarios.Uwu.P1Garuda;
 
-// Garuda randomization, from 86 pulls; the opening Mistral Song always targets a healer.
+// The opening Mistral Song always targets a healer.
 public sealed class UwuP1GarudaState
 {
     public static readonly Vector3 SpinyPlumeSpawn = new(-10f, 0f, 0f);

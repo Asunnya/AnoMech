@@ -16,7 +16,7 @@ using static AnoMech.Scenarios.Uwu.P3Titan.UwuP3TitanState;
 
 namespace AnoMech.Scenarios.Uwu.P3Titan;
 
-// UWU P3 Titan; timings from the clear in Network_30208_20260816.log (pull 18). Landslides follow Titan's facing at cast start.
+// Landslides follow Titan's facing at cast start.
 public sealed class UwuP3TitanScenario : IScenario
 {
     public string Name => "Titan";
@@ -506,7 +506,7 @@ public sealed class UwuP3TitanScenario : IScenario
         foreach (var gaol in reached) world.Events.Add(0.35f, () => BreakGaol(gaol, explode: true));
     }
 
-    // Freefire chains to gaols in reach; the prisoner is freed ~1.1s later, like the clear.
+    // Freefire chains to gaols in reach; the prisoner is freed ~1.1s later.
     private void BreakGaol(SimEnemy gaol, bool explode)
     {
         if (!gaols.Remove(gaol, out var role)) return;
