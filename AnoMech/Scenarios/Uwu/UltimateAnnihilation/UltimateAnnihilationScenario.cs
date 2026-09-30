@@ -214,9 +214,6 @@ public sealed class UltimateAnnihilationScenario : IScenario
 
     private static bool IsTank(SimCharacter member) => member is ISimPartyMember { Role: PartyRole.MainTank or PartyRole.OffTank };
 
-    private List<SimCharacter> AliveMembers() =>
-        Enumerable.Range(0, 8).Select(party.Get).OfType<SimCharacter>().Where(m => m.IsAlive()).ToList();
-
     private SimEnemy? Dummy(int index) => dummies[index];
 
     private Func<SimEnemy?>[] DummyGetters(int first, int count) =>
@@ -258,7 +255,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
 
     private void GiveEveryoneThermalLow()
     {
-        foreach (var member in AliveMembers())
+        foreach (var member in party.ActiveMembers().ToList())
             member.AddStatus(StatusId.ThermalLow);
     }
 
@@ -285,7 +282,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
     private void Raidwide(SimEnemy? caster, uint actionId, float fraction, float animationLock)
     {
         PlayEffect(caster, actionId, animationLock);
-        foreach (var member in AliveMembers())
+        foreach (var member in party.ActiveMembers().ToList())
             damage.ApplyDamage(member, fraction, actionId, "Raidwide", false);
     }
 
@@ -371,7 +368,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
             burst?.SetPosition(new Placement(spot, 0f));
             PlayEffect(burst, ActionId.SuperCyclone, 1.1f);
         }
-        foreach (var member in AliveMembers())
+        foreach (var member in party.ActiveMembers().ToList())
             damage.ApplyDamage(member, SuperCycloneDamage, ActionId.SuperCyclone, "Super Cyclone", false);
     }
 

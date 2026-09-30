@@ -231,11 +231,9 @@ public sealed class UwuP3TitanScenario : IScenario
 
     private SimCharacter? Get(PartyRole role) => party.Get(role);
 
-
-
     private static bool IsJailed(SimCharacter member) => member.HasStatus(StatusId.Fetters);
 
-    private SimCharacter[] Jailed() => AliveMembers().Where(IsJailed).ToArray();
+    private SimCharacter[] Jailed() => party.ActiveMembers().Where(IsJailed).ToArray();
 
     private SimEnemy? SpawnEnemy(uint baseId, uint nameId, Placement placement, bool targetable, bool visible, EnemyListMode enemyList) =>
         world.SpawnEnemy(new EnemySpawnConfig(
@@ -259,13 +257,6 @@ public sealed class UwuP3TitanScenario : IScenario
         if (helper == null) return;
         helpers.Remove(helper);
         helper.Despawn();
-    }
-
-    private IEnumerable<SimCharacter> AliveMembers()
-    {
-        for (var slot = 0; slot < 8; slot++)
-            if (party.Get(slot) is { } member && member.IsAlive())
-                yield return member;
     }
 
     private void SpawnTitan() =>
@@ -331,7 +322,7 @@ public sealed class UwuP3TitanScenario : IScenario
     {
         if (titan == null) return;
         PlayEffect(titan, actionId, 2.1f);
-        foreach (var member in AliveMembers())
+        foreach (var member in party.ActiveMembers().ToList())
         {
             var distance = Vector2.Distance(Flat(member.Position), Flat(titan.Position));
             var fraction = peak * MathF.Max(0f, 1f - distance / falloff);
@@ -342,7 +333,7 @@ public sealed class UwuP3TitanScenario : IScenario
     private void Raidwide(uint actionId, float fraction)
     {
         PlayEffect(titan, actionId, 2.1f);
-        foreach (var member in AliveMembers())
+        foreach (var member in party.ActiveMembers().ToList())
             damage.ApplyDamage(member, fraction, actionId, "Raidwide", false);
     }
 
@@ -454,7 +445,7 @@ public sealed class UwuP3TitanScenario : IScenario
     {
         if (titan == null) return;
         PlayEffect(titan, ActionId.Upheaval, 2.1f);
-        foreach (var member in AliveMembers())
+        foreach (var member in party.ActiveMembers().ToList())
             damage.ApplyDamage(member, 0.26f, ActionId.Upheaval, "Knockback", false);
         party.Knockback(titan.Position, UpheavalKnockback);
     }
