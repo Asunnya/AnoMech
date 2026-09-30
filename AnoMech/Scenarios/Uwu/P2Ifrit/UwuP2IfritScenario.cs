@@ -156,15 +156,15 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(101.10f, () => DespawnDashClone(180f));
         world.Events.Add(101.10f, () => DespawnDashClone(90f));
 
-        world.Events.Add(102.84f, () => CastInfernoHowl(state.HowlFirst));
+        world.Events.Add(102.84f, () => CastInfernoHowl(state.HowlThird));
         world.Events.Add(104.70f, () => SearingWind(state.HowlSecond));
-        world.Events.Add(104.79f, () => ResolveInfernoHowl(state.HowlFirst, 30f));
+        world.Events.Add(104.79f, () => ResolveInfernoHowl(state.HowlThird, 30f));
         world.Events.Add(109.88f, () => Lockon(Get(state.FlamingCrushTargets[0]), LockonId.FlamingCrush));
         world.Events.Add(110.72f, () => SearingWind(state.HowlSecond));
-        world.Events.Add(110.77f, () => SearingWind(state.HowlFirst));
+        world.Events.Add(110.77f, () => SearingWind(state.HowlThird));
         world.Events.Add(115.00f, () => FlamingCrush(state.FlamingCrushTargets[0]));
         world.Events.Add(116.74f, () => SearingWind(state.HowlSecond));
-        world.Events.Add(116.78f, () => SearingWind(state.HowlFirst));
+        world.Events.Add(116.78f, () => SearingWind(state.HowlThird));
 
         world.Events.Add(119.02f, () => TankIfrit(false));
         world.Events.Add(119.02f, () => Leave(ifrit));
@@ -173,7 +173,7 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(122.53f, () => SpawnDashClone(state.NailKillBearings[1], awakened: state.AwakenedDash == 1));
         world.Events.Add(122.53f, () => SpawnDashClone(state.NailKillBearings[2], awakened: state.AwakenedDash == 2));
         world.Events.Add(122.53f, () => SpawnDashClone(state.NailKillBearings[3], awakened: state.AwakenedDash == 3));
-        world.Events.Add(122.80f, () => SearingWind(state.HowlFirst));
+        world.Events.Add(122.80f, () => SearingWind(state.HowlThird));
         world.Events.Add(123.43f, () => CastDash(state.NailKillBearings[0]));
         world.Events.Add(124.85f, () => CastDash(state.NailKillBearings[1]));
         world.Events.Add(126.24f, () => CastDash(state.NailKillBearings[2]));
@@ -182,7 +182,7 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(127.66f, () => CastDash(state.NailKillBearings[3]));
         world.Events.Add(127.83f, () => ResolveDash(state.NailKillBearings[1]));
         world.Events.Add(128.56f, () => AwakenedCross(0));
-        world.Events.Add(128.82f, () => SearingWind(state.HowlFirst));
+        world.Events.Add(128.82f, () => SearingWind(state.HowlThird));
         world.Events.Add(129.03f, () => DespawnDashClone(state.NailKillBearings[1]));
         world.Events.Add(129.22f, () => ResolveDash(state.NailKillBearings[2]));
         world.Events.Add(129.98f, () => AwakenedCross(1));
@@ -194,7 +194,7 @@ public sealed class UwuP2IfritScenario : IScenario
 
         world.Events.Add(134.00f, PlaceIfritFacingSouth);
         world.Events.Add(134.05f, () => Arrive(ifrit));
-        world.Events.Add(134.83f, () => SearingWind(state.HowlFirst));
+        world.Events.Add(134.83f, () => SearingWind(state.HowlThird));
         world.Events.Add(134.83f, () => TankIfrit(true));
         world.Events.Add(135.50f, () => MoveIfrit(new Vector3(-8f, 0f, 0f)));
         world.Events.Add(138.98f, Incinerate);
@@ -218,7 +218,7 @@ public sealed class UwuP2IfritScenario : IScenario
         world.Events.Add(168.00f, DespawnAll);
     }
 
-    // A scripted drag walks Ifrit to his spot first; he picks the tank back up once there.
+    // After a scripted drag Ifrit goes back to the MT.
     public void Tick(float delta, float elapsed)
     {
         var timeline = world.Events.Elapsed;
