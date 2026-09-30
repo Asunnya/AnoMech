@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
@@ -59,19 +60,24 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         ai.Move(30.8f, () => Group(OppositeFirstJump(13.5f)));
         ai.Move(36.0f, () => Group(state.FromJumpFrame(new Vector2(14f - UpheavalStandOff, 0f)), 0.1f), jitter: 0f);
         ai.Move(40.1f, () => Group(UpheavalStandingSpot(), 0.1f), jitter: 0f);
+        ai.Automarker(46.31f, MarkTheGaolsInOrder);
+        ai.Automarker(58.0f, () => []);
+        ai.Automarker(92.45f, () => new() { [state.JailedHealer] = Sign.Attack1 });
+        ai.Automarker(103.5f, () => []);
         ai.Move(46.8f, JailedBesideTheirGaolSpotsOutOfTheLandslide, jitter: 0f);
-        ai.Move(46.8f, () => PartyTo(new Vector2(-0.8f, -6.1f), withGaolTargets: false), jitter: 0f);
-        ai.Move(48.6f, () => HolderTo(new Vector2(-11f, -5f * state.SafeSide)));
+        ai.Move(46.8f, BaitTheGaolWindowLandslideThroughTheMiddle, jitter: 0f);
+        ai.Move(48.6f, () => PartyTo(new Vector2(-0.8f, -6.1f), withGaolTargets: false), jitter: 0f);
+        ai.Move(48.6f, () => MainTankTo(new Vector2(-11f, -5f * state.SafeSide)));
         ai.Move(50.40f, JailedIntoTheChain, jitter: 0f, sprint: true);
         ai.Move(50.75f, () => PartyTo(new Vector2(9.5f, -10.2f), withGaolTargets: false), jitter: 0f);
-        ai.Move(50.8f, () => HolderTo(new Vector2(-11f, 0f)));
-        ai.Move(53.05f, () => HolderTo(new Vector2(-8f, -6f * state.SafeSide)));
-        ai.Move(57.0f, () => HolderTo(new Vector2(8f, 0f)), jitter: 0f);
+        ai.Move(50.8f, () => MainTankTo(new Vector2(-11f, 0f)));
+        ai.Move(53.05f, () => MainTankTo(new Vector2(-8f, -6f * state.SafeSide)));
+        ai.Move(57.0f, () => MainTankTo(new Vector2(8f, 0f)), jitter: 0f);
         ai.Move(57.8f, () => PartyTo(TitansLeftSide, withGaolTargets: true), jitter: 0f);
 
         ai.Move(70.3f, () => PartyTo(TitansRightSide, withGaolTargets: true), jitter: 0f);
         ai.Move(73.3f, () => PartyTo(new Vector2(4f, 8.5f), withGaolTargets: true), jitter: 0f);
-        ai.Move(73.3f, () => HolderTo(new Vector2(1f, 0f)), jitter: 0f);
+        ai.Move(73.3f, () => MainTankTo(new Vector2(1f, 0f)), jitter: 0f);
         PlanEvery(ai, 76.1f, 80.3f, _ => []);
 
         ai.Move(84.9f, () => Group(OppositeSecondJump(10f)));
@@ -94,7 +100,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         var front = FromSecondJumpFrame(new Vector2(-4f, 0f));
         for (var slot = 0; slot < 8; slot++) spots[slot] = front + SpreadOffset(slot, TightSpread);
         spots[(int)PartyRole.CasterDps] = FromSecondJumpFrame(new Vector2(-10f, 0f));
-        if (!state.Jailed.Contains(state.Holder)) spots[(int)state.Holder] = FromSecondJumpFrame(new Vector2(5f, 0f));
+        spots[(int)PartyRole.MainTank] = FromSecondJumpFrame(new Vector2(5f, 0f));
         foreach (var jailed in state.Jailed) spots[(int)jailed] = null;
         return AiMove.Create(spots).NaturalOrder();
     }
@@ -178,12 +184,11 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     {
         groupTarget = null;
         var anchor = jumpFrame ? state.FromJumpFrame(spot) : spot;
-        var holderMovesAlone = !state.GaolTargets.Contains(state.Holder);
         var spots = new Vector2?[8];
         for (var slot = 0; slot < 8; slot++)
         {
             var role = (PartyRole)slot;
-            if (holderMovesAlone && role == state.Holder) continue;
+            if (role == PartyRole.MainTank) continue;
             if (!withGaolTargets && state.GaolTargets.Contains(role)) continue;
             spots[slot] = anchor + SpreadOffset(slot, TightSpread);
         }
@@ -196,11 +201,19 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
         return new Vector2(eastFrame.X * cos - eastFrame.Y * sin, eastFrame.X * sin + eastFrame.Y * cos);
     }
 
-    private IAiMove HolderAt(Vector2 spot) =>
-        state.GaolTargets.Contains(state.Holder) && state.Jailed.Contains(state.Holder) ? Nobody() : Only(state.Holder, spot);
+    private Dictionary<PartyRole, Sign> MarkTheGaolsInOrder() =>
+        state.GaolTargets.Select((role, order) => (role, order)).ToDictionary(x => x.role, x => Sign.Attack1 + x.order);
 
-    private IAiMove HolderTo(Vector2 jumpFrameSpot) =>
-        state.GaolTargets.Contains(state.Holder) ? Nobody() : Only(state.Holder, state.FromJumpFrame(jumpFrameSpot));
+    private IAiMove MainTankTo(Vector2 jumpFrameSpot) => Only(PartyRole.MainTank, state.FromJumpFrame(jumpFrameSpot));
+
+    private IAiMove BaitTheGaolWindowLandslideThroughTheMiddle()
+    {
+        var spots = new Vector2?[8];
+        var onTheAxis = state.FromJumpFrame(new Vector2(-0.8f, 0f));
+        for (var slot = 0; slot < 8; slot++)
+            if (!state.GaolTargets.Contains((PartyRole)slot)) spots[slot] = onTheAxis + SpreadOffset(slot, TightSpread);
+        return AiMove.Create(spots).NaturalOrder();
+    }
 
     private Vector2 BesideGaolSpot(int order) => state.FromJumpFrame(order switch
     {
@@ -213,7 +226,6 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
     {
         var spots = new Vector2?[8];
         for (var i = 0; i < state.GaolTargets.Count; i++) spots[(int)state.GaolTargets[i]] = BesideGaolSpot(i);
-        if (!state.GaolTargets.Contains(state.Holder)) spots[(int)state.Holder] = state.FromJumpFrame(new Vector2(-11f, 0f));
         return AiMove.Create(spots).NaturalOrder();
     }
 
@@ -245,7 +257,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
                 if (wedge[slot] is { } spot) HeadFor(slot, spot, now);
             return AiMove.Create((Vector2?[])wedge.Clone()).NaturalOrder();
         }
-        var holder = (int)state.Holder;
+        var holder = (int)PartyRole.MainTank;
         var members = Enumerable.Range(0, 8)
             .Where(slot => (holderJoinsTheGroup || slot != holder) && !excluded.Contains(slot) && !state.Jailed.Contains((PartyRole)slot))
             .Select(slot => (slot, member: world.Party.Get(slot)))
@@ -276,7 +288,7 @@ public sealed class UwuP3TitanAi : IScenarioAi<UwuP3TitanState>
                     : NearestSpotClearOfUpcomingHazards(WhereItTurns(slot, at), now, Margin);
             spots[slot] = HeadFor(slot, spot, now);
         }
-        if (!holderJoinsTheGroup && !excluded.Contains(holder) && !state.Jailed.Contains(state.Holder) && world.Party.Get(holder) is { } tank && tank.IsAlive())
+        if (!holderJoinsTheGroup && !excluded.Contains(holder) && world.Party.Get(holder) is { } tank && tank.IsAlive())
             spots[holder] = state.Hazards.Any(h => h.At > now)
                 ? NearestSpotClearOfUpcomingHazards(Flat(tank.Position), now, Margin)
                 : BesideTitanAwayFrom(target, now);

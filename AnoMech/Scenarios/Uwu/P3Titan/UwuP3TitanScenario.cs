@@ -10,7 +10,6 @@ using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Network;
-using LuminaAction = Lumina.Excel.Sheets.Action;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
 using static AnoMech.Scenarios.Uwu.UwuUtils;
 using static AnoMech.Scenarios.Uwu.P3Titan.UwuP3TitanState;
@@ -33,15 +32,12 @@ public sealed class UwuP3TitanScenario : IScenario
     private const float LandslideKnockback = 15f;
     private const float UpheavalKnockback = 24f;
     private const float FreefireRadius = 6f;
-    private const float GaolSpotTolerance = 2.5f;
-    private const float GaolChainReach = 6.7f + GaolSpotTolerance;
     private const float GaolChainDelay = 0.7f;
     private const float PrisonerFreedAfter = 1.1f;
     private const float TankBusterHalfAngle = MathF.PI / 4f;
     private const uint HealerGaolMaxHp = 1_300_000;
     private const float HealerGaolDrainFrom = 99.5f;
     private const float HealerGaolDrainTo = 102.0f;
-    private const float HealerGaolHpUntilPlayerHits = 0.05f;
     private const float JumpTurnSpeed = 3f;
     private const string ShrunkenFloorDeath = "Fell off the shrunken floor";
     private SimWorld world = null!;
@@ -55,16 +51,12 @@ public sealed class UwuP3TitanScenario : IScenario
     private bool titanFacesTank;
     private float? turningTo;
     private PartyRole? busterTank;
-    private bool gaolsMarked;
     private SimEnemy? healerGaol;
-    private bool playerHitHealerGaol;
-    private int lastPlayerActionSequence;
     private float landslideRotation;
     private readonly List<SimEnemy> helpers = [];
     private readonly SimEnemy?[] bombs = new SimEnemy?[6];
     private readonly SimEnemy?[] lateBombs = new SimEnemy?[4];
     private readonly Dictionary<SimEnemy, PartyRole> gaols = [];
-    private readonly Dictionary<PartyRole, Sign> gaolSigns = [];
     private readonly List<(SimEnemy? Caster, float Rotation)> landslideCasters = [];
 
     public void Run(SimWorld worldParam, int? selectedAi)
@@ -79,18 +71,12 @@ public sealed class UwuP3TitanScenario : IScenario
         titanFacesTank = false;
         turningTo = null;
         busterTank = null;
-        gaolsMarked = false;
         healerGaol = null;
-        playerHitHealerGaol = false;
         helpers.Clear();
         gaols.Clear();
-        gaolSigns.Clear();
         landslideCasters.Clear();
         Array.Clear(bombs);
         Array.Clear(lateBombs);
-
-        Plugin.PlayerInputHooks.ActionExecuted -= OnPlayerAction;
-        Plugin.PlayerInputHooks.ActionExecuted += OnPlayerAction;
 
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UwuP3TitanState>)AiStrats[idx]).Run(state, world);
@@ -133,14 +119,13 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(46.71f, () => ResolveBursts(bombs, 0, 5));
         world.Events.Add(48.27f, () => SpawnBomb(bombs, 5, state.SixthBomb, 49.16f));
         world.Events.Add(48.49f, () => titanFacesTank = true);
-        world.Events.Add(48.49f, () => CastLandslide(50.68f));
+        world.Events.Add(48.49f, () => CastLandslide(50.68f, state.GaolWindowLandslideTarget));
         world.Events.Add(49.16f, () => BuryBombs(bombs, 5, 1));
         world.Events.Add(50.68f, ResolveLandslide);
         world.Events.Add(51.26f, () => Jail(state.GaolTargets));
-        world.Events.Add(51.26f, PunishPlayerOutOfGaolOrder);
         world.Events.Add(51.26f, () => CastBursts(bombs, 5, 1, 54.74f));
         world.Events.Add(52.30f, () => SpawnGaols(state.GaolTargets, [55.09f, 55.79f, 56.49f]));
-        world.Events.Add(52.95f, () => CastLandslide(55.14f));
+        world.Events.Add(52.95f, () => CastLandslide(55.14f, aimAt: null));
         world.Events.Add(53.40f, () => CastGraniteImpact(ActionId.GraniteImpactGaols, 17.7f));
         world.Events.Add(54.74f, BurstSixthBombIntoGaols);
         world.Events.Add(55.14f, ResolveLandslide);
@@ -160,7 +145,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(73.20f, () => ResolveWeights(2));
         world.Events.Add(73.25f, () => CastWeights(3, 76.23f));
         world.Events.Add(74.00f, () => titan?.MoveTo(state.FromJumpFrame(new Vector3(8.3f, 0f, 0f)), 3f));
-        world.Events.Add(76.05f, () => CastLandslide(78.24f, 80.24f));
+        world.Events.Add(76.05f, () => CastLandslide(78.24f, state.AwakenedLandslideTargets[0], 80.24f));
         world.Events.Add(76.23f, () => ResolveWeights(3));
         world.Events.Add(78.24f, ResolveLandslide);
         world.Events.Add(78.28f, CastAwakenedSecondHit);
@@ -180,7 +165,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(97.39f, () => Jail([state.JailedHealer]));
         world.Events.Add(98.45f, SpawnHealerGaol);
         world.Events.Add(99.53f, () => CastGraniteImpact(ActionId.GraniteImpact, 6.7f));
-        world.Events.Add(104.84f, () => CastLandslide(107.02f, 109.02f));
+        world.Events.Add(104.84f, () => CastLandslide(107.02f, state.JailedHealer, 109.02f));
         world.Events.Add(106.23f, () => GraniteImpact(ActionId.GraniteImpact));
         world.Events.Add(107.02f, ResolveLandslide);
         world.Events.Add(107.06f, CastAwakenedSecondHit);
@@ -213,7 +198,7 @@ public sealed class UwuP3TitanScenario : IScenario
         world.Events.Add(134.08f, () => SpawnBomb(lateBombs, 3, state.LateBomb(3), 135.12f));
         world.Events.Add(134.19f, () => ResolveWeights(5));
         world.Events.Add(134.19f, () => CastWeights(6, 137.18f));
-        world.Events.Add(134.41f, () => CastLandslide(136.60f, 138.60f));
+        world.Events.Add(134.41f, () => CastLandslide(136.60f, state.AwakenedLandslideTargets[1], 138.60f));
         world.Events.Add(134.68f, () => ResolveBursts(lateBombs, 0, 1));
         world.Events.Add(135.12f, () => BuryBombs(lateBombs, 3, 1));
         world.Events.Add(135.21f, () => CastBursts(lateBombs, 2, 1, 138.69f));
@@ -236,18 +221,16 @@ public sealed class UwuP3TitanScenario : IScenario
 
     public void Tick(float delta, float elapsed)
     {
-        DrainHealerGaol(elapsed);
+        DrainHealerGaol(world.Events.Elapsed);
         if (titan == null) return;
         state.TitanPosition = titan.Position;
         if (turningTo is { } goal) TurnToward(goal, delta);
-        if (titanFacesTank && Get(busterTank ?? AggroTank) is { } holder && holder.IsAlive() && !titan.IsCasting)
+        if (titanFacesTank && Get(busterTank ?? PartyRole.MainTank) is { } holder && holder.IsAlive() && !titan.IsCasting)
             titan.Face(holder);
     }
 
     private SimCharacter? Get(PartyRole role) => party.Get(role);
 
-    // The main tank holds Titan until the gaol marks tell the tanks whether to swap.
-    private PartyRole AggroTank => gaolsMarked ? state.Holder : PartyRole.MainTank;
 
 
     private static bool IsJailed(SimCharacter member) => member.HasStatus(StatusId.Fetters);
@@ -292,7 +275,7 @@ public sealed class UwuP3TitanScenario : IScenario
     {
         titan?.SetTargetable(targetable);
         titanFacesTank = targetable;
-        if (targetable && Get(AggroTank) is { } holder) titan?.SetTarget(holder, follow: false);
+        if (targetable && Get(PartyRole.MainTank) is { } tank) titan?.SetTarget(tank, follow: false);
     }
 
     private void Leave(SimEnemy? enemy)
@@ -476,28 +459,14 @@ public sealed class UwuP3TitanScenario : IScenario
         party.Knockback(titan.Position, UpheavalKnockback);
     }
 
-    private void MarkGaolTargets()
-    {
-        gaolsMarked = true;
-        MarkGaolTargets(state.GaolTargets);
-    }
+    private void MarkGaolTargets() => MarkGaolTargets(state.GaolTargets);
 
-    // Automarker: Attack 1-3 along the gaol line, starting from Titan's side.
+    // The automarker lives in the AI; this is only Titan's Rock Throw on each target.
     private void MarkGaolTargets(IReadOnlyList<PartyRole> roles)
     {
-        for (var i = 0; i < roles.Count; i++)
-        {
-            if (Get(roles[i]) is not { } target || !target.IsAlive()) continue;
-            var sign = Sign.Attack1 + i;
-            PlayEffect(titan, ActionId.RockThrow, 1.1f, target: target.GameObjectId);
-            Markings.Set(sign, target.GameObjectId);
-            gaolSigns[roles[i]] = sign;
-        }
-    }
-
-    private void ClearGaolSign(PartyRole role)
-    {
-        if (gaolSigns.Remove(role, out var sign)) Markings.Clear(sign);
+        foreach (var role in roles)
+            if (Get(role) is { } target && target.IsAlive())
+                PlayEffect(titan, ActionId.RockThrow, 1.1f, target: target.GameObjectId);
     }
 
     private void Jail(IEnumerable<PartyRole> roles)
@@ -512,16 +481,6 @@ public sealed class UwuP3TitanScenario : IScenario
     }
 
     // The player's gaol has to land on its numbered waymark or the chain order breaks.
-    private void PunishPlayerOutOfGaolOrder()
-    {
-        for (var i = 0; i < state.GaolTargets.Count; i++)
-        {
-            if (Get(state.GaolTargets[i]) is not SimPlayer player || !player.IsAlive()) continue;
-            if (Vector2.Distance(Flat(player.Position), state.GaolSpot(i)) <= GaolSpotTolerance) continue;
-            player.Die($"Gaol {i + 1} dropped off its spot (1 by Titan, 2 in the middle, 3 by the bomb)");
-        }
-    }
-
     // The bots keep clear of every gaol for the whole window its Freefire chain can go off in.
     private void SpawnGaols(IEnumerable<PartyRole> roles, float[] freefireAt)
     {
@@ -542,7 +501,7 @@ public sealed class UwuP3TitanScenario : IScenario
     private void BurstSixthBombIntoGaols()
     {
         if (bombs[5] is not { } bomb) return;
-        var reached = gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(bomb.Position)) <= BurstRadius + GaolSpotTolerance + 0.5f).ToList();
+        var reached = gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(bomb.Position)) <= BurstRadius + g.HitboxRadius).ToList();
         ResolveBursts(bombs, 5, 1);
         foreach (var gaol in reached) world.Events.Add(0.35f, () => BreakGaol(gaol, explode: true));
     }
@@ -556,7 +515,7 @@ public sealed class UwuP3TitanScenario : IScenario
             PlayEffect(gaol, ActionId.Freefire, 1.1f);
             var at = gaol.Position;
             damage.Resolve(gaol, ActionId.Freefire, [DamageType.Lethal], [], excludeTargets: Jailed());
-            foreach (var next in gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(at)) <= GaolChainReach).ToList())
+            foreach (var next in gaols.Keys.Where(g => Vector2.Distance(Flat(g.Position), Flat(at)) <= FreefireRadius + g.HitboxRadius).ToList())
                 world.Events.Add(GaolChainDelay, () => BreakGaol(next, explode: true));
         }
         world.Events.Add(PrisonerFreedAfter, () => Free(role));
@@ -565,7 +524,6 @@ public sealed class UwuP3TitanScenario : IScenario
 
     private void Free(PartyRole role)
     {
-        ClearGaolSign(role);
         state.Jailed.Remove(role);
         Get(role)?.RemoveStatus(StatusId.Fetters);
     }
@@ -582,8 +540,6 @@ public sealed class UwuP3TitanScenario : IScenario
     {
         if (healerGaol is not { IsActive: true } gaol || !gaols.ContainsKey(gaol)) return;
         var hp = 1f - Math.Clamp((elapsed - HealerGaolDrainFrom) / (HealerGaolDrainTo - HealerGaolDrainFrom), 0f, 1f);
-        var playerIsJailed = Get(state.JailedHealer) is SimPlayer;
-        if (!playerIsJailed && !playerHitHealerGaol) hp = MathF.Max(hp, HealerGaolHpUntilPlayerHits);
         SetHealerGaolHp(hp);
         if (hp <= 0f) BreakGaol(gaol, explode: false);
     }
@@ -598,60 +554,28 @@ public sealed class UwuP3TitanScenario : IScenario
         chara->Health = (uint)MathF.Ceiling(maxHp * Math.Clamp(fraction, 0f, 1f));
     }
 
-    private void OnPlayerAction(ActionType actionType, uint actionId, ulong targetId)
-    {
-        if (actionType != ActionType.Action || healerGaol is not { IsActive: true } gaol || !IsNewPlayerAction()) return;
-        if (Plugin.TargetManager.Target?.EntityId != gaol.EntityId) return;
-        if (Plugin.DataManager.GetExcelSheet<LuminaAction>().GetRowOrDefault(actionId) is not { CanTargetHostile: true }) return;
-        playerHitHealerGaol = true;
-    }
-
-    private unsafe bool IsNewPlayerAction()
-    {
-        var am = ActionManager.Instance();
-        if (am == null) return false;
-        var seq = (int)am->LastUsedActionSequence;
-        if (seq == lastPlayerActionSequence) return false;
-        lastPlayerActionSequence = seq;
-        return true;
-    }
-
+    // A gaol the chain didn't reach explodes and takes the whole party with it.
     private void GraniteImpact(uint actionId)
     {
+        if (gaols.Count == 0) return;
         foreach (var (gaol, role) in gaols.ToList())
         {
             PlayEffect(gaol, actionId, 1.1f);
             gaols.Remove(gaol);
-            if (Get(role) is { } prisoner)
-            {
-                prisoner.RemoveStatus(StatusId.Fetters);
-                prisoner.Die("Died to Granite Impact (gaol not broken in time)");
-            }
-            state.Jailed.Remove(role);
-            ClearGaolSign(role);
+            Free(role);
             gaol.Despawn();
         }
-    }
-
-    private float AtRandomPlayer()
-    {
-        var targets = AliveMembers().Where(m => !IsJailed(m)).ToList();
-        return targets.Count == 0 ? LandslideRotation() : Facing(titan!.Position, targets[Random.Shared.Next(targets.Count)].Position);
-    }
-
-    private float LandslideRotation()
-    {
-        if (titan == null) return 0f;
-        return titanFacesTank && !state.BothTanksJailed && Get(state.Holder) is { } holder && holder.IsAlive()
-            ? Facing(titan.Position, holder.Position)
-            : FacingCentre(titan.Position);
+        party.WipeAllPlayers("Died to Granite Impact (a gaol was never broken)");
     }
 
     // Only the awakened cast has a second hit and aims at a random player; the bots know where it lands from the first cast.
-    private void CastLandslide(float hitAt, float? secondHitAt = null)
+    // A null target keeps the last Landslide's line: the gaol window's two casts share one.
+    private void CastLandslide(float hitAt, PartyRole? aimAt, float? secondHitAt = null)
     {
         if (titan == null) return;
-        var rotation = landslideRotation = secondHitAt == null ? LandslideRotation() : AtRandomPlayer();
+        var rotation = landslideRotation = aimAt is not { } role
+            ? landslideRotation
+            : Get(role) is { } target ? Facing(titan.Position, target.Position) : FacingCentre(titan.Position);
         titan.SetPosition(new Placement(titan.Position, rotation));
         CastSelf(titan, secondHitAt == null ? ActionId.LandslideTitanNormal : ActionId.LandslideTitan, 1.9f);
         CastLandslideLines(rotation, LandslideOffsets, ActionId.LandslideLine, 1.9f, hitAt);
