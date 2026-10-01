@@ -105,8 +105,9 @@ public sealed class DsrP1KnightsScenario : IScenario
             ((IScenarioAi<DsrP1KnightsState>)AiStrats[idx]).Run(state, world);
 
         world.Events.Add(0f, () => world.Map.DirectorUpdate(ArenaDirector.Layout, 0U, ArenaDirector.KnightsLayout));
-        world.Events.Add(0f, () => world.Map.DirectorUpdate(ArenaDirector.SharedGroup, ArenaDirector.KnightsSharedGroup));
+        world.Events.Add(0f, () => world.Map.DirectorUpdate(ArenaDirector.MapChange, ArenaDirector.KnightsMap));
         world.Events.Add(0f, SpawnKnights);
+        world.Events.Add(2f, () => world.Map.LogArena("DSR P1 start"));
         world.Events.Add(2.14f, () => CastSelf(adelphel, ActionId.HoliestOfHoly, 3.7f));
         world.Events.Add(6.10f, () => Raidwide(adelphel, ActionId.HoliestOfHoly, HoliestOfHolyDamage));
 
@@ -172,7 +173,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         world.Events.Add(149.40f, KnightsDepart);
         world.Events.Add(151.38f, ThordanArrives);
         world.Events.Add(151.51f, () => world.Map.DirectorUpdate(ArenaDirector.Layout, 0U, ArenaDirector.ThordanLayout));
-        world.Events.Add(151.51f, () => world.Map.DirectorUpdate(ArenaDirector.SharedGroup, ArenaDirector.ThordanSharedGroup));
+        world.Events.Add(151.51f, () => world.Map.DirectorUpdate(ArenaDirector.MapChange, ArenaDirector.ThordanMap));
         world.Events.Add(159.00f, DespawnAll);
     }
 

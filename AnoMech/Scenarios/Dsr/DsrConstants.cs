@@ -146,13 +146,13 @@ public class DsrConstants
     public static class ArenaDirector
     {
         public const uint Layout = 0x80000016;
-        public const uint SharedGroup = 0x8000001F;
+        public const uint MapChange = 0x8000001F;
         public const uint Music = 0x80000004;
         public const uint KnightsLayout = 0x01;
         public const uint PrisonLayout = 0x14;
         public const uint ThordanLayout = 0x1E;
-        public const uint KnightsSharedGroup = 0x2F6;
-        public const uint ThordanSharedGroup = 0x2FD;
+        public const uint KnightsMap = 758;
+        public const uint ThordanMap = 765;
         public const uint ThordanMusic = 0x1AF3;
     }
 
