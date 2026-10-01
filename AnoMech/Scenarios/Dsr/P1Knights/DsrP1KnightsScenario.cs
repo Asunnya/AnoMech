@@ -31,6 +31,8 @@ public sealed class DsrP1KnightsScenario : IScenario
     private const float SlashConeHalfAngle = MathF.PI / 4f;
     private const float SlashConeLength = 40f;
     private const int SlashConeMinTargets = 3;
+    private const int SlashCasterCount = 5;
+    private const float SlashCasterLifetime = 3f;
     private const float FaithUnmovingDamage = 0.1f;
     private const float HeavensflameDamage = 0.35f;
     private const float FireResistanceDownSeconds = 2.96f;
@@ -45,6 +47,7 @@ public sealed class DsrP1KnightsScenario : IScenario
     private const float SkyblindRadius = 3f;
     private const float ExecutionRadius = 5f;
     private const float ShiningBladeHalfWidth = 3f;
+    private const float ShiningBladeLandDelay = 0.35f;
     private const float BrightFlareRadius = 9f;
     private const float BrightFlareDelay = 1.15f;
     private const float AntiKnockbackSeconds = 6f;
@@ -83,6 +86,7 @@ public sealed class DsrP1KnightsScenario : IScenario
     private SimEnemy? spear;
     private SimEnemy? thordan;
     private readonly List<SimEnemy> helpers = [];
+    private readonly List<SimEnemy?> slashCasters = [];
     private readonly List<(SimEnemy? Tear, Vector3 At)> portals = [];
     private readonly List<SimTether> burningChains = [];
     private readonly HashSet<SimCharacter> chainBurned = [];
@@ -136,8 +140,10 @@ public sealed class DsrP1KnightsScenario : IScenario
         world.Events.Add(34.62f, AdelphelLeaves);
         world.Events.Add(34.62f, () => MarkSlashPrey(state.FirstSlashTargets));
         world.Events.Add(34.71f, () => CastSelf(grinnaux, ActionId.HyperdimensionalSlash, 4.7f));
+        world.Events.Add(40.48f, SpawnSlashCasters);
         world.Events.Add(40.86f, () => ResolveSlashes(state.FirstSlashTargets));
         world.Events.Add(41.66f, () => MarkSlashPrey(state.SecondSlashTargets));
+        world.Events.Add(47.56f, SpawnSlashCasters);
         world.Events.Add(47.94f, () => ResolveSlashes(state.SecondSlashTargets));
 
         world.Events.Add(50.71f, AdelphelLands);
@@ -169,8 +175,8 @@ public sealed class DsrP1KnightsScenario : IScenario
 
         world.Events.Add(108.70f, () => world.Map.DirectorUpdate(ArenaDirector.Layout, 0U, ArenaDirector.PrisonLayout));
         world.Events.Add(108.70f, KnightsFall);
-        world.Events.Add(111.90f, KnightsRegroupWest);
-        world.Events.Add(111.90f, () => zephirin = SpawnKnight(BNpcBaseId.Zephirin, BNpcNameId.Zephirin, ZephirinMaxHp, new Placement(new Vector3(Geometry.ArenaHalfWidth, 0f, 0f), -MathF.PI / 2f), false, EnemyListMode.Never));
+        world.Events.Add(110.08f, KnightsRegroupWest);
+        world.Events.Add(110.08f, () => zephirin = SpawnKnight(BNpcBaseId.Zephirin, BNpcNameId.Zephirin, ZephirinMaxHp, new Placement(new Vector3(Geometry.ArenaHalfWidth, 0f, 0f), -MathF.PI / 2f), false, EnemyListMode.Never));
         world.Events.Add(112.31f, ResolvePlanarPrison);
         world.Events.Add(112.31f, ZephirinThrowsSpear);
         world.Events.Add(112.84f, () => charibert?.NativeCast(ActionId.PureOfHeart, ActionType.Action, 0f, 35.2f, false, targetId: charibert.GameObjectId));
@@ -337,17 +343,35 @@ public sealed class DsrP1KnightsScenario : IScenario
             party.Get(role)?.AttachLockonVfx(LockonId.HyperdimensionalSlash, 6f, persistent: false);
     }
 
+    private void SpawnSlashCasters()
+    {
+        slashCasters.Clear();
+        var origin = grinnaux?.Position ?? Vector3.Zero;
+        for (var i = 0; i < SlashCasterCount; i++)
+        {
+            var caster = SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.Grinnaux, new Placement(origin, 0f), false, true, EnemyListMode.Never);
+            if (caster != null) helpers.Add(caster);
+            slashCasters.Add(caster);
+        }
+        var spawned = slashCasters.ToList();
+        world.Events.Add(SlashCasterLifetime, () =>
+        {
+            foreach (var caster in spawned) caster?.Despawn();
+        });
+    }
+
     private void ResolveSlashes(IReadOnlyList<PartyRole> prey)
     {
         if (grinnaux == null) return;
         var origin = grinnaux.Position;
+        var caster = 0;
         var hitBy = new Dictionary<SimCharacter, int>();
         var newPortals = new List<Vector3>();
         foreach (var role in prey)
         {
             if (party.Get(role) is not { } target || !target.IsAlive()) continue;
             var rotation = RotationTowards(origin, target.Position);
-            PlayEffect(grinnaux, ActionId.HyperdimensionalSlashLine, 1.1f, rotation, target.GameObjectId);
+            PlayEffect(NextSlashCaster(ref caster, rotation), ActionId.HyperdimensionalSlashLine, 1.1f, rotation, target.GameObjectId);
             foreach (var hit in party.Find.InsideActionAoe(ActionId.HyperdimensionalSlashLine, new Placement(origin, rotation)))
                 hitBy[hit] = hitBy.GetValueOrDefault(hit) + 1;
             newPortals.Add(EdgePoint(origin, target.Position));
@@ -358,7 +382,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         {
             var bait = stackers[Random.Shared.Next(stackers.Count)];
             var coneRotation = RotationTowards(origin, bait.Position);
-            PlayEffect(grinnaux, ActionId.HyperdimensionalSlashCone, 1.1f, coneRotation, bait.GameObjectId);
+            PlayEffect(NextSlashCaster(ref caster, coneRotation), ActionId.HyperdimensionalSlashCone, 1.1f, coneRotation, bait.GameObjectId);
             var shared = party.Find.InsideCone(new Placement(origin, coneRotation), SlashConeHalfAngle, SlashConeLength);
             foreach (var hit in shared)
             {
@@ -382,6 +406,14 @@ public sealed class DsrP1KnightsScenario : IScenario
         }
 
         world.Events.Add(0.6f, () => OpenPortals(newPortals));
+    }
+
+    private SimEnemy? NextSlashCaster(ref int index, float rotation)
+    {
+        var caster = index < slashCasters.Count ? slashCasters[index] : grinnaux;
+        index++;
+        caster?.SetRotation(rotation);
+        return caster;
     }
 
     private static Vector3 EdgePoint(Vector3 origin, Vector3 through)
@@ -466,8 +498,10 @@ public sealed class DsrP1KnightsScenario : IScenario
     {
         if (adelphel == null) return;
         var rotation = RotationTowards(from, to);
-        PlayEffect(adelphel, ActionId.ShiningBlade, 1.0f, rotation, at: to);
-        adelphel.SetPosition(new Placement(to, rotation));
+        var dasher = adelphel;
+        dasher.SetRotation(rotation);
+        PlayEffect(dasher, ActionId.ShiningBlade, 1.0f, rotation, at: to);
+        world.Events.Add(ShiningBladeLandDelay, () => dasher.SetPosition(new Placement(to, rotation)));
         var length = FlatDistance(from, to);
         foreach (var hit in party.Find.InsideRect(new Placement(from, rotation), ShiningBladeHalfWidth, length).ToList())
             damage.ApplyDamage(hit, 1f, ActionId.ShiningBlade, "stood in Adelphel's path", lethal: true);
@@ -640,16 +674,16 @@ public sealed class DsrP1KnightsScenario : IScenario
 
     private void KnightsFall()
     {
-        foreach (var knight in new[] { adelphel, grinnaux })
+        var fallen = new[] { adelphel, grinnaux };
+        foreach (var knight in fallen)
         {
             knight?.SetTargetable(false);
             knight?.FadeOut();
         }
+        adelphel = null;
         world.Events.Add(2f, () =>
         {
-            adelphel?.Despawn();
-            grinnaux?.Despawn();
-            adelphel = null;
+            foreach (var knight in fallen) knight?.Despawn();
         });
     }
 

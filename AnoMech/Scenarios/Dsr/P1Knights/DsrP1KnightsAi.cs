@@ -26,7 +26,7 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
     private static readonly Vector2 PrisonStackOffset = new(0f, 1f);
     private static readonly Vector2 PrisonEastDropOffset = new(6f, 0f);
     private static readonly Vector2 PrisonWestDropOffset = new(-5.5f, 2.5f);
-    private static readonly Vector2[] BrightwingBaitOffsets = [new(-1.2f, 7f), new(1.2f, 7f)];
+    private static readonly Vector2[] BrightwingBaitOffsets = [new(1.2f, 7f), new(-1.2f, 7f)];
 
     private DsrP1KnightsState state = null!;
     private SimWorld world = null!;
