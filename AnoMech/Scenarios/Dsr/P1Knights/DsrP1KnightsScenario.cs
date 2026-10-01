@@ -172,6 +172,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         world.Events.Add(148.31f, () => Raidwide(charibert, ActionId.PureOfHeart, PureOfHeartDamage));
         world.Events.Add(149.40f, KnightsDepart);
         world.Events.Add(151.38f, ThordanArrives);
+        world.Events.Add(151.38f, () => world.PlaceWaymarks(NaurWaymarks));
         world.Events.Add(151.51f, () => world.Map.DirectorUpdate(ArenaDirector.Layout, 0U, ArenaDirector.ThordanLayout));
         world.Events.Add(151.51f, () => world.Map.DirectorUpdate(ArenaDirector.MapChange, ArenaDirector.ThordanMap));
         world.Events.Add(159.00f, DespawnAll);
