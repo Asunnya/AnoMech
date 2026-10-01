@@ -457,6 +457,7 @@ public sealed class DsrP1KnightsScenario : IScenario
     {
         var orb = SpawnEnemy(BNpcBaseId.Brightsphere, BNpcNameId.Brightsphere, new Placement(at, 0f), false, true, EnemyListMode.Never);
         if (orb != null) helpers.Add(orb);
+        orb?.NativeCast(ActionId.BrightFlare, ActionType.Action, 0f, BrightFlareDelay, false, position: at);
         if (portals.Any(p => FlatDistance(p.At, at) < PortalBrightsphereRange))
         {
             world.Announce("A Brightsphere dropped next to a portal and set it off.");
