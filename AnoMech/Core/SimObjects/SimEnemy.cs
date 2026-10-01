@@ -372,8 +372,12 @@ public sealed unsafe class SimEnemy : SimNpc
                 chara->HitboxRadius = hitboxRadius;
                 nativeHitbox = false;
                 break;
+            // UNVERIFIED: no Type 2 (demihuman) boss had been spawned before DSR's knights, whose
+            // Model + 10000 skeleton left them T-posed; SetupBNpc's own value wins when it set one.
             case 2:
-                chara->ModelContainer.ModelSkeletonId = modelChara.Model + 10000;
+                DiagnosticLog.Info($"[SimEnemy.Spawn] BNpcBase {config.BNpcBaseId}: Type 2 skeleton from SetupBNpc = {chara->ModelContainer.ModelSkeletonId}, Model + 10000 = {modelChara.Model + 10000}.");
+                if (chara->ModelContainer.ModelSkeletonId == 0)
+                    chara->ModelContainer.ModelSkeletonId = modelChara.Model + 10000;
                 break;
             case 3:
                 chara->ModelContainer.ModelSkeletonId = modelChara.Model;

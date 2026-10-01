@@ -76,6 +76,7 @@ public sealed class DsrP1KnightsScenario : IScenario
     private readonly List<(SimEnemy? Tear, Vector3 At)> portals = [];
     private readonly List<SimTether> burningChains = [];
     private bool portalsOpen;
+    private bool shieldBashLocked;
     private bool prisonActive;
     private int hallowingCast;
     private bool hallowingInterrupted;
@@ -92,6 +93,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         portals.Clear();
         burningChains.Clear();
         portalsOpen = false;
+        shieldBashLocked = false;
         prisonActive = false;
         hallowingCast = 0;
         hallowingInterrupted = false;
@@ -182,6 +184,7 @@ public sealed class DsrP1KnightsScenario : IScenario
     {
         if (grinnaux is { Targetable: true, IsMoving: false, IsCasting: false } boss && party.Get(PartyRole.OffTank) is { } offTank && offTank.IsAlive())
             boss.Face(offTank);
+        LockShieldBashOnTank();
         if (portalsOpen) TetherToPortals();
         BreakStretchedChains();
         if (prisonActive) KillPrisonEscapees();
@@ -243,11 +246,23 @@ public sealed class DsrP1KnightsScenario : IScenario
         state.ShieldBashTether = world.Tether(adelphel, End.Passable(party.Get(state.ShieldBashSeed)), TetherId.HolyShieldBash);
     }
 
+    // Bots crossing the beam would otherwise pass it on after the tank has it.
+    private void LockShieldBashOnTank()
+    {
+        if (shieldBashLocked || adelphel == null || state.ShieldBashTether is not { IsActive: true } tether) return;
+        if (tether.B is not ISimPartyMember { Role: PartyRole.MainTank or PartyRole.OffTank } tank) return;
+        tether.Despawn();
+        state.ShieldBashTether = world.Tether(adelphel, (SimCharacter)tank, TetherId.HolyShieldBash);
+        shieldBashLocked = true;
+    }
+
     private void ResolveHolyShieldBash()
     {
         if (adelphel == null || state.ShieldBashTether?.B is not { } holder) return;
         PlayEffect(adelphel, ActionId.HolyShieldBash, 2.1f, RotationTowards(adelphel.Position, holder.Position), holder.GameObjectId);
         holder.AddStatus(StatusId.DownForTheCount, 5.96f);
+        if (holder is ISimPartyMember { Role: PartyRole.MainTank or PartyRole.OffTank } tank && party.IsBotDriven(holder))
+            party.GiveInvuln(tank.Role, 8f);
         state.ShieldBashTether.Despawn();
     }
 

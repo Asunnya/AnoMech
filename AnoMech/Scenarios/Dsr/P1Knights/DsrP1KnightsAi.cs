@@ -41,7 +41,6 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
         ai.Move(0.3f, () => AiMove.Create(TanksNorthPartySouth()).NaturalOrder());
         world.Events.Add(14.5f, OffTankWalksThroughShieldBashTether);
         ai.Move(16.4f, () => AiMove.Create(OffTankNorthPartyStacksSouth()).NaturalOrder());
-        ai.GiveInvuln(18.8f, PartyRole.OffTank, 8f);
         ai.Move(25.0f, () => AiMove.Create(TanksNorthPartySouth()).NaturalOrder());
 
         ai.Move(35.0f, () => AiMove.Create(PreySpreadAndStack(state.FirstSlashTargets, NorthPreyBearings, new Vector2(0f, 4.5f))).NaturalOrder());
@@ -93,6 +92,7 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
     {
         var spots = Enumerable.Repeat<Vector2?>(new Vector2(0f, 3.5f), 8).ToArray();
         spots[(int)PartyRole.OffTank] = new Vector2(0f, -4f);
+        spots[(int)PartyRole.MainTank] = new Vector2(-3f, -4f);
         return spots;
     }
 
