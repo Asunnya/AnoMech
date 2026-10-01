@@ -1,5 +1,5 @@
 
-# ![AsuMech](images/icon.png) AsuMech
+# ![AsuMech](images/asumechicon.png) AsuMech
 
 *Another FFXIV mechanics simulator, now with Savage*
 
