@@ -35,7 +35,7 @@ public sealed class DsrP1KnightsScenario : IScenario
     private const float HeavensflameDamage = 0.35f;
     private const float FireResistanceDownSeconds = 2.96f;
     private const float PureOfHeartDamage = 0.7f;
-    private const float HolyChainTankDamage = 0.8f;
+    private const float HolyChainDamage = 0.8f;
     private const float DamageDownSeconds = 180f;
     private const float ShockwaveDamage = 0.05f;
     private const float BrightwingDamage = 0.5f;
@@ -85,6 +85,7 @@ public sealed class DsrP1KnightsScenario : IScenario
     private readonly List<SimEnemy> helpers = [];
     private readonly List<(SimEnemy? Tear, Vector3 At)> portals = [];
     private readonly List<SimTether> burningChains = [];
+    private readonly HashSet<SimCharacter> chainBurned = [];
     private bool portalsOpen;
     private bool shieldBashLocked;
     private bool prisonActive;
@@ -102,6 +103,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         helpers.Clear();
         portals.Clear();
         burningChains.Clear();
+        chainBurned.Clear();
         portalsOpen = false;
         shieldBashLocked = false;
         prisonActive = false;
@@ -600,13 +602,9 @@ public sealed class DsrP1KnightsScenario : IScenario
             {
                 if (holder == null || !holder.IsAlive()) continue;
                 PlayEffect(charibertCaster, ActionId.HolyChain, 1.1f, target: holder.GameObjectId, at: holder.Position);
-                if (holder is ISimPartyMember { Role: PartyRole.MainTank or PartyRole.OffTank })
-                {
-                    damage.ApplyDamage(holder, HolyChainTankDamage, ActionId.HolyChain, "Burning Chains not broken", false);
-                    holder.AddStatus(StatusId.DamageDown, DamageDownSeconds);
-                    continue;
-                }
-                damage.ApplyDamage(holder, 1f, ActionId.HolyChain, "Burning Chains not broken", lethal: true);
+                damage.ApplyDamage(holder, HolyChainDamage, ActionId.HolyChain, "Burning Chains not broken", false);
+                holder.AddStatus(StatusId.DamageDown, DamageDownSeconds);
+                chainBurned.Add(holder);
             }
             chain.Despawn();
         }
@@ -625,6 +623,11 @@ public sealed class DsrP1KnightsScenario : IScenario
         }
         foreach (var (member, count) in hits)
         {
+            if (chainBurned.Contains(member) && member is not ISimPartyMember { Role: PartyRole.MainTank or PartyRole.OffTank })
+            {
+                damage.ApplyDamage(member, 1f, ActionId.HeavensflameHit, "still low from an unbroken Burning Chain", lethal: true);
+                continue;
+            }
             if (count > 1)
             {
                 damage.ApplyDamage(member, 1f, ActionId.HeavensflameHit, $"overlapped {count} Heavensflames", lethal: true);
