@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using AnoMech.Core.SimObjects;
+using AnoMech.Core.UserActions;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Group;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -33,6 +34,9 @@ internal sealed unsafe class PartyHud
 
     public void Refresh(SimParty party)
     {
+        foreach (var member in party.AllMembers())
+            WriteShield(member);
+
         if (party.AllMembers().Count() < 2) return;
 
         var gm = GroupManager.Instance();
@@ -101,6 +105,17 @@ internal sealed unsafe class PartyHud
         realPartySnapshot = null;
     }
 
+    // ShieldValue (0-100, % of max HP) drives the gold overlay on the HP bar, target bar and
+    // nameplate; _PartyList reads the slot's DamageShield instead and ignores it. Nothing else
+    // sets either in the sim, so both are re-stamped from the shield statuses every frame.
+    private static void WriteShield(SimCharacter member)
+    {
+        var bc = member.BattleCharaPtr;
+        if (bc == null) return;
+        var fraction = Mitigation.ShieldFraction(member.ActiveStatusSnapshot.Select(s => s.StatusId));
+        bc->ShieldValue = (byte)Math.Clamp(fraction * 100f, 0f, 100f);
+    }
+
     private static void WriteSlot(ref GroupPartyMember slot, BattleChara* bc)
     {
         var obj = (GameObject*)bc;
@@ -118,7 +133,7 @@ internal sealed unsafe class PartyHud
         slot.Level = bc->Level;
         slot.Sex = bc->DrawData.CustomizeData.Sex;
         slot.Flags = 0x5;
-        slot.DamageShield = 0;
+        slot.DamageShield = bc->ShieldValue;
         slot.StatusManager = bc->StatusManager;
 
         for (int i = 0; i < 64; i++)

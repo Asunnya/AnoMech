@@ -29,16 +29,6 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
     // Real native MaxHealth before it was overridden; null if inactive.
     private uint? realMaxHealth;
 
-    // The same pool bot tanks get (IScenario.TankMaxHealth).
-    public void OverrideMaxHealthForTankRole(uint tankMaxHealth)
-    {
-        var bc = BattleCharaPtr;
-        if (bc == null || realMaxHealth != null) return;
-        realMaxHealth = bc->MaxHealth;
-        bc->MaxHealth = tankMaxHealth;
-        bc->Health = tankMaxHealth;
-    }
-
     // Host-authoritative HP for a peer's own character; the real MaxHealth is captured once so
     // Despawn restores it no matter what a host sent.
     public void ApplyNetworkHp(uint currentHp, uint maxHp)
@@ -135,6 +125,9 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
         RestoreRealMaxHealth();
         // Unconditional: also covers a godmode preview drop, where Dead is never set.
         RestoreHpBar();
+        // PartyHud's sim shield would otherwise stay on the real character's HP bar.
+        var bc = BattleCharaPtr;
+        if (bc != null) bc->ShieldValue = 0;
         if (Dead)
         {
             ResetActionTimelineNative();

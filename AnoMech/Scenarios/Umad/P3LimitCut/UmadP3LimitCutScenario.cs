@@ -26,7 +26,6 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     public float BgmSecondsAtStart => Constants.BgmSecondsAtStart;
     public bool SupportsSolo => true;
     public bool SupportsMultiplayer => true;
-    public uint? TankMaxHealth => UmadConstants.Tunables.RealTankMaxHealth;
     public IReadOnlyList<IScenarioAi> AiStrats => [new UmadP3LimitCutAi()];
     public void DrawSettings() => settingsWindow.Draw();
     public bool HasPerPlayerSettings => true;
@@ -304,9 +303,13 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     // Skipped by default when the human is a tank, so the press is theirs to make.
     private void BotTankLimitBreak()
     {
-        if (settingsWindow.Overrides.BotTankLimitBreak ?? !party.PlayerRole.IsTank())
-            party.BotTankLimitBreak();
+        if (!(settingsWindow.Overrides.BotTankLimitBreak ?? !party.PlayerRole.IsTank())) return;
+        if (UseLimitBreak(PartyRole.MainTank) || UseLimitBreak(PartyRole.OffTank)) return;
+        DiagnosticLog.Warn("[UmadP3LimitCut] No bot tank used LB3.");
     }
+
+    private bool UseLimitBreak(PartyRole role)
+        => party.Get(role) is ISimPartyMember tank && tank.UseLimitBreak();
 
     private void ChaosLands()
     {

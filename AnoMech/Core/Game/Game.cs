@@ -348,7 +348,7 @@ public sealed class Game : IDisposable
         World.ScenarioOrigin = zone.Origin;
         World.Map.ArmColliderDrops(zone.ColliderRemovalPoints.Select(World.Coordinates.ToGlobal));
         World.PlaceWaymarks(ResolveWaymarks(zone, selectedWaymark));
-        World.CreateParty(player.ClassJob.RowId, scenario.TankMaxHealth, roleOverride, solo, networkRoles, networkSeats);
+        World.CreateParty(player.ClassJob.RowId, roleOverride, solo, networkRoles, networkSeats);
         // Client-asset setup a peer needs too (see IZone.RunClientSetup).
         zone.RunClientSetup(World);
         phase.RunClientSetup(World);
@@ -475,7 +475,7 @@ public sealed class Game : IDisposable
     // on the first non-godmode death.
     //
     // Returns true only when the member actually went down (OnKilled ran):
-    // false when it was already dead, invulnerable (GiveInvuln), or godmode
+    // false when it was already dead, invulnerable (UseInvuln), or godmode
     // swallowed it. Callers that run extra on-death logic should gate on this
     // so an invuln'd/godmode'd "death" doesn't trigger gameplay consequences.
     public bool Kill(ISimPartyMember target, string cause)

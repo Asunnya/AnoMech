@@ -228,12 +228,4 @@ public static class UmadConstants
         public const float AllThingsEndHalfCone = MathF.PI / 2;
     }
 
-    public static class Tunables
-    {
-        // A real level-100 tank's own max HP -- every Umad scenario's IScenario.TankMaxHealth
-        // points here, and the mitigation thresholds are calibrated against it.
-        // Scoped to this namespace deliberately -- not a universal constant to reach for.
-        public const uint RealTankMaxHealth = 325_047;
-    }
-
 }

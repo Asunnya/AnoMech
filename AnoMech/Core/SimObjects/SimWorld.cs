@@ -183,10 +183,10 @@ public sealed class SimWorld : ISimObject, IDisposable
     // Reset's reverse-order teardown (tethers and enemies reference slot positions).
     // networkRoles: multiplayer slots claimed by other real participants — see
     // PartyCreator.Populate.
-    public void CreateParty(uint playerJob, uint? tankMaxHealth = null, PartyRole? roleOverride = null, bool solo = false, IReadOnlySet<PartyRole>? networkRoles = null, IReadOnlyDictionary<PartyRole, NetworkSeat>? networkSeats = null)
+    public void CreateParty(uint playerJob, PartyRole? roleOverride = null, bool solo = false, IReadOnlySet<PartyRole>? networkRoles = null, IReadOnlyDictionary<PartyRole, NetworkSeat>? networkSeats = null)
     {
         var party = new SimParty();
-        PartyCreator.Populate(party, new SimPlayer(Coordinates), playerJob, this, tankMaxHealth, roleOverride, solo, networkRoles, networkSeats);
+        PartyCreator.Populate(party, new SimPlayer(Coordinates), playerJob, this, roleOverride, solo, networkRoles, networkSeats);
         children.Add(party);
         Party = party;
     }

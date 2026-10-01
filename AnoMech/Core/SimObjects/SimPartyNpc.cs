@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
@@ -24,10 +25,45 @@ public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
     }
 
     // A bot's button press: the animation, then the same JobActions effects a player's press applies.
-    public void UseAction(uint actionId)
+    private void UseAction(uint actionId)
     {
         PlayAction(actionId);
         JobActions.ApplyEffects(this, actionId, (ulong)GameObjectId, Random.Shared);
+    }
+
+    // False if KO'd, the gauge is not full, or the job has no LB3.
+    public bool UseLimitBreak()
+    {
+        if (!this.IsAlive()) return false;
+        var hooks = Plugin.PlayerInputHooks;
+        if (!hooks.LimitBreakReady)
+        {
+            DiagnosticLog.Info($"[SimPartyNpc] {Role} LB3 skipped: the gauge is not full.");
+            return false;
+        }
+        if (!Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>().TryGetRow(ClassJob, out var job)) return false;
+        var actionId = job.LimitBreak3.RowId;
+        if (actionId == 0) return false;
+        DiagnosticLog.Info($"[SimPartyNpc] {Role} (job {ClassJob}) uses LB3 {ActionLookup.Name(actionId)}.");
+        UseAction(actionId);
+        hooks.SpendLimitBreak();
+        return true;
+    }
+
+    private static readonly Dictionary<byte, uint> InvulnActionIdByJob = new()
+    {
+        [19] = 30,    // Paladin: Hallowed Ground
+        [21] = 43,    // Warrior: Holmgang
+        [32] = 3638,  // Dark Knight: Living Dead
+        [37] = 16152, // Gunbreaker: Superbolide
+    };
+
+    // False for a non-tank job.
+    public bool UseInvuln()
+    {
+        if (!InvulnActionIdByJob.TryGetValue(ClassJob, out var actionId)) return false;
+        UseAction(actionId);
+        return true;
     }
 
     public void Knockback(Vector3 source, float distance, float speed) => Movement.Knockback(source, distance, speed);

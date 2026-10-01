@@ -109,10 +109,8 @@ public sealed class AiManager
         });
     }
 
-    // Schedule temporary death-immunity for `role` at scenario-time `time`, e.g.
-    // ai.GiveInvuln(28f, PartyRole.OffTank).
-    public void GiveInvuln(float time, PartyRole role, float seconds = 10f)
-        => world.Events.Add(time, () => world.Party.GiveInvuln(role, seconds));
+    public void UseInvuln(float time, PartyRole role)
+        => world.Events.Add(time, () => (world.Party.Get(role) as ISimPartyMember)?.UseInvuln());
 
     public void Automarker(float time, Func<Dictionary<PartyRole, Sign>> mapping)
     {

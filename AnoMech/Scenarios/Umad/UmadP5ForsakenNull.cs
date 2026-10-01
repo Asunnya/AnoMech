@@ -25,7 +25,6 @@ public sealed class UmadP5ForsakenNull : IScenario
 {
     public string Name => "Forsaken Null";
     public IPhase Phase => UmadZone.P5;
-    public uint? TankMaxHealth => UmadConstants.Tunables.RealTankMaxHealth;
 
     private SimWorld world = null!;
     private SimParty party = null!;

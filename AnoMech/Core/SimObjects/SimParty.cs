@@ -63,55 +63,6 @@ public sealed class SimParty : ISimObject
     public bool IsBotDriven(SimCharacter member)
         => (!ReferenceEquals(member, Player) || DebugBotControl.Enabled) && member is not SimNetworkPuppet;
 
-    // The first living bot tank uses its job's LB3, from the same gauge the player's own would
-    // spend. False if the gauge is not full or no bot tank is standing.
-    public bool BotTankLimitBreak()
-    {
-        var hooks = Plugin.PlayerInputHooks;
-        if (!hooks.LimitBreakReady)
-        {
-            DiagnosticLog.Info("[SimParty] Bot tank LB3 skipped: the gauge is not full.");
-            return false;
-        }
-        foreach (var role in new[] { PartyRole.MainTank, PartyRole.OffTank })
-        {
-            if (Get(role) is not SimPartyNpc tank || !tank.IsAlive()) continue;
-            if (!Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>().TryGetRow(tank.ClassJob, out var job)) continue;
-            var actionId = job.LimitBreak3.RowId;
-            if (actionId == 0) continue;
-            DiagnosticLog.Info($"[SimParty] {role} (job {tank.ClassJob}) uses LB3 {ActionLookup.Name(actionId)}.");
-            tank.UseAction(actionId);
-            hooks.SpendLimitBreak();
-            return true;
-        }
-        DiagnosticLog.Warn("[SimParty] No bot tank alive to use LB3.");
-        return false;
-    }
-
-    // Fallback for an unrecognized job; being Holmgang's id is incidental.
-    public const ushort InvulnStatusId = 409;
-
-    private static readonly Dictionary<uint, ushort> InvulnStatusIdByJob = new()
-    {
-        [19] = 82,   // Paladin: Hallowed Ground
-        [21] = 409,  // Warrior: Holmgang
-        [32] = 810,  // Dark Knight: Living Dead
-        [37] = 1836, // Gunbreaker: Superbolide
-    };
-
-    // Game.Kill swallows any death of a member holding a recognized invuln. Uses the target's
-    // own job's real invuln so the icon matches. No-op if the slot is empty.
-    public unsafe void GiveInvuln(PartyRole role, float seconds = 10f)
-    {
-        var member = Get(role);
-        if (member == null) return;
-        var bc = member.BattleCharaPtr;
-        var statusId = bc != null && InvulnStatusIdByJob.TryGetValue((uint)bc->ClassJob, out var real)
-            ? real
-            : InvulnStatusId;
-        member.AddStatus(statusId, seconds);
-    }
-
     // Raidwide knockback: pushes every active slot `distance` units away from
     // `source`. Each slot resolves its own direction from its current position.
     public void Knockback(Vector3 source, float distance)
