@@ -55,7 +55,7 @@ jobs:
         if [ -z "$zip" ]; then echo "latest.zip not found under AnoMech/bin"; find AnoMech/bin -maxdepth 3; exit 1; fi
         echo "Publishing $zip"
         gh release create "v${{ steps.version.outputs.version }}" "$zip" \
-          --target "$GITHUB_SHA" --title "AnoMech ${{ steps.version.outputs.version }}" --notes "Built from $GITHUB_SHA"
+          --target "$GITHUB_SHA" --title "AsuMech ${{ steps.version.outputs.version }}" --notes "Built from $GITHUB_SHA"
 
     - name: Update pluginmaster
       shell: bash

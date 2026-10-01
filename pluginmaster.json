@@ -1,12 +1,12 @@
 [
     {
         "Author": "Asunnya (fork of Anomek's AnoMech)",
-        "Name": "AnoMech (Asunnya)",
-        "Punchline": "Another FFXIV mechanics simulator, with UWU and M9S scenarios in progress.",
-        "Description": "Asunnya's fork of AnoMech: spawns fake party members and bosses client-side so you can practice raid mechanics without a full party. Adds UWU (Garuda, Ifrit) and M9S scenarios.",
+        "Name": "AsuMech",
+        "Punchline": "Another FFXIV mechanics simulator: a fork of AnoMech with Savage and more fights.",
+        "Description": "Asunnya's fork of AnoMech: spawns fake party members and bosses client-side so you can practice raid mechanics without a full party. Everything from AnoMech, plus Savage raids (M9S) and other fights.",
         "InternalName": "AnoMech",
         "AssemblyVersion": "0.4.3.3",
-        "RepoUrl": "https://github.com/Asunnya/AnoMech",
+        "RepoUrl": "https://github.com/Asunnya/AsuMech",
         "ApplicableVersion": "any",
         "Tags": [
             "ultimate",
@@ -16,10 +16,10 @@
             "simulator"
         ],
         "DalamudApiLevel": 15,
-        "IconUrl": "https://raw.githubusercontent.com/Asunnya/AnoMech/asunnya-release/images/icon.png",
-        "DownloadLinkInstall": "https://github.com/Asunnya/AnoMech/releases/latest/download/latest.zip",
-        "DownloadLinkTesting": "https://github.com/Asunnya/AnoMech/releases/latest/download/latest.zip",
-        "DownloadLinkUpdate": "https://github.com/Asunnya/AnoMech/releases/latest/download/latest.zip",
+        "IconUrl": "https://raw.githubusercontent.com/Asunnya/AsuMech/asunnya-release/images/icon.png",
+        "DownloadLinkInstall": "https://github.com/Asunnya/AsuMech/releases/latest/download/latest.zip",
+        "DownloadLinkTesting": "https://github.com/Asunnya/AsuMech/releases/latest/download/latest.zip",
+        "DownloadLinkUpdate": "https://github.com/Asunnya/AsuMech/releases/latest/download/latest.zip",
         "IsHide": false,
         "IsTestingExclusive": false,
         "LastUpdate": "1790767350"
