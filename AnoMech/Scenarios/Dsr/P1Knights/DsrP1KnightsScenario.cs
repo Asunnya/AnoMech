@@ -57,6 +57,11 @@ public sealed class DsrP1KnightsScenario : IScenario
     private const float ChainBreakDistance = 30f;
     private const float PrisonRadius = 9f;
 
+    private const uint KnightMaxHp = 3337516;
+    private const uint CharibertMaxHp = 2333424;
+    private const uint ZephirinMaxHp = 6920000;
+    private const uint ThordanMaxHp = 7439000;
+
     private const uint CancelCastControl = 15;
     private const uint CancelCastReason = 540;
 
@@ -68,6 +73,7 @@ public sealed class DsrP1KnightsScenario : IScenario
     private SimEnemy? adelphel;
     private SimEnemy? grinnaux;
     private SimEnemy? charibert;
+    private SimEnemy? charibertCaster;
     private SimEnemy? zephirin;
     private SimEnemy? haurchefant;
     private SimEnemy? spear;
@@ -140,7 +146,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         world.Events.Add(70.50f, () => adelphel?.MoveTo(new Vector3(-0.6f, 0f, 0.3f), 4f, MathF.PI));
 
         world.Events.Add(76.90f, MarkChainSymbols);
-        world.Events.Add(76.99f, () => CastSelf(charibert, ActionId.Heavensflame, 6.7f));
+        world.Events.Add(76.99f, () => CastSelf(charibertCaster, ActionId.Heavensflame, 6.7f));
         world.Events.Add(78.02f, () => CastSelf(grinnaux, ActionId.FaithUnmoving, 3.7f));
         world.Events.Add(80.92f, TetherBurningChains);
         world.Events.Add(81.98f, () => ResolveFaithUnmoving(botsResist: false));
@@ -158,6 +164,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         world.Events.Add(108.70f, () => world.Map.DirectorUpdate(ArenaDirector.Layout, 0U, ArenaDirector.PrisonLayout));
         world.Events.Add(108.70f, KnightsFall);
         world.Events.Add(111.90f, KnightsRegroupWest);
+        world.Events.Add(111.90f, () => zephirin = SpawnKnight(BNpcBaseId.Zephirin, BNpcNameId.Zephirin, ZephirinMaxHp, new Placement(new Vector3(Geometry.ArenaHalfWidth, 0f, 0f), -MathF.PI / 2f), false, EnemyListMode.Never));
         world.Events.Add(112.31f, ResolvePlanarPrison);
         world.Events.Add(112.31f, ZephirinThrowsSpear);
         world.Events.Add(112.84f, () => charibert?.NativeCast(ActionId.PureOfHeart, ActionType.Action, 0f, 35.2f, false, targetId: charibert.GameObjectId));
@@ -200,6 +207,16 @@ public sealed class DsrP1KnightsScenario : IScenario
             IsVisible: visible,
             Placement: placement));
 
+    private SimEnemy? SpawnKnight(uint baseId, uint nameId, uint maxHp, Placement placement, bool targetable, EnemyListMode enemyList) =>
+        world.SpawnEnemy(new EnemySpawnConfig(
+            BNpcBaseId: baseId,
+            NameId: nameId,
+            Level: Level,
+            Targetable: targetable,
+            EnemyList: enemyList,
+            Placement: placement,
+            NpcSpawnTemplate: DsrNpcSpawn.Build(baseId, nameId, maxHp)));
+
     private SimEnemy? SpawnHelper(Vector3 position, float rotation = 0f)
     {
         var helper = SpawnEnemy(BNpcBaseId.Dummy, BNpcNameId.Dummy, new Placement(position, rotation), false, true, EnemyListMode.Never);
@@ -235,9 +252,9 @@ public sealed class DsrP1KnightsScenario : IScenario
 
     private void SpawnKnights()
     {
-        grinnaux = SpawnEnemy(BNpcBaseId.Grinnaux, BNpcNameId.Grinnaux, new Placement(Vector3.Zero, MathF.PI), true, true, EnemyListMode.Always);
-        adelphel = SpawnEnemy(BNpcBaseId.Adelphel, BNpcNameId.Adelphel, new Placement(new Vector3(-0.6f, 0f, 0.3f), MathF.PI), true, true, EnemyListMode.Always);
-        charibert = SpawnEnemy(BNpcBaseId.Charibert, BNpcNameId.Charibert, new Placement(new Vector3(0f, 0f, -30f), 0f), false, false, EnemyListMode.Never);
+        grinnaux = SpawnKnight(BNpcBaseId.Grinnaux, BNpcNameId.Grinnaux, KnightMaxHp, new Placement(Vector3.Zero, MathF.PI), true, EnemyListMode.Always);
+        adelphel = SpawnKnight(BNpcBaseId.Adelphel, BNpcNameId.Adelphel, KnightMaxHp, new Placement(new Vector3(-0.6f, 0f, 0.3f), MathF.PI), true, EnemyListMode.Always);
+        charibertCaster = SpawnHelper(new Vector3(0f, 0f, -30f));
     }
 
     private void TetherShieldBash()
@@ -279,14 +296,14 @@ public sealed class DsrP1KnightsScenario : IScenario
     private void CastHeavensblaze()
     {
         if (party.Get(state.HeavensblazeTarget) is not { } target) return;
-        charibert?.NativeCast(ActionId.Heavensblaze, ActionType.Action, 0f, 4.7f, false, targetId: target.GameObjectId);
+        charibertCaster?.NativeCast(ActionId.Heavensblaze, ActionType.Action, 0f, 4.7f, false, targetId: target.GameObjectId);
     }
 
     private void ResolveHeavensblaze()
     {
         if (party.Get(state.HeavensblazeTarget) is not { } target) return;
         heavensblazeAt = target.Position;
-        PlayEffect(charibert, ActionId.Heavensblaze, 2.1f, target: target.GameObjectId, at: heavensblazeAt);
+        PlayEffect(charibertCaster, ActionId.Heavensblaze, 2.1f, target: target.GameObjectId, at: heavensblazeAt);
         var hits = damage.Resolve(IPositioned.From(heavensblazeAt), ActionId.Heavensblaze, [DamageType.Magic], [], stackMinTargets: HeavensblazeMinTargets);
         foreach (var hit in hits.Where(h => h.IsAlive()))
             damage.ApplyDamage(hit, HeavensblazeDamage, ActionId.Heavensblaze, "Heavensblaze", false);
@@ -304,8 +321,8 @@ public sealed class DsrP1KnightsScenario : IScenario
 
     private void AdelphelLeaves()
     {
-        adelphel?.SetTargetable(false);
-        adelphel?.SetVisible(false);
+        adelphel?.Despawn();
+        adelphel = null;
     }
 
     private void MarkSlashPrey(IReadOnlyList<PartyRole> prey)
@@ -403,11 +420,8 @@ public sealed class DsrP1KnightsScenario : IScenario
 
     private void AdelphelLands()
     {
-        if (adelphel == null) return;
         var landing = state.AdelphelLanding;
-        adelphel.SetPosition(new Placement(landing, RotationTowards(landing, Vector3.Zero)));
-        adelphel.SetVisible(true);
-        adelphel.SetTargetable(true);
+        adelphel = SpawnKnight(BNpcBaseId.Adelphel, BNpcNameId.Adelphel, KnightMaxHp, new Placement(landing, RotationTowards(landing, Vector3.Zero)), true, EnemyListMode.Always);
     }
 
     private void ResolveFaithUnmoving(bool botsResist)
@@ -581,7 +595,7 @@ public sealed class DsrP1KnightsScenario : IScenario
             foreach (var holder in new[] { chain.A, chain.B })
             {
                 if (holder == null || !holder.IsAlive()) continue;
-                PlayEffect(charibert, ActionId.HolyChain, 1.1f, target: holder.GameObjectId, at: holder.Position);
+                PlayEffect(charibertCaster, ActionId.HolyChain, 1.1f, target: holder.GameObjectId, at: holder.Position);
                 damage.ApplyDamage(holder, 1f, ActionId.HolyChain, "Burning Chains not broken", lethal: true);
             }
             chain.Despawn();
@@ -595,7 +609,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         var hits = members.ToDictionary(m => m, _ => 0);
         foreach (var source in members)
         {
-            PlayEffect(charibert, ActionId.HeavensflameHit, 1.1f, target: source.GameObjectId, at: source.Position);
+            PlayEffect(charibertCaster, ActionId.HeavensflameHit, 1.1f, target: source.GameObjectId, at: source.Position);
             foreach (var hit in party.Find.InsideActionAoe(ActionId.HeavensflameHit, new Placement(source.Position, 0f)))
                 if (hits.ContainsKey(hit)) hits[hit]++;
         }
@@ -618,17 +632,18 @@ public sealed class DsrP1KnightsScenario : IScenario
             knight?.SetTargetable(false);
             knight?.FadeOut();
         }
+        world.Events.Add(2f, () =>
+        {
+            adelphel?.Despawn();
+            grinnaux?.Despawn();
+            adelphel = null;
+        });
     }
 
     private void KnightsRegroupWest()
     {
-        grinnaux?.SetPosition(new Placement(DsrP1KnightsState.PrisonCentre, MathF.PI / 2f));
-        grinnaux?.SetVisible(true);
-        if (charibert == null) return;
-        charibert.SetPosition(new Placement(DsrP1KnightsState.CharibertSpot, 0f));
-        charibert.SetVisible(true);
-        charibert.SetTargetable(true);
-        charibert.SetVisibleInEnemyList(true);
+        grinnaux = SpawnKnight(BNpcBaseId.Grinnaux, BNpcNameId.Grinnaux, KnightMaxHp, new Placement(DsrP1KnightsState.PrisonCentre, MathF.PI / 2f), false, EnemyListMode.Never);
+        charibert = SpawnKnight(BNpcBaseId.Charibert, BNpcNameId.Charibert, CharibertMaxHp, new Placement(DsrP1KnightsState.CharibertSpot, 0f), true, EnemyListMode.Always);
     }
 
     private void ResolvePlanarPrison()
@@ -663,7 +678,6 @@ public sealed class DsrP1KnightsScenario : IScenario
 
     private void ZephirinThrowsSpear()
     {
-        zephirin = SpawnEnemy(BNpcBaseId.Zephirin, BNpcNameId.Zephirin, new Placement(new Vector3(Geometry.ArenaHalfWidth, 0f, 0f), -MathF.PI / 2f), false, true, EnemyListMode.Never);
         zephirin?.NativeCast(ActionId.SpearOfTheFury, ActionType.Action, 0f, 9.7f, false, rotation: -MathF.PI / 2f);
     }
 
@@ -734,8 +748,11 @@ public sealed class DsrP1KnightsScenario : IScenario
 
     private void ThordanArrives()
     {
-        thordan = SpawnEnemy(BNpcBaseId.Thordan, BNpcNameId.Thordan, new Placement(Vector3.Zero, MathF.PI), true, true, EnemyListMode.Always);
-        if (party.Get(PartyRole.MainTank) is { } mainTank) thordan?.SetTarget(mainTank, follow: false);
+        thordan = SpawnKnight(BNpcBaseId.Thordan, BNpcNameId.Thordan, ThordanMaxHp, new Placement(Vector3.Zero, MathF.PI), true, EnemyListMode.Always);
+        world.Events.Add(0.5f, () =>
+        {
+            if (party.Get(PartyRole.MainTank) is { } mainTank) thordan?.SetTarget(mainTank, follow: false);
+        });
     }
 
     private void DespawnAll()
@@ -745,7 +762,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         foreach (var chain in burningChains) chain.Despawn();
         burningChains.Clear();
         prisonActive = false;
-        foreach (var enemy in new[] { adelphel, grinnaux, charibert, zephirin, haurchefant, spear, thordan })
+        foreach (var enemy in new[] { adelphel, grinnaux, charibert, charibertCaster, zephirin, haurchefant, spear, thordan })
             enemy?.Despawn();
         foreach (var helper in helpers) helper.Despawn();
         helpers.Clear();
