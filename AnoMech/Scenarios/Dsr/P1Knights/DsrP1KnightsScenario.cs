@@ -47,6 +47,8 @@ public sealed class DsrP1KnightsScenario : IScenario
     private const float BrightFlareDelay = 1.15f;
     private const float AntiKnockbackSeconds = 6f;
     private const float BotInterruptDelay = 1.6f;
+    // Despawning an effect's caster cuts its VFX short.
+    private const float EffectCarrierLinger = 3f;
     private const float HallowingCastSeconds = 3.7f;
     private const ushort HeavensblazeMinTargets = 4;
     // UNVERIFIED: none of these were measured; picked inside what the strat's spacing allows.
@@ -482,7 +484,7 @@ public sealed class DsrP1KnightsScenario : IScenario
             PlayEffect(orb, ActionId.BrightFlare, 1.1f, at: at);
             foreach (var hit in party.Find.InsideCircle(at, BrightFlareRadius).ToList())
                 damage.ApplyDamage(hit, 1f, ActionId.BrightFlare, "Brightsphere", lethal: true);
-            orb?.Despawn();
+            world.Events.Add(EffectCarrierLinger, () => orb?.Despawn());
         });
     }
 
@@ -733,7 +735,7 @@ public sealed class DsrP1KnightsScenario : IScenario
             PlayEffect(caster, ActionId.Skyblind, 1.1f, at: at);
             foreach (var hit in party.Find.InsideCircle(at, SkyblindRadius).ToList())
                 damage.ApplyDamage(hit, 1f, ActionId.Skyblind, "stood on a Skyblind puddle", lethal: true);
-            caster?.Despawn();
+            world.Events.Add(EffectCarrierLinger, () => caster?.Despawn());
         });
     }
 
