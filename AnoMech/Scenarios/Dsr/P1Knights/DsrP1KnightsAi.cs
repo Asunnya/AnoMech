@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
@@ -19,8 +20,8 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
     private const float ExecutionBaitRadius = 21.9f;
     private const float FullDimensionRadius = 9f;
 
-    private static readonly float[] NorthPreyBearings = [330f, 30f, 300f, 60f];
-    private static readonly float[] SouthPreyBearings = [210f, 150f, 240f, 120f];
+    private static readonly float[] NorthPreyBearings = WaymarkBearings(WaymarkSlot.Two, WaymarkSlot.Three, WaymarkSlot.One, WaymarkSlot.Four);
+    private static readonly float[] SouthPreyBearings = WaymarkBearings(WaymarkSlot.B, WaymarkSlot.C, WaymarkSlot.A, WaymarkSlot.D);
     private static readonly float[] BrightwingBaits = [128.16f, 133.20f, 138.23f, 143.27f];
 
     private static readonly Vector2 PrisonStackOffset = new(0f, -2f);
@@ -168,6 +169,9 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
         spots[(int)PartyRole.OffTank] = new Vector2(1.5f, -5f);
         return spots;
     }
+
+    private static float[] WaymarkBearings(params WaymarkSlot[] slots) =>
+        slots.Select(slot => DsrConstants.BearingOf(DsrConstants.Phase1Waymark(slot))).ToArray();
 
     private static Vector2 Flat(Vector3 p) => new(p.X, p.Z);
 }

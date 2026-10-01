@@ -21,7 +21,7 @@ public sealed class DsrZone : IZone
     public ushort ItemLevel => DsrConstants.ItemLevel;
 
     public IReadOnlyList<WaymarkLayout> WaymarkPresets { get; } =
-        [new WaymarkLayout("Toolbox", DsrConstants.ToolboxWaymarks)];
+        [new WaymarkLayout("DSR Phase 1", DsrConstants.Phase1Waymarks), new WaymarkLayout("NAUR", DsrConstants.NaurWaymarks)];
 
     public void Run(SimWorld world) =>
         world.EnforceArenaBoundary(new SquareArena(DsrConstants.Geometry.ArenaHalfWidth), "Touched the arena wall");

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game;
 
@@ -13,22 +14,36 @@ public class DsrConstants
     public static class Geometry
     {
         public const float ArenaHalfWidth = 22f;
-        public const float WaymarkRadius = 16f;
     }
 
-    // Prey spots sit 30° either side of the north/south axis so no Hyperdimensional Slash portal
-    // lands near a cardinal.
-    public static IReadOnlyList<Waymark> ToolboxWaymarks =>
+    // Numbers north and letters south are the Hyperdimensional Slash prey spots.
+    public static IReadOnlyList<Waymark> Phase1Waymarks =>
     [
-        new(WaymarkSlot.A, AtBearing(300f, Geometry.WaymarkRadius)),
-        new(WaymarkSlot.B, AtBearing(330f, Geometry.WaymarkRadius)),
-        new(WaymarkSlot.C, AtBearing(30f, Geometry.WaymarkRadius)),
-        new(WaymarkSlot.D, AtBearing(60f, Geometry.WaymarkRadius)),
-        new(WaymarkSlot.One, AtBearing(120f, Geometry.WaymarkRadius)),
-        new(WaymarkSlot.Two, AtBearing(150f, Geometry.WaymarkRadius)),
-        new(WaymarkSlot.Three, AtBearing(210f, Geometry.WaymarkRadius)),
-        new(WaymarkSlot.Four, AtBearing(240f, Geometry.WaymarkRadius)),
+        new(WaymarkSlot.A, new Vector3(-6.669f, 0f, 3.162f)),
+        new(WaymarkSlot.B, new Vector3(-3.186f, 0f, 6.708f)),
+        new(WaymarkSlot.C, new Vector3(3.22f, 0f, 6.667f)),
+        new(WaymarkSlot.D, new Vector3(6.599f, 0f, 3.18f)),
+        new(WaymarkSlot.One, new Vector3(-6.862f, 0f, -3.595f)),
+        new(WaymarkSlot.Two, new Vector3(-3.159f, 0f, -6.721f)),
+        new(WaymarkSlot.Three, new Vector3(3.441f, 0f, -6.881f)),
+        new(WaymarkSlot.Four, new Vector3(6.664f, 0f, -3.598f)),
     ];
+
+    public static IReadOnlyList<Waymark> NaurWaymarks =>
+    [
+        new(WaymarkSlot.A, new Vector3(0f, 0f, -9.5f)),
+        new(WaymarkSlot.B, new Vector3(13.123f, 0f, -13.458f)),
+        new(WaymarkSlot.C, new Vector3(9.5f, 0f, 0f)),
+        new(WaymarkSlot.D, new Vector3(12.75f, 0f, 12.508f)),
+        new(WaymarkSlot.One, new Vector3(0f, 0f, 9.5f)),
+        new(WaymarkSlot.Two, new Vector3(-12.852f, 0f, 12.929f)),
+        new(WaymarkSlot.Three, new Vector3(-9.5f, 0f, 0f)),
+        new(WaymarkSlot.Four, new Vector3(-12.782f, 0f, -12.875f)),
+    ];
+
+    public static Vector3 Phase1Waymark(WaymarkSlot slot) => Phase1Waymarks.First(w => w.Slot == slot).Offset;
+
+    public static float BearingOf(Vector3 point) => (MathF.Atan2(point.X, -point.Z) * 180f / MathF.PI + 360f) % 360f;
 
     // Compass degrees: 0 = north (-Z), 90 = east (+X).
     public static Vector3 AtBearing(float bearingDegrees, float radius)
