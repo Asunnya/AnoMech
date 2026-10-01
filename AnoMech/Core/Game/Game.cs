@@ -29,6 +29,7 @@ using AnoMech.Scenarios.Umad.P4KefkaSays;
 using AnoMech.Scenarios.Ucob.P5Exaflares;
 using AnoMech.Scenarios.Umad.P5Celestriad;
 using AnoMech.Scenarios.Umad.P5Exaflares;
+using AnoMech.Scenarios.Dsr.P1Knights;
 using AnoMech.Scenarios.Uwu.P1Garuda;
 using AnoMech.Scenarios.Uwu.P2Ifrit;
 using AnoMech.Scenarios.Uwu.P3Titan;
@@ -176,6 +177,7 @@ public sealed class Game : IDisposable
             new UltimateAnnihilationScenario(),
             new UltimateSuppressionScenario(),
             new UcobP5ExaflaresScenario(),
+            new DsrP1KnightsScenario(),
             new M9sVampStompScenario(),
             new M9sCoffinmakerScenario(),
             new M9sAetherlettingScenario(),
