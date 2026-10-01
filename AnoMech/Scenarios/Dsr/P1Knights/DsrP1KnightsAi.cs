@@ -24,10 +24,10 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
     private static readonly float[] SouthPreyBearings = WaymarkBearings(WaymarkSlot.B, WaymarkSlot.C, WaymarkSlot.A, WaymarkSlot.D);
     private static readonly float[] BrightwingBaits = [128.16f, 133.20f, 138.23f, 143.27f];
 
-    private static readonly Vector2 PrisonStackOffset = new(0f, -2f);
+    private static readonly Vector2 PrisonStackOffset = new(0f, 1f);
     private static readonly Vector2 PrisonEastDropOffset = new(6f, 0f);
     private static readonly Vector2 PrisonWestDropOffset = new(-5.5f, 2.5f);
-    private static readonly Vector2[] BrightwingBaitOffsets = [new(-1.5f, 3f), new(1.5f, 3f)];
+    private static readonly Vector2[] BrightwingBaitOffsets = [new(-1.2f, 7f), new(1.2f, 7f)];
 
     private DsrP1KnightsState state = null!;
     private SimWorld world = null!;

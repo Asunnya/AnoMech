@@ -141,6 +141,21 @@ public class DsrConstants
         public const uint Cross = 0x11C;
     }
 
+    // UNVERIFIED: replayed from the log's director traffic at each phase change; whether they
+    // switch the arena scenery client-side was never observed.
+    public static class ArenaDirector
+    {
+        public const uint Layout = 0x80000016;
+        public const uint SharedGroup = 0x8000001F;
+        public const uint Music = 0x80000004;
+        public const uint KnightsLayout = 0x01;
+        public const uint PrisonLayout = 0x14;
+        public const uint ThordanLayout = 0x1E;
+        public const uint KnightsSharedGroup = 0x2F6;
+        public const uint ThordanSharedGroup = 0x2FD;
+        public const uint ThordanMusic = 0x1AF3;
+    }
+
     public class KnockbackId
     {
         public const uint Execution = 111;

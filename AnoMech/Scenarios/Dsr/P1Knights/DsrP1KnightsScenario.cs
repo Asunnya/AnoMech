@@ -104,6 +104,8 @@ public sealed class DsrP1KnightsScenario : IScenario
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<DsrP1KnightsState>)AiStrats[idx]).Run(state, world);
 
+        world.Events.Add(0f, () => world.Map.DirectorUpdate(ArenaDirector.Layout, 0U, ArenaDirector.KnightsLayout));
+        world.Events.Add(0f, () => world.Map.DirectorUpdate(ArenaDirector.SharedGroup, ArenaDirector.KnightsSharedGroup));
         world.Events.Add(0f, SpawnKnights);
         world.Events.Add(2.14f, () => CastSelf(adelphel, ActionId.HoliestOfHoly, 3.7f));
         world.Events.Add(6.10f, () => Raidwide(adelphel, ActionId.HoliestOfHoly, HoliestOfHolyDamage));
@@ -150,6 +152,7 @@ public sealed class DsrP1KnightsScenario : IScenario
 
         world.Events.Add(104.27f, StartHoliestHallowing);
 
+        world.Events.Add(108.70f, () => world.Map.DirectorUpdate(ArenaDirector.Layout, 0U, ArenaDirector.PrisonLayout));
         world.Events.Add(108.70f, KnightsFall);
         world.Events.Add(111.90f, KnightsRegroupWest);
         world.Events.Add(112.31f, ResolvePlanarPrison);
@@ -163,10 +166,13 @@ public sealed class DsrP1KnightsScenario : IScenario
         foreach (var bait in new[] { 128.16f, 133.20f, 138.23f, 143.27f })
             world.Events.Add(bait, ResolveBrightwing);
         world.Events.Add(136.82f, () => haurchefant?.Despawn());
+        world.Events.Add(141.58f, () => world.Map.DirectorUpdate(ArenaDirector.Music, ArenaDirector.ThordanMusic));
         world.Events.Add(145.32f, ReleasePrison);
         world.Events.Add(148.31f, () => Raidwide(charibert, ActionId.PureOfHeart, PureOfHeartDamage));
         world.Events.Add(149.40f, KnightsDepart);
         world.Events.Add(151.38f, ThordanArrives);
+        world.Events.Add(151.51f, () => world.Map.DirectorUpdate(ArenaDirector.Layout, 0U, ArenaDirector.ThordanLayout));
+        world.Events.Add(151.51f, () => world.Map.DirectorUpdate(ArenaDirector.SharedGroup, ArenaDirector.ThordanSharedGroup));
         world.Events.Add(159.00f, DespawnAll);
     }
 
@@ -601,7 +607,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         grinnaux?.SetPosition(new Placement(DsrP1KnightsState.PrisonCentre, MathF.PI / 2f));
         grinnaux?.SetVisible(true);
         if (charibert == null) return;
-        charibert.SetPosition(new Placement(DsrP1KnightsState.CharibertSpot, MathF.PI));
+        charibert.SetPosition(new Placement(DsrP1KnightsState.CharibertSpot, 0f));
         charibert.SetVisible(true);
         charibert.SetTargetable(true);
         charibert.SetVisibleInEnemyList(true);
@@ -618,7 +624,7 @@ public sealed class DsrP1KnightsScenario : IScenario
             member.AddStatus(StatusId.Stun, 1f);
             member.AddStatus(StatusId.PlanarImprisonment, 32.4f);
             if (FlatDistance(member.Position, DsrP1KnightsState.PrisonCentre) > PrisonRadius - 2f)
-                (member as ISimPartyMember)?.CarryTo(DsrP1KnightsState.PrisonCentre + new Vector3(0f, 0f, -2f));
+                (member as ISimPartyMember)?.CarryTo(DsrP1KnightsState.PrisonCentre + new Vector3(0f, 0f, 1f));
         }
         world.Events.Add(2f, () => prisonActive = true);
     }
