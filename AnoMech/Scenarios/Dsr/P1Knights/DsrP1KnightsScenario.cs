@@ -35,6 +35,8 @@ public sealed class DsrP1KnightsScenario : IScenario
     private const float HeavensflameDamage = 0.35f;
     private const float FireResistanceDownSeconds = 2.96f;
     private const float PureOfHeartDamage = 0.7f;
+    private const float HolyChainTankDamage = 0.8f;
+    private const float DamageDownSeconds = 180f;
     private const float ShockwaveDamage = 0.05f;
     private const float BrightwingDamage = 0.5f;
     private const float BrightwingHalfAngle = MathF.PI / 12f;
@@ -598,6 +600,12 @@ public sealed class DsrP1KnightsScenario : IScenario
             {
                 if (holder == null || !holder.IsAlive()) continue;
                 PlayEffect(charibertCaster, ActionId.HolyChain, 1.1f, target: holder.GameObjectId, at: holder.Position);
+                if (holder is ISimPartyMember { Role: PartyRole.MainTank or PartyRole.OffTank })
+                {
+                    damage.ApplyDamage(holder, HolyChainTankDamage, ActionId.HolyChain, "Burning Chains not broken", false);
+                    holder.AddStatus(StatusId.DamageDown, DamageDownSeconds);
+                    continue;
+                }
                 damage.ApplyDamage(holder, 1f, ActionId.HolyChain, "Burning Chains not broken", lethal: true);
             }
             chain.Despawn();

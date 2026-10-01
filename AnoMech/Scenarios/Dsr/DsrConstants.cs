@@ -121,6 +121,7 @@ public class DsrConstants
         public const ushort FireResistanceDownII = 0xB56;
         public const ushort MagicVulnerabilityUp = 0xB7D;
         public const ushort DownForTheCount = 0xC5D;
+        public const ushort DamageDown = 0xC5E;
     }
 
     public class TetherId
