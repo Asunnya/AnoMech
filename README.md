@@ -7,7 +7,7 @@
 
 AsuMech is a fork of [AnoMech](https://github.com/anomek/AnoMech) by Anomek. It keeps everything AnoMech has and adds
 Savage raids and other fights that stay in this fork, starting with AAC Heavyweight M1 (Savage). The plugin is still
-opened with `/anomech`, and only one of the two can be installed at a time.
+opened with `/asumech` (or `/asu`; `/anomech` and `/ano` still work), and only one of the two can be installed at a time.
  
 Simulate FFXIV raid mechanics client-side for solo practice. Go to any Inn, open the plugin with `/anomech` and start practicing!
 

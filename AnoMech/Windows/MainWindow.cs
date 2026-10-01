@@ -88,7 +88,7 @@ public unsafe class MainWindow : Window, IDisposable
     {
         var v = Assembly.GetExecutingAssembly().GetName().Version;
         var version = v is null ? "" : $" v{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
-        return $"AnoMech{version}###MainWindow";
+        return $"AsuMech{version}###MainWindow";
     }
 
     public MainWindow(Plugin plugin)

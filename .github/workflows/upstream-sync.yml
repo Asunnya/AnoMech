@@ -1,0 +1,31 @@
+name: Upstream sync
+
+# Opens a PR from anomek/AnoMech master into this fork's master when upstream has new commits.
+on:
+  schedule:
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Open upstream PR
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+      run: |
+        ahead=$(gh api "repos/$REPO/compare/master...anomek:AnoMech:master" -q .ahead_by)
+        echo "upstream is $ahead commit(s) ahead"
+        if [ "$ahead" = "0" ]; then exit 0; fi
+        open=$(gh pr list -R "$REPO" --base master --state open --json headRepositoryOwner,headRefName \
+          -q '[.[] | select(.headRepositoryOwner.login == "anomek" and .headRefName == "master")] | length')
+        if [ "$open" != "0" ]; then echo "sync PR already open"; exit 0; fi
+        gh pr create -R "$REPO" --base master --head anomek:master \
+          --title "Sync upstream AnoMech" \
+          --body "anomek/AnoMech master is $ahead commit(s) ahead of master. Merge with a merge commit, never squash or rebase."

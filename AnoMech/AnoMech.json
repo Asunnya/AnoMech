@@ -1,10 +1,10 @@
 {
-    "Author": "Anomek",
-    "Name": "AnoMech",
+    "Author": "Asunnya (fork of Anomek's AnoMech)",
+    "Name": "AsuMech",
     "Punchline": "Another FFXIV mechanics simulator. Go to an inn and start practice.",
     "Description": "Spawns fake party members and bosses client-side so you can practice raid mechanics without a full party.",
-    "RepoUrl": "https://github.com/anomek/AnoMech",
-    "IconUrl": "https://raw.githubusercontent.com/anomek/AnoMech/master/images/icon.png",
+    "RepoUrl": "https://github.com/Asunnya/AsuMech",
+    "IconUrl": "https://raw.githubusercontent.com/Asunnya/AsuMech/asunnya-release/images/icon6464.png",
     "Tags": [
         "top",
         "umad",
