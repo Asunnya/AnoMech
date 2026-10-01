@@ -672,7 +672,9 @@ public sealed class DsrP1KnightsScenario : IScenario
         foreach (var bait in baited)
         {
             var rotation = RotationTowards(origin, bait.Position);
-            PlayEffect(charibert, ActionId.Brightwing, 1.1f, rotation, bait.GameObjectId);
+            var wing = SpawnHelper(origin, rotation);
+            PlayEffect(wing, ActionId.Brightwing, 1.1f, rotation, bait.GameObjectId);
+            world.Events.Add(2f, () => wing?.Despawn());
             foreach (var hit in party.Find.InsideActionAoe(ActionId.Brightwing, new Placement(origin, rotation), size: BrightwingHalfAngle))
             {
                 if (!struck.Add(hit) || hit.HasStatus(StatusId.LightResistanceDown))

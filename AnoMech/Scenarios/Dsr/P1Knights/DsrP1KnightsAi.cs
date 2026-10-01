@@ -65,7 +65,7 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
             var drop = pair % 2 == 0 ? PrisonEastDropOffset : PrisonWestDropOffset;
             ai.Move(bait - 3f, () => AiMove.Create(PairBaitsBrightwing(roles)).NaturalOrder(), jitter: 0.1f);
             ai.Move(bait + 0.4f, () => AiMove.Create(PairCarriesSkyblindOut(roles, drop)).NaturalOrder(), jitter: 0.1f);
-            ai.Move(bait + 5.7f, () => AiMove.Create(StackInPrison()).NaturalOrder(), jitter: 0.1f);
+            ai.Move(bait + 5.7f, () => AiMove.Create(PairReturnsBehindCharibert(roles)).NaturalOrder(), jitter: 0.1f);
         }
         ai.Move(149.0f, () => AiMove.Create(MainTankNorthForThordan()).NaturalOrder());
     }
@@ -145,6 +145,13 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
     private static Vector2 InPrison(Vector2 offset) => Flat(DsrP1KnightsState.PrisonCentre) + offset;
 
     private static Vector2?[] StackInPrison() => Enumerable.Repeat<Vector2?>(InPrison(PrisonStackOffset), 8).ToArray();
+
+    private static Vector2?[] PairReturnsBehindCharibert(PartyRole[] pair)
+    {
+        var spots = new Vector2?[8];
+        foreach (var role in pair) spots[(int)role] = InPrison(PrisonStackOffset);
+        return spots;
+    }
 
     private static Vector2?[] PairBaitsBrightwing(PartyRole[] pair)
     {
