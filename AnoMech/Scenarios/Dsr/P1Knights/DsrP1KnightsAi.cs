@@ -13,15 +13,14 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
 {
     public string Name => "Toolbox (PF)";
 
-    private const float PreyRadius = 10f;
     private const float CardinalChainStart = 1.5f;
     private const float DiagonalChainStart = 2.5f;
     private const float SafeQuadrantRadius = 14.1f;
     private const float ExecutionBaitRadius = 21.9f;
     private const float FullDimensionRadius = 9f;
 
-    private static readonly float[] NorthPreyBearings = WaymarkBearings(WaymarkSlot.Two, WaymarkSlot.Three, WaymarkSlot.One, WaymarkSlot.Four);
-    private static readonly float[] SouthPreyBearings = WaymarkBearings(WaymarkSlot.B, WaymarkSlot.C, WaymarkSlot.A, WaymarkSlot.D);
+    private static readonly WaymarkSlot[] NorthPreyMarkers = [WaymarkSlot.Two, WaymarkSlot.Three, WaymarkSlot.One, WaymarkSlot.Four];
+    private static readonly WaymarkSlot[] SouthPreyMarkers = [WaymarkSlot.B, WaymarkSlot.C, WaymarkSlot.A, WaymarkSlot.D];
     private static readonly float[] BrightwingBaits = [128.16f, 133.20f, 138.23f, 143.27f];
 
     private static readonly Vector2 PrisonStackOffset = new(0f, 1f);
@@ -43,8 +42,8 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
         ai.Move(16.4f, () => AiMove.Create(OffTankNorthPartyStacksSouth()).NaturalOrder());
         ai.Move(25.0f, () => AiMove.Create(TanksNorthPartySouth()).NaturalOrder());
 
-        ai.Move(35.0f, () => AiMove.Create(PreySpreadAndStack(state.FirstSlashTargets, NorthPreyBearings, new Vector2(0f, 4.5f))).NaturalOrder());
-        ai.Move(41.2f, () => AiMove.Create(PreySpreadAndStack(state.SecondSlashTargets, SouthPreyBearings, new Vector2(0f, -4.5f))).NaturalOrder());
+        ai.Move(35.0f, () => AiMove.Create(PreySpreadAndStack(state.FirstSlashTargets, NorthPreyMarkers, new Vector2(0f, 4.5f))).NaturalOrder(), jitter: 0f);
+        ai.Move(41.2f, () => AiMove.Create(PreySpreadAndStack(state.SecondSlashTargets, SouthPreyMarkers, new Vector2(0f, -4.5f))).NaturalOrder(), jitter: 0f);
         ai.Move(48.6f, () => AiMove.Create(TanksNorthPartySouth()).NaturalOrder());
         ai.Move(50.9f, () => AiMove.Create(GroupOppositeAdelphel()).NaturalOrder());
         ai.Move(59.2f, () => AiMove.Create(GroupInSafeQuadrantMainTankPastThem()).NaturalOrder());
@@ -96,11 +95,11 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
         return spots;
     }
 
-    private static Vector2?[] PreySpreadAndStack(IReadOnlyList<PartyRole> prey, float[] bearings, Vector2 stack)
+    private static Vector2?[] PreySpreadAndStack(IReadOnlyList<PartyRole> prey, WaymarkSlot[] markers, Vector2 stack)
     {
         var spots = Enumerable.Repeat<Vector2?>(stack, 8).ToArray();
         for (var i = 0; i < prey.Count; i++)
-            spots[(int)prey[i]] = Flat(DsrConstants.AtBearing(bearings[i], PreyRadius));
+            spots[(int)prey[i]] = Flat(DsrConstants.Phase1Waymark(markers[i]));
         return spots;
     }
 
@@ -176,9 +175,6 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
         spots[(int)PartyRole.OffTank] = new Vector2(1.5f, -5f);
         return spots;
     }
-
-    private static float[] WaymarkBearings(params WaymarkSlot[] slots) =>
-        slots.Select(slot => DsrConstants.BearingOf(DsrConstants.Phase1Waymark(slot))).ToArray();
 
     private static Vector2 Flat(Vector3 p) => new(p.X, p.Z);
 }

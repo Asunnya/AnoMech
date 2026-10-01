@@ -43,8 +43,6 @@ public class DsrConstants
 
     public static Vector3 Phase1Waymark(WaymarkSlot slot) => Phase1Waymarks.First(w => w.Slot == slot).Offset;
 
-    public static float BearingOf(Vector3 point) => (MathF.Atan2(point.X, -point.Z) * 180f / MathF.PI + 360f) % 360f;
-
     // Compass degrees: 0 = north (-Z), 90 = east (+X).
     public static Vector3 AtBearing(float bearingDegrees, float radius)
     {
