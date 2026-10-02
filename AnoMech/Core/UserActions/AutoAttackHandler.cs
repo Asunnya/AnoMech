@@ -24,89 +24,44 @@ internal sealed unsafe class AutoAttackHandler : IUserActionHandler
     // after the delay has run out swings at once.
     private float swingCooldown;
     private byte swingCount;
-    private string? lastHold;
     private readonly System.Random rng = new();
 
     public void OnScenarioStart()
     {
         swingCooldown = 0f;
         swingCount = 0;
-        lastHold = null;
     }
 
     public void OnTick(float deltaSeconds)
     {
         if (swingCooldown > 0f) swingCooldown -= deltaSeconds;
         if (swingCooldown > 0f) return;
-        if (!UIState.Instance()->WeaponState.AutoAttackState.IsAutoAttacking)
-        {
-            Hold("autos off");
-            return;
-        }
-        if (Plugin.GameInstance is not { } game || game.Player is not { Dead: false })
-        {
-            Hold("no live SimPlayer");
-            return;
-        }
+        if (!UIState.Instance()->WeaponState.AutoAttackState.IsAutoAttacking) return;
+        if (Plugin.GameInstance is not { } game || game.Player is not { Dead: false }) return;
 
         var player = (BattleChara*)(Plugin.ObjectTable.LocalPlayer?.Address ?? 0);
-        if (player == null || player->CastInfo.IsCasting)
-        {
-            Hold("casting");
-            return;
-        }
-        if (TargetedEnemy(game, out var why) is not { } enemy)
-        {
-            Hold(why);
-            return;
-        }
+        if (player == null || player->CastInfo.IsCasting) return;
+        if (TargetedEnemy(game) is not { } enemy) return;
 
         var job = PlayerJob.Current;
-        var reach = ReachOf(job);
-        if (!InReach(player, enemy, reach))
-        {
-            Hold($"out of reach ({reach}y past hitboxes)");
-            return;
-        }
+        if (!InReach(player, enemy, ReachOf(job))) return;
 
         var actionId = ActionIdOf(job);
         var variation = (byte)(swingCount++ % 3);
         swingCooldown = WeaponDelay();
-        lastHold = null;
-        DiagnosticLog.Info($"[AutoAttack] Swing: action {actionId} variation {variation} at 0x{enemy.GameObjectId.ObjectId:X8}, next in {swingCooldown:F2}s.");
         ActionEffects.FireAutoAttack((Character*)player, actionId, enemy.GameObjectId, variation);
         JobActions.ApplyAutoAttack(game.Player, actionId, enemy.GameObjectId, rng);
     }
 
-    private void Hold(string reason)
-    {
-        if (reason == lastHold) return;
-        lastHold = reason;
-        DiagnosticLog.Info($"[AutoAttack] Holding: {reason}.");
-    }
-
     // The swing is delivered to the enemy, so it must resolve through CharacterManager.
-    private static SimEnemy? TargetedEnemy(Game.Game game, out string why)
+    private static SimEnemy? TargetedEnemy(Game.Game game)
     {
-        why = "";
-        if (Plugin.TargetManager.Target is not { } target)
-        {
-            why = "no target";
-            return null;
-        }
+        if (Plugin.TargetManager.Target is not { } target) return null;
         var enemy = game.World.Children.OfType<SimEnemy>()
             .FirstOrDefault(e => e.IsActive && e.Targetable && (ulong)e.GameObjectId == target.GameObjectId);
-        if (enemy == null)
-        {
-            why = $"target 0x{target.GameObjectId:X} is not a live targetable SimEnemy";
-            return null;
-        }
+        if (enemy == null) return null;
         var cm = CharacterManager.Instance();
-        if (cm == null || cm->LookupBattleCharaByEntityId(enemy.GameObjectId.ObjectId) == null)
-        {
-            why = $"target 0x{enemy.GameObjectId.ObjectId:X8} is not in CharacterManager";
-            return null;
-        }
+        if (cm == null || cm->LookupBattleCharaByEntityId(enemy.GameObjectId.ObjectId) == null) return null;
         return enemy;
     }
 
