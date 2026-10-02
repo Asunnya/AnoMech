@@ -6,7 +6,6 @@ using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
 using AnoMech.Core.SimObjects;
 using AnoMech.Multiplayer;
 using AnoMech.Scenarios.Umad.P3BlackHole;
@@ -14,6 +13,7 @@ using AnoMech.Scenarios.Umad.P3BlackHole;
 namespace AnoMech.Scenarios.Umad.P3LimitCut;
 
 using Constants = UmadP3LimitCutConstants;
+using AnoMech.Core.Native.Interfaces;
 
 // Dancing Mad P3 "Limit Cut" (BossMod's P3UltimaBlaster). Scenario time 0 is 8.0s before Chaos
 // starts casting Umbra Smash, the earliest start inside this mechanic (the previous resolve is
@@ -158,7 +158,7 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     // materialise timelines, so the preload belongs here too, and so does a tank's LB3 gauge.
     public void RunInstanceEvents(SimWorld instanceWorld)
     {
-        ActionTimelinePreload.Preload(CloneTimelines, "UmadP3LimitCut");
+        Natives.TimelinePreload.Preload(CloneTimelines, "UmadP3LimitCut");
         instanceWorld.Party.LimitBreak.Set(3f);
         var u = Constants.Timing.UmbraCastAt;
         foreach (var (offset, arg) in Constants.Timing.DirectorBeats)

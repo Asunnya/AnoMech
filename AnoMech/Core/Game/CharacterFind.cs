@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.SimObjects;
 using AnoMech.Scenarios;
 
@@ -227,8 +228,7 @@ public sealed class CharacterFind<T> where T : IPositioned
     // 10 (donut) -> inner safe radius default 0
     public IReadOnlyList<T> InsideActionAoe(uint actionId, Placement target, float omenRotate = 0f, float? size = null)
     {
-        var actionSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
-        if (!actionSheet.TryGetRow(actionId, out var action))
+        if (Natives.Data.Action(actionId) is not { } action)
         {
             Plugin.Log.Warning($"InsideActionAoe: action {actionId} not found");
             return Array.Empty<T>();

@@ -7,16 +7,14 @@ using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using AnoMech.Multiplayer;
-using AnoMech.Pointers;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.Network;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
 
 namespace AnoMech.Scenarios.Uwu.UltimatePredation;
 
-public unsafe class UltimatePredationScenario : IMultiplayerReplayable
+public class UltimatePredationScenario : IMultiplayerReplayable
 {
     public string Name => "Ultimate Predation";
     public IPhase Phase => UwuZone.Ultima;
@@ -1052,7 +1050,7 @@ public unsafe class UltimatePredationScenario : IMultiplayerReplayable
 
         world.Events.Add(effectOffset + 0.16f, () => utils.ResolveSnapshot(burstSnapshot, "Burst"));
 
-        world.Events.Add(fadeOffset, () => PacketDispatcher.HandleActorControlPacket(boulder!.EntityId, 607, boulder.EntityId, 1, 0, 100, 0, 0, 0, 0, 0xE0000000, false));
+        world.Events.Add(fadeOffset, () => boulder!.ActorControl(607, boulder.EntityId, 1, 0, 100));
         world.Events.Add(despawnOffset, () => boulder?.Despawn());
     }
 

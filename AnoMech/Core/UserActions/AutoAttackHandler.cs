@@ -1,10 +1,11 @@
 using System.Linq;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Implementations;
 using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Lumina.Excel.Sheets;
+using AnoMech.Core.Native.Implementations.Interop;
 
 namespace AnoMech.Core.UserActions;
 
@@ -76,7 +77,7 @@ internal sealed unsafe class AutoAttackHandler : IUserActionHandler
     // SimEnemy.Position is scenario-local; compare world positions.
     private static bool InReach(BattleChara* player, SimEnemy enemy, float range)
     {
-        var bc = enemy.BattleCharaPtr;
+        var bc = enemy.BattleCharaPtr();
         if (bc == null) return false;
         var dx = bc->Position.X - player->Position.X;
         var dz = bc->Position.Z - player->Position.Z;

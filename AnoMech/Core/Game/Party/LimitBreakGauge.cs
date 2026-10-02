@@ -1,5 +1,5 @@
 using System;
-using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.Game.Party;
 
@@ -7,14 +7,14 @@ namespace AnoMech.Core.Game.Party;
 // that grants one has it written into LimitBreakController every tick, for display only: the
 // real values are saved once and written back when the party despawns. The client gates presses
 // on it; the request packet is eaten by the firewall.
-public sealed unsafe class LimitBreakGauge
+public sealed class LimitBreakGauge
 {
     private const ushort UnitsPerBar = 10000;
     private const byte Bars = 3;
 
     // Null until a scenario grants a gauge; the native one is then left alone.
     private ushort? units;
-    private (byte BarCount, ushort CurrentUnits, ushort BarUnits)? saved;
+    private LimitBreakBars? saved;
 
     public int FilledBars => (units ?? 0) / UnitsPerBar;
 
@@ -29,12 +29,9 @@ public sealed unsafe class LimitBreakGauge
     internal void Tick()
     {
         if (units is not { } current) return;
-        var lb = LimitBreakController.Instance();
-        if (lb == null) return;
-        saved ??= (lb->BarCount, lb->CurrentUnits, lb->BarUnits);
-        lb->BarCount = Bars;
-        lb->BarUnits = UnitsPerBar;
-        lb->CurrentUnits = current;
+        if (Natives.LimitBreak.Read() is not { } real) return;
+        saved ??= real;
+        Natives.LimitBreak.Write(new LimitBreakBars(Bars, current, UnitsPerBar));
     }
 
     internal void Restore()
@@ -42,10 +39,6 @@ public sealed unsafe class LimitBreakGauge
         units = null;
         if (saved is not { } s) return;
         saved = null;
-        var lb = LimitBreakController.Instance();
-        if (lb == null) return;
-        lb->BarCount = s.BarCount;
-        lb->CurrentUnits = s.CurrentUnits;
-        lb->BarUnits = s.BarUnits;
+        Natives.LimitBreak.Write(s);
     }
 }

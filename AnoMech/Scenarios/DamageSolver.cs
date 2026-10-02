@@ -1,10 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
 using AnoMech.Core.SimObjects;
 using AnoMech.Core.UserActions;
 
@@ -222,7 +221,8 @@ public class DamageSolver
     {
         if (target is not ISimPartyMember) return;
         var name = ActionLookup.Name(actionId);
-        DamageNumbers.ShowFraction(target, fractionOfMaxHp, name);
+        if (target.Proxy is { Exists: true } chara)
+            chara.ShowFlyText((uint)MathF.Round(fractionOfMaxHp * chara.MaxHealth), name);
         if (!lethal) return;
         target.Die($"Died to {name} ({context})");
     }

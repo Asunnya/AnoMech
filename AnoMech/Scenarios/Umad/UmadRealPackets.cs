@@ -88,7 +88,7 @@ internal static class UmadRealPackets
     // The 8-target action-effect packet (632 bytes).
     public const ushort ActionEffect8Opcode = 0x03C8;
 
-    // A captured resolve that Core.Native.RawActionEffect replays on one actor.
+    // A captured resolve that Core.Native.Implementations.RawActionEffect replays on one actor.
     public sealed record RawActionEffectCapture(byte[] Body, ushort Opcode, string GameVersion);
 
     // One real FloodAOE (49769) resolve: animation target = the caster, lock 1.1, no targets,

@@ -24,10 +24,7 @@ using AnoMech.Scenarios.Umad.P5Exaflares;
 using AnoMech.Scenarios.Umad.P5Flood;
 using AnoMech.Scenarios.Uwu.UltimatePredation;
 using AnoMech.Scenarios.Uwu.UltimateSuppression;
-using Dalamud.Game.Text;
-using Dalamud.Game.Text.SeStringHandling;
-using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.UI;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.Game;
 
@@ -51,7 +48,6 @@ public sealed class Game : IDisposable
     public IReadOnlyList<IZone> Zones { get; }
     private readonly Dictionary<IZone, List<IPhase>> phasesByZone = new();
     private readonly Dictionary<IPhase, List<IScenario>> scenariosByPhase = new();
-    public Bgm Bgm { get; } = new();
 
     // Fixed scenario-local player spawn (16y south of centre).
     public static readonly Vector3 PlayerSpawnLocal = new(0f, 0f, 16f);
@@ -132,7 +128,6 @@ public sealed class Game : IDisposable
     private IPhase? lastPhase;
     private bool firstDeathScheduled;
     private bool firstFreezeScheduled;
-    private readonly OpcodeUpdater opcodeUpdater;
 
 #if DEBUG
     // A run where nobody dies but something went wrong needs the same trace as the auto-freeze.
@@ -143,7 +138,6 @@ public sealed class Game : IDisposable
     public Game()
     {
         World = new SimWorld(Events);
-        opcodeUpdater = new OpcodeUpdater();
         Scenarios = new IScenario[]
         {
             new UmadP1TeleTrouncingScenario(),
@@ -201,7 +195,7 @@ public sealed class Game : IDisposable
 
     public void RunScenario(RunScenarioParams p)
     {
-        if (ZoneSession.StartBlockedReason(out var settling) != null && settling != null)
+        if (Natives.Zone.StartBlockedReason(out var settling) != null && settling != null)
         {
             if (waitingStart == null) AnoMech.Core.DiagnosticLog.Info($"[Game] Start waiting for {settling} to settle.");
             waitingStart = p;
@@ -211,13 +205,13 @@ public sealed class Game : IDisposable
         waitingStart = null;
         StartWaitingOn = null;
         lastRun = p;
-        Plugin.Framework.Run(() => { RunScenarioInternal(p, null, null, isPeer: false); });
+        Natives.Framework.Run(() => { RunScenarioInternal(p, null, null, isPeer: false); });
     }
 
     private void RetryWaitingStart()
     {
         if (waitingStart is not { } waiting) return;
-        if (ZoneSession.StartBlockedReason(out var settling) != null && settling != null)
+        if (Natives.Zone.StartBlockedReason(out var settling) != null && settling != null)
         {
             StartWaitingOn = settling;
             return;
@@ -253,7 +247,7 @@ public sealed class Game : IDisposable
     // null once the run is up; an exception counts as a refusal.
     private static void RunResolved(Func<string?> start, Action<string?> resolved)
     {
-        Plugin.Framework.Run(() =>
+        Natives.Framework.Run(() =>
         {
             string? refusal;
             try
@@ -293,7 +287,7 @@ public sealed class Game : IDisposable
         // isn't about to act on. Everything downstream (CharacterManager registration, zone
         // load, doppel spawn) assumes the inn; the deferred start may land in a state the click
         // didn't see, and ZoneSession.Enter asks once more before the firewall goes up.
-        if (ZoneSession.StartBlockedReason() is { } blocked)
+        if (Natives.Zone.StartBlockedReason(out _) is { } blocked)
         {
             Plugin.Log.Warning($"Game: refusing to start {scenario.Name} -- {blocked}.");
             return blocked;
@@ -314,8 +308,8 @@ public sealed class Game : IDisposable
         var previousScenario = activeScenario;
         ResetInternal();
 
-        var player = Plugin.ObjectTable.LocalPlayer;
-        if (player == null)
+        var player = Natives.BattleCharas.LocalPlayer;
+        if (!player.Exists)
         {
             Plugin.Log.Warning("Game: no local player; aborting scenario start");
             return "no local player";
@@ -353,7 +347,7 @@ public sealed class Game : IDisposable
         var seed = requestedSeed ?? Random.Shared.Next();
         World.Reseed(seed);
         Plugin.Log.Info($"Game: {scenario.Name} seed {seed}");
-        World.CreateParty(player.ClassJob.RowId, roleOverride, solo, networkRoles, networkSeats);
+        World.CreateParty(player.ClassJob, roleOverride, solo, networkRoles, networkSeats);
         // Client-asset setup a peer needs too (see IZone.RunClientSetup).
         zone.RunClientSetup(World);
         phase.RunClientSetup(World);
@@ -396,22 +390,18 @@ public sealed class Game : IDisposable
         // restarting the song; a different track swaps; suppressed/no-track reverts.
         AnoMech.Core.DiagnosticLog.Info($"[Bgm] Suppress scenario BGM: {(Plugin.Config.SuppressBgm ? "on" : "off")}.");
         if (Plugin.Config.SuppressBgm || phase.Bgm == 0)
-            Bgm.Reset();
+            Natives.Bgm.Reset();
         else
-            Bgm.Play(phase.Bgm, scenario.BgmSecondsAtStart);
+            Natives.Bgm.Play(phase.Bgm, scenario.BgmSecondsAtStart);
 
-        Plugin.ChatGui.Print(new XivChatEntry
-        {
-            Type = XivChatType.SystemMessage,
-            // networkRoles null, not solo: a peer passes selectedAi null too.
-            Message = new SeStringBuilder().AddText($"[AnoMech] Starting: {FullName(scenario)}{(networkRoles is null ? " (Solo)" : "")}").Build(),
-        });
+        // networkRoles null, not solo: a peer passes selectedAi null too.
+        Natives.Messages.PrintSystemMessage($"[AnoMech] Starting: {FullName(scenario)}{(networkRoles is null ? " (Solo)" : "")}");
         return null;
     }
 
     public void Tick(float deltaSeconds)
     {
-        Bgm.Tick(deltaSeconds);
+        Natives.Bgm.Tick(deltaSeconds);
         RetryWaitingStart();
         if (Paused) return;
         lastEventTick = Stopwatch.GetTimestamp();
@@ -539,13 +529,7 @@ public sealed class Game : IDisposable
     }
 
     private static void PrintDeath(ISimPartyMember target, string cause)
-    {
-        Plugin.ChatGui.Print(new XivChatEntry
-        {
-            Type = XivChatType.SystemMessage,
-            Message = new SeStringBuilder().AddText($"[AnoMech] {DescribeName(target)} died: {cause}").Build(),
-        });
-    }
+        => Natives.Messages.PrintSystemMessage($"[AnoMech] {DescribeName(target)} died: {cause}");
 
     private static string DescribeName(ISimPartyMember target) => target switch
     {
@@ -555,20 +539,16 @@ public sealed class Game : IDisposable
         _ => "Character",
     };
 
-    private static unsafe void ShowFirstDeathOverlay(ISimPartyMember target, string cause)
-    {
-        var ui = UIModule.Instance();
-        if (ui == null) return;
-        ui->ShowErrorText($"{DescribeName(target)} died: {cause}", true);
-    }
+    private static void ShowFirstDeathOverlay(ISimPartyMember target, string cause)
+        => Natives.Messages.ShowErrorText($"{DescribeName(target)} died: {cause}");
 
-    public void Reset() => Plugin.Framework.Run(() =>
+    public void Reset() => Natives.Framework.Run(() =>
     {
         CancelWaitingStart();
         if (activeScenario is not null)
             TeleportPlayerToSpawnIfOutsideArena();
         ResetInternal();
-        Bgm.Reset();
+        Natives.Bgm.Reset();
     });
 
     // Pull the player back to the scenario's spawn point only if they're standing
@@ -579,8 +559,8 @@ public sealed class Game : IDisposable
     // clears Party / ScenarioOrigin.
     private void TeleportPlayerToSpawnIfOutsideArena()
     {
-        var lp = Plugin.ObjectTable.LocalPlayer;
-        if (lp == null) return;
+        var lp = Natives.BattleCharas.LocalPlayer;
+        if (!lp.Exists) return;
         if (!World.IsOutsideArena(World.Coordinates.ToLocal(lp.Position))) return;
         TeleportPlayerToSpawn();
     }
@@ -604,12 +584,12 @@ public sealed class Game : IDisposable
     {
         // Leaving always finalizes its own log segment.
         AnoMech.Core.DiagnosticLog.RotateNow();
-        Plugin.Framework.Run(() =>
+        Natives.Framework.Run(() =>
         {
             CancelWaitingStart();
             ResetInternal();
             Plugin.UserActions.OnSessionEnd();   // restore the job gauge captured at session start
-            Bgm.Reset();
+            Natives.Bgm.Reset();
             World.Map.Unload();
         });
     }
@@ -621,7 +601,7 @@ public sealed class Game : IDisposable
         Events.Clear();
         World.Despawn();
         // A wipe or Leave never reaches the scenario's own cleanup.
-        Core.Native.VfxSpawnLog.Disable();
+        Natives.VfxSpawnLog.Disable();
         // BGM is the callers': resetting here would restart a same-track scenario switch.
 
         Paused = false;
@@ -644,9 +624,7 @@ public sealed class Game : IDisposable
         activeScenario = null;
         Events.Clear();
         Plugin.UserActions.OnSessionEnd();   // restore the gauge if the plugin unloads mid-session (no-op otherwise)
-        Bgm.Dispose();
         World.Dispose();
-        opcodeUpdater.Dispose();
     }
 }
 

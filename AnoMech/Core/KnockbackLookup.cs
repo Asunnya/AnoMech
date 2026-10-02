@@ -1,5 +1,4 @@
-using Lumina.Excel;
-using LuminaKnockback = Lumina.Excel.Sheets.Knockback;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core;
 
@@ -9,16 +8,13 @@ namespace AnoMech.Core;
 // straight to SimParty/ISimPartyMember — no intermediate action-id table.
 internal static class KnockbackLookup
 {
-    private static readonly ExcelSheet<LuminaKnockback> Sheet =
-        Plugin.DataManager.GetExcelSheet<LuminaKnockback>();
-
     public static bool TryGet(uint knockbackId, out float distance, out float speed)
     {
-        distance = 0f;
-        speed = 0f;
-        if (!Sheet.TryGetRow(knockbackId, out var row))
+        if (Natives.Data.Knockback(knockbackId) is not { } row)
         {
             Plugin.Log.Warning($"KnockbackLookup: Knockback row {knockbackId} missing in sheet");
+            distance = 0f;
+            speed = 0f;
             return false;
         }
         distance = row.Distance;

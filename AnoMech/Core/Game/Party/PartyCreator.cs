@@ -1,13 +1,8 @@
-using AnoMech.Core.Native;
 using AnoMech.Core.SimObjects;
-using AnoMech.Helpers;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
-using FFXIVClientStructs.FFXIV.Client.Game.Object;
-using Lumina.Excel;
-using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.Game.Party;
 
@@ -21,23 +16,8 @@ namespace AnoMech.Core.Game.Party;
 // matching unregister lives in SimPartyNpc.Despawn. Scenarios are
 // inn-gated upstream (Game.RunScenarioInternal). Game is the entry point —
 // it computes the origin and delegates here.
-internal static unsafe class PartyCreator
+internal static class PartyCreator
 {
-    private const byte RaceLalafell = 3;
-    private const byte TribePlainsfolk = 5;
-    private const byte SexFemale = 1;
-    private const byte BodyTypeAdult = 1;
-
-    // Status-loop-VFX size is driven by GameObject.Height (and possibly VfxScale). The engine
-    // derives both from a real PC's Customize, but a client-spawned doppel leaves them at the 1.0
-    // default — making status VFX render oversized vs the small Lalafell model. There's no cheap
-    // way to recompute them (CalculateHeight is a different, larger value), so we hardcode the
-    // Lalafell values observed on a live Lalafell player to match the hardcoded Customize below.
-    private const float LalafellVfxScale = 0.4f;
-    private const float LalafellHeight = 0.6f;
-
-    private const uint DoppelMaxHealth = 100_000;
-
     private const float RingRadius = 2.5f;
     private const float RadiusJitter = 0.6f;
     private const float AngleJitter = 0.4f;
@@ -50,7 +30,6 @@ internal static unsafe class PartyCreator
         var presets = roleOverride is { } skip
             ? PartyPresets.ForRole(skip)
             : PartyPresets.ForPlayerJob(playerJob);
-        var itemSheet = Plugin.DataManager.GetExcelSheet<Item>();
         var spawnRng = world.Stream("party-spawn");
 
         for (int i = 0; i < presets.Count; i++)
@@ -76,7 +55,7 @@ internal static unsafe class PartyCreator
                         ClassJob = seat.ClassJob != 0 ? seat.ClassJob : preset.ClassJob,
                     }
                     : preset;
-                var puppet = SpawnPuppet(puppetPreset, world, role, new Placement(localPos0, MathF.Atan2(-localPos0.X, -localPos0.Z)), itemSheet);
+                var puppet = SpawnPuppet(puppetPreset, world, role, new Placement(localPos0, MathF.Atan2(-localPos0.X, -localPos0.Z)));
                 if (puppet != null) party.SetSlot(role, puppet);
                 continue;
             }
@@ -92,17 +71,17 @@ internal static unsafe class PartyCreator
             var localPos = new Vector3(MathF.Sin(angle) * distance, 0f, MathF.Cos(angle) * distance);
             var facingPlayer = MathF.Atan2(-localPos.X, -localPos.Z);
 
-            var member = Spawn(preset, world, role, new Placement(localPos, facingPlayer), itemSheet);
+            var member = Spawn(preset, world, role, new Placement(localPos, facingPlayer));
             if (member != null) party.SetSlot(role, member);
         }
     }
 
-    private static SimPartyNpc? Spawn(PartyMemberPreset preset, SimWorld world, PartyRole role, Placement placement, ExcelSheet<Item> itemSheet)
+    private static SimPartyNpc? Spawn(PartyMemberPreset preset, SimWorld world, PartyRole role, Placement placement)
     {
-        if (!SpawnNative(preset, world, placement, itemSheet, out var idx)) return null;
+        if (Natives.BattleCharas.SpawnDoppel(preset, world.Coordinates.ToGlobal(placement)) is not { } chara) return null;
 
-        Plugin.Log.Info($"PartyCreator: spawned {preset.Name} ({role}, job {preset.ClassJob}) at index {idx}");
-        var member = new SimPartyNpc(idx, world.Coordinates, role, preset.ClassJob, preset.Name);
+        Plugin.Log.Info($"PartyCreator: spawned {preset.Name} ({role}, job {preset.ClassJob}) at index {chara.Slot}");
+        var member = new SimPartyNpc(chara, world.Coordinates, role, preset.ClassJob, preset.Name);
         // Bots steer around the scenario's geometry; only doppels get the live
         // field (bosses/player/puppets keep ObstacleField.Empty and move in straight lines).
         member.Obstacles = world.Obstacles;
@@ -114,113 +93,13 @@ internal static unsafe class PartyCreator
     }
 
     // Same visuals as a bot, but excluded from the Obstacles field only steering doppels need.
-    private static SimNetworkPuppet? SpawnPuppet(PartyMemberPreset preset, SimWorld world, PartyRole role, Placement placement, ExcelSheet<Item> itemSheet)
+    private static SimNetworkPuppet? SpawnPuppet(PartyMemberPreset preset, SimWorld world, PartyRole role, Placement placement)
     {
-        if (!SpawnNative(preset, world, placement, itemSheet, out var idx)) return null;
+        if (Natives.BattleCharas.SpawnDoppel(preset, world.Coordinates.ToGlobal(placement)) is not { } chara) return null;
 
-        Plugin.Log.Info($"PartyCreator: spawned network puppet {preset.Name} ({role}, job {preset.ClassJob}) at index {idx}");
-        var puppet = new SimNetworkPuppet(idx, world.Coordinates, role, preset.ClassJob, preset.Name);
+        Plugin.Log.Info($"PartyCreator: spawned network puppet {preset.Name} ({role}, job {preset.ClassJob}) at index {chara.Slot}");
+        var puppet = new SimNetworkPuppet(chara, world.Coordinates, role, preset.ClassJob, preset.Name);
         puppet.SetPosition(placement);
         return puppet;
-    }
-
-    // Shared native BattleChara setup for both a bot doppel and a network puppet
-    // — identical visuals, only the wrapper type and movement behaviour differ.
-    private static bool SpawnNative(PartyMemberPreset preset, SimWorld world, Placement placement, ExcelSheet<Item> itemSheet, out int idx)
-    {
-        idx = -1;
-        if (!CharacterManagerHelper.CreateCharacter(out idx, out var obj)) return false;
-
-        var gameObj = (GameObject*)obj;
-        var chara = (BattleChara*)obj;
-        chara->ObjectKind = ObjectKind.Pc;
-        chara->Position = world.Coordinates.ToGlobal(placement.Position);
-        chara->Rotation = MathUtil.NormalizeRotation(placement.Rotation);
-        chara->Scale = 1f;
-        chara->VfxScale = LalafellVfxScale;
-        chara->Height = LalafellHeight;
-        chara->ModelContainer.ModelCharaId = 0;
-        chara->ModelContainer.ModelSkeletonId = 0;
-
-        WriteCustomize(chara);
-        WriteEquipment(chara, preset, itemSheet);
-        GameObjectHelper.WriteName(gameObj, preset.Name);
-        obj->RenderFlags = 0;
-
-        chara->TargetableStatus = ObjectTargetableFlags.IsTargetable;
-        chara->HitboxRadius = 0.5f;
-        chara->MaxHealth = DoppelMaxHealth;
-        chara->Health = DoppelMaxHealth;
-        chara->MaxMana = 10_000;
-        chara->Mana = 10_000;
-        chara->Battalion = 0;
-        chara->IsHostile = false;
-        chara->InCombat = false;
-        chara->IsPartyMember = true;
-        chara->IsAllianceMember = false;
-        chara->IsFriend = false;
-        chara->IsOffhandDrawn = false;
-        chara->Timeline.IsWeaponDrawn = false;
-        chara->CastInfo.IsCasting = false;
-        chara->Mode = CharacterModes.Normal;
-        chara->ModeParam = 0;
-        chara->ClassJob = preset.ClassJob;
-        chara->Level = preset.Level;
-
-        var player = Plugin.ObjectTable.LocalPlayer;
-        if (player != null)
-        {
-            var localChara = (Character*)player.Address;
-            chara->HomeWorld = localChara->HomeWorld;
-            chara->CurrentWorld = localChara->CurrentWorld;
-        }
-
-        return true;
-    }
-
-    private static void WriteCustomize(BattleChara* chara)
-    {
-        ref var c = ref chara->DrawData.CustomizeData;
-        c.Race = RaceLalafell;
-        c.Sex = SexFemale;
-        c.BodyType = BodyTypeAdult;
-        c.Height = 50;
-        c.Tribe = TribePlainsfolk;
-        c.Face = 1;
-        c.Hairstyle = 1;
-        c.SkinColor = 1;
-        c.EyeColorRight = 1;
-        c.EyeColorLeft = 1;
-        c.HairColor = 1;
-        c.HighlightsColor = 1;
-        c.TattooColor = 1;
-        c.Eyebrows = 1;
-        c.Nose = 1;
-        c.Jaw = 1;
-        c.LipColorFurPattern = 1;
-        c.MuscleMass = 50;
-        c.TailShape = 1;
-        c.BustSize = 50;
-        c.FacePaintColor = 1;
-    }
-
-    private static void WriteEquipment(BattleChara* chara, PartyMemberPreset preset, ExcelSheet<Item> itemSheet)
-    {
-        ApplyItem(chara, DrawDataContainer.EquipmentSlot.Head, preset.Head, itemSheet);
-        ApplyItem(chara, DrawDataContainer.EquipmentSlot.Body, preset.Body, itemSheet);
-        ApplyItem(chara, DrawDataContainer.EquipmentSlot.Hands, preset.Hands, itemSheet);
-        ApplyItem(chara, DrawDataContainer.EquipmentSlot.Legs, preset.Legs, itemSheet);
-        ApplyItem(chara, DrawDataContainer.EquipmentSlot.Feet, preset.Feet, itemSheet);
-    }
-
-    private static void ApplyItem(BattleChara* chara, DrawDataContainer.EquipmentSlot slot, uint itemRowId, ExcelSheet<Item> itemSheet)
-    {
-        if (itemRowId == 0) return;
-        if (!itemSheet.TryGetRow(itemRowId, out var item))
-        {
-            Plugin.Log.Warning($"PartyCreator: Item row {itemRowId} for slot {slot} not found");
-            return;
-        }
-        chara->DrawData.Equipment(slot).Value = item.ModelMain;
     }
 }

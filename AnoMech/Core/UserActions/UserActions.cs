@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Implementations;
 using AnoMech.Core.UserActions.Jobs;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;

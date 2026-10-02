@@ -1,21 +1,14 @@
-using AnoMech.Helpers;
-using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.Map;
 
 // Unified entry point for zone loading and map effects. Owned by SimWorld as
-// world.Map. Zone and effects state are reset by Reset(); zone hooks are
-// released by Dispose().
-public sealed unsafe class MapController : IDisposable
+// world.Map; zone and effects state are reset by Unload().
+public sealed class MapController
 {
-    private readonly MapEffects effects = new();
-    private readonly ZoneSession zone = new();
-
-    // Layout instances forced inactive for the run's lifetime — see SuppressLayer.
-    private readonly List<nint> suppressedLayerInstances = new();
     // The engine brings layers up over several seconds, so one reading can't tell a slow load
     // from one that never completes.
     private int layerDumpFrame;
@@ -79,15 +72,15 @@ public sealed unsafe class MapController : IDisposable
     // Cleared by Unload() and Reset().
     public bool IsInInstance { get; private set; }
 
-    public bool IsZoneLoaded => zone.IsActive;
-    public bool IsInInn() => ZoneSession.IsInInn();
+    public bool IsZoneLoaded => Natives.Zone.IsActive;
+    public bool IsInInn() => Natives.Zone.IsInInn();
 
     // Load the target territory client-side. Must be called from the Inn. False when refused
     // (see ZoneSession.StartBlockedReason); nothing is loaded then.
-    public bool Load(uint territoryId, Vector3 playerPosition, byte levelSync, ushort itemLevelSync) => zone.Enter(territoryId, playerPosition, levelSync, itemLevelSync);
+    public bool Load(uint territoryId, Vector3 playerPosition, byte levelSync, ushort itemLevelSync) => Natives.Zone.Enter(territoryId, playerPosition, levelSync, itemLevelSync);
 
     // Apply weather after a zone load (1-second delayed to let the engine settle).
-    public void ApplyWeather(byte weatherId) => zone.ApplyWeather(weatherId);
+    public void ApplyWeather(byte weatherId) => Natives.Zone.ApplyWeather(weatherId);
 
     // Mirrored to peers by MultiplayerManager; scenarios call SetWeather mid-fight for
     // arena-transform lighting cues that no SimObject carries.
@@ -99,43 +92,43 @@ public sealed unsafe class MapController : IDisposable
 
     public void SetFogHold(float? value)
     {
-        zone.FogHold = value;
+        Natives.Zone.FogHold = value;
         FogHoldChanged?.Invoke(value);
     }
 
     // A captured server packet, replayed through the client's own dispatcher (see
     // ZoneSession.InjectIncomingPacket). Returns false when it could not be delivered.
     public bool InjectIncomingPacket(uint sourceEntityId, ushort opcode, ReadOnlySpan<byte> body, string what)
-        => zone.InjectIncomingPacket(sourceEntityId, opcode, body, what);
+        => Natives.Zone.InjectIncomingPacket(sourceEntityId, opcode, body, what);
 
     // Outside a session, block every outbound packet but the heartbeat (see
     // ZoneSession.HoldSendFirewall).
-    public void HoldSendFirewall(bool hold) => zone.HoldSendFirewall(hold);
+    public void HoldSendFirewall(bool hold) => Natives.Zone.HoldSendFirewall(hold);
 
     // See ZoneSession.MaxActionEffectCounter.
-    public uint MaxSeenActionEffectCounter => zone.MaxActionEffectCounter;
+    public uint MaxSeenActionEffectCounter => Natives.Zone.MaxActionEffectCounter;
 
     // Immediately change the active weather (mid-scenario). transition = fade seconds.
     public void SetWeather(byte weatherId, float transition = 0.5f)
     {
-        zone.SetWeather(weatherId, transition);
+        Natives.Zone.SetWeather(weatherId, transition);
         WeatherChanged?.Invoke(weatherId, transition);
     }
 
     // Revert to the saved inn territory and restore position.
     public void Unload()
     {
-        zone.Revert(false);
+        Natives.Zone.Revert();
         IsInInstance = false;
         // Otherwise the native ProcessMapEffect path stays reachable from a replayed message
         // outside any sim.
-        effects.Loaded = false;
+        Natives.MapEffects.Loaded = false;
         pendingColliderDrops.Clear();
         pendingEffects.Clear();
         pendingDirectorUpdates.Clear();
         suppressedArenaSlots.Clear();
-        effects.ForgetSuppressions();
-        suppressedLayerInstances.Clear();
+        Natives.MapEffects.ForgetSuppressions();
+        Natives.Layout.ClearSuppressedLayers();
         layerDumpFrame = int.MaxValue;
     }
 
@@ -146,34 +139,32 @@ public sealed unsafe class MapController : IDisposable
     // reconciles it back within a frame or two — so this re-asserts every tick until Unload.
     public void SuppressLayer(ushort layerKey)
     {
-        var instances = LayoutQuery.CollectLayerInstances(layerKey);
-        suppressedLayerInstances.AddRange(instances);
-        DiagnosticLog.Info($"[MapController] Suppressed layer 0x{layerKey:X} -- {instances.Count} instances.");
+        var instances = Natives.Layout.SuppressLayer(layerKey);
+        DiagnosticLog.Info($"[MapController] Suppressed layer 0x{layerKey:X} -- {instances} instances.");
     }
 
     // Per-frame poll. Called from SimWorld.Tick.
     internal void Tick()
     {
-        foreach (var ptr in suppressedLayerInstances)
-            ((ILayoutInstance*)ptr)->SetActive(false);
+        Natives.Layout.ReassertSuppressedLayers();
 
         if (IsInInstance && layerDumpFrame <= LayerDumpFrames[^1])
         {
             layerDumpFrame++;
             if (Array.IndexOf(LayerDumpFrames, layerDumpFrame) >= 0)
             {
-                var at = Plugin.ObjectTable.LocalPlayer?.Position;
-                var where = at is { } p ? $"({p.X:F1},{p.Y:F1},{p.Z:F1})" : "no player";
-                DiagnosticLog.Info($"[MapController] Active layout at frame {layerDumpFrame}, player {where}: {LayoutQuery.DescribeActiveLayers()}");
+                var player = Natives.BattleCharas.LocalPlayer;
+                var where = player.Exists ? $"({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1})" : "no player";
+                DiagnosticLog.Info($"[MapController] Active layout at frame {layerDumpFrame}, player {where}: {Natives.Layout.DescribeActiveLayers()}");
             }
         }
-        zone.TickWeather();
-        foreach (var slot in suppressedArenaSlots) effects.KeepSlotSuppressed(slot);
+        Natives.Zone.TickWeather();
+        foreach (var slot in suppressedArenaSlots) Natives.MapEffects.KeepSlotSuppressed(slot);
 
         for (int i = pendingColliderDrops.Count - 1; i >= 0; i--)
         {
             var drop = pendingColliderDrops[i];
-            var disabled = DirectorFunctions.DisableSpawnAreaColliders(drop.Center, drop.Radius);
+            var disabled = Natives.Layout.DisableSpawnAreaColliders(drop.Center, drop.Radius);
             if (disabled > 0) { pendingColliderDrops.RemoveAt(i); continue; }
             drop.FramesLeft--;
             if (drop.FramesLeft <= 0)
@@ -193,8 +184,8 @@ public sealed unsafe class MapController : IDisposable
         {
             var pending = pendingEffects[i];
             var applied = pending.PacketFlags == SuppressSentinel
-                ? effects.SuppressSlot(pending.Index)
-                : effects.Apply(pending.PacketFlags, pending.Index);
+                ? Natives.MapEffects.SuppressSlot(pending.Index)
+                : Natives.MapEffects.Apply(pending.PacketFlags, pending.Index);
             if (applied) { pendingEffects.RemoveAt(i); i--; continue; }
             pending.FramesLeft--;
             if (pending.FramesLeft <= 0)
@@ -212,7 +203,7 @@ public sealed unsafe class MapController : IDisposable
         for (int i = 0; i < pendingDirectorUpdates.Count; i++)
         {
             var pending = pendingDirectorUpdates[i];
-            if (InstanceContentDirectorHelper.ProcessDirectorUpdate(pending.Category, pending.Arg1, pending.Arg2, pending.Arg3, pending.Arg4, pending.Arg5, pending.Arg6))
+            if (Natives.Director.ProcessDirectorUpdate(pending.Category, pending.Arg1, pending.Arg2, pending.Arg3, pending.Arg4, pending.Arg5, pending.Arg6))
             {
                 pendingDirectorUpdates.RemoveAt(i);
                 i--;
@@ -250,7 +241,7 @@ public sealed unsafe class MapController : IDisposable
             freshLoad = true;
         }
         // Per phase, before the weather write; a phase without a hold clears a previous one's.
-        zone.FogHold = target.FogHold;
+        Natives.Zone.FogHold = target.FogHold;
         if (target.WeatherId is { } wid)
         {
             if (freshLoad) ApplyWeather(wid);   // fresh load: delay so the engine settles
@@ -258,8 +249,8 @@ public sealed unsafe class MapController : IDisposable
         }
         IsInInstance = true;
         layerDumpFrame = 0;
-        effects.Loaded = true;
-        InstanceContentDirectorHelper.Commence();
+        Natives.MapEffects.Loaded = true;
+        Natives.Director.Commence();
         ArmBarrierDrop(target.PlayerPosition, 10f);
         // freshLoad=false reuses a zone from an earlier run, where a stale SGB never shows up as
         // a retry or failure.
@@ -307,7 +298,7 @@ public sealed unsafe class MapController : IDisposable
         if (!InSim(nameof(AddEffect))) return;
         // Behind a pending call for the same slot, or it would land first and be overwritten.
         var behind = pendingEffects.Exists(p => p.Index == index);
-        if ((behind || !effects.Apply(packetFlags, index)) && TryReserveRetrySlot(pendingEffects.Count, "MapEffect"))
+        if ((behind || !Natives.MapEffects.Apply(packetFlags, index)) && TryReserveRetrySlot(pendingEffects.Count, "MapEffect"))
         {
             DiagnosticLog.Warn($"[MapEffect] packetFlags=0x{packetFlags:X8} index=0x{index:X} {(behind ? "queued behind an earlier call for the same slot" : "not ready yet -- queued for retry")}.");
             pendingEffects.Add(new PendingMapEffect { PacketFlags = packetFlags, Index = index, FramesLeft = BarrierDropMaxFrames });
@@ -326,15 +317,15 @@ public sealed unsafe class MapController : IDisposable
     {
         if (!InSim(nameof(SuppressArenaSlot))) return;
         suppressedArenaSlots.Add(index); // Tick re-silences its Sound children every frame
-        if (!effects.SuppressSlot(index) && TryReserveRetrySlot(pendingEffects.Count, "SuppressSlot"))
+        if (!Natives.MapEffects.SuppressSlot(index) && TryReserveRetrySlot(pendingEffects.Count, "SuppressSlot"))
             pendingEffects.Add(new PendingMapEffect { PacketFlags = SuppressSentinel, Index = index, FramesLeft = BarrierDropMaxFrames });
     }
 
     public void LogArena(string label)
     {
         if (!InSim(nameof(LogArena))) return;
-        effects.LogAllSlots(label);
-        DiagnosticLog.Info($"[MapController] {label} live VFX and lights: {LayoutQuery.DescribeLiveEffects()}");
+        Natives.MapEffects.LogAllSlots(label);
+        DiagnosticLog.Info($"[MapController] {label} live VFX and lights: {Natives.Layout.DescribeLiveEffects()}");
     }
 
     // A different phase starting in the loaded zone: suppression outlives a restart (only a
@@ -343,8 +334,8 @@ public sealed unsafe class MapController : IDisposable
     {
         pendingEffects.RemoveAll(p => p.PacketFlags == SuppressSentinel);
         suppressedArenaSlots.Clear();
-        foreach (var slot in new List<byte>(effects.SuppressedSlots))
-            effects.RestoreSlot(slot);
+        foreach (var slot in new List<byte>(Natives.MapEffects.SuppressedSlots))
+            Natives.MapEffects.RestoreSlot(slot);
     }
 
     // Replay a native DirectorUpdate event (instance progress / state sync); same retry and
@@ -352,20 +343,12 @@ public sealed unsafe class MapController : IDisposable
     public void DirectorUpdate(uint category, uint arg1 = 0, uint arg2 = 0, uint arg3 = 0, uint arg4 = 0, uint arg5 = 0, uint arg6 = 0, bool broadcast = true)
     {
         if (!InSim(nameof(DirectorUpdate))) return;
-        if (!InstanceContentDirectorHelper.ProcessDirectorUpdate(category, arg1, arg2, arg3, arg4, arg5, arg6)
+        if (!Natives.Director.ProcessDirectorUpdate(category, arg1, arg2, arg3, arg4, arg5, arg6)
             && TryReserveRetrySlot(pendingDirectorUpdates.Count, "DirectorUpdate"))
         {
             DiagnosticLog.Warn($"[MapEffect] DirectorUpdate category=0x{category:X8} not ready yet -- queued for retry.");
             pendingDirectorUpdates.Add(new PendingDirectorUpdate { Category = category, Arg1 = arg1, Arg2 = arg2, Arg3 = arg3, Arg4 = arg4, Arg5 = arg5, Arg6 = arg6, FramesLeft = BarrierDropMaxFrames });
         }
         if (broadcast) DirectorUpdated?.Invoke(category, arg1, arg2, arg3, arg4, arg5, arg6);
-    }
-
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
-
-    public void Dispose()
-    {
-        effects.Dispose();
-        zone.Dispose();
     }
 }

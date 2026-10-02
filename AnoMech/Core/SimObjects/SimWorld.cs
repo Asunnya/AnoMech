@@ -8,8 +8,7 @@ using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Scenarios;
-using Dalamud.Game.Text;
-using Dalamud.Game.Text.SeStringHandling;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -22,9 +21,6 @@ public sealed class SimWorld : ISimObject, IDisposable
 {
     // Ownership
     private readonly List<ISimObject> children = new();
-    private readonly EnmityHud enmityHud = new();
-    private readonly PartyHud partyHud = new();
-    private readonly Waymarks waymarks;
 
     // Zone loading and map effects entry point.
     public MapController Map { get; } = new();
@@ -71,7 +67,6 @@ public sealed class SimWorld : ISimObject, IDisposable
     {
         Events = events;
         Coordinates = new Coordinates(() => ScenarioOrigin);
-        waymarks = new Waymarks(Coordinates);
     }
 
     // A fixed end is just the character; dynamic ends are End.Passable(...) /
@@ -125,11 +120,17 @@ public sealed class SimWorld : ISimObject, IDisposable
         return tower;
     }
 
-    // Places the scenario's waymark layout. Offsets are scenario-relative;
-    // Waymarks resolves them through Coordinates. Cleared in Reset (like
-    // Markings) — Waymarks is a writer owned here, not a tracked child.
+    // Places the scenario's waymark layout (scenario-local offsets). Cleared in Despawn, not a
+    // tracked child.
     public void PlaceWaymarks(IReadOnlyList<Waymark> layout)
-        => waymarks.Place(layout);
+    {
+        foreach (var waymark in layout)
+        {
+            if (Natives.Waymarks.Set(waymark.Slot, Coordinates.ToGlobal(waymark.Offset))) continue;
+            Plugin.Log.Warning("Waymarks: MarkingController unavailable");
+            return;
+        }
+    }
 
     // Suppress a native GameObject (by BaseId) for the duration of the scenario.
     public void HideObject(uint baseId)
@@ -158,11 +159,7 @@ public sealed class SimWorld : ISimObject, IDisposable
 
     public void Announce(string text)
     {
-        Plugin.ChatGui.Print(new XivChatEntry
-        {
-            Type = XivChatType.SystemMessage,
-            Message = new SeStringBuilder().AddText($"[AnoMech] {text}").Build(),
-        });
+        Natives.Messages.PrintSystemMessage($"[AnoMech] {text}");
         Announced?.Invoke(text);
     }
 
@@ -209,21 +206,21 @@ public sealed class SimWorld : ISimObject, IDisposable
     public void Tick(float deltaSeconds)
     {
         Map.Tick();
-        AnoMech.Core.Native.VfxSpawnLog.Tick();
-        AnoMech.Helpers.CharacterManagerHelper.SweepOrphans();
+        Natives.VfxSpawnLog.Tick();
+        Natives.BattleCharas.SweepOrphans();
         children.Update(deltaSeconds);
-        enmityHud.Refresh(children.OfType<SimEnemy>(), deltaSeconds);
-        partyHud.Refresh(Party);
+        Natives.EnmityHud.Refresh(children.OfType<SimEnemy>(), deltaSeconds);
+        Natives.PartyHud.Refresh(Party);
     }
 
     public void Despawn()
     {
         children.Despawn();
         Party = SimParty.Empty;
-        enmityHud.Clear();
-        partyHud.Clear();
-        Markings.ClearAll();
-        waymarks.ClearAll();
+        Natives.EnmityHud.Clear();
+        Natives.PartyHud.Clear();
+        Natives.Markings.ClearAll();
+        Natives.Waymarks.ClearAll();
         Obstacles.Clear();
         ScenarioOrigin = default;
     }
@@ -231,7 +228,5 @@ public sealed class SimWorld : ISimObject, IDisposable
     public void Dispose()
     {
         Despawn();
-        enmityHud.Dispose();
-        Map.Dispose();
     }
 }

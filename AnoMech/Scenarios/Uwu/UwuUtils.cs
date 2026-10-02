@@ -1,11 +1,10 @@
+using AnoMech.Core.Native.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.SimObjects;
-using AnoMech.Helpers;
-using AnoMech.Pointers;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
 
@@ -18,14 +17,14 @@ public enum LandslideType
     Ultima
 }
 
-public unsafe class UwuUtils(SimWorld world)
+public class UwuUtils(SimWorld world)
 {
     private readonly SimWorld world = world;
 
     public void UpdateArena(byte value)
     {
         byte[] unionData = [value];
-        InstanceContentDirectorHelper.SetDirectorData(1, 0, unionData, true);
+        Natives.Director.SetDirectorData(1, 0, unionData, true);
     }
 
     public void Awaken(SimEnemy? enemy, bool isUltima)

@@ -2,28 +2,24 @@ using System;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.UserActions;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
-using FFXIVClientStructs.FFXIV.Client.Game.Object;
 
 namespace AnoMech.Core.SimObjects;
 
-public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coordinates), ISimPartyMember
+public sealed class SimPlayer(Coordinates coordinates) : SimCharacter(coordinates), ISimPartyMember
 {
     private const ushort StunStatusId = 896;  // "Down for the Count" (896) — IsPermanent + LockControl variant.
 
     // The real HP bar is only touched on a scenario KO (a 1-HP sliver), restored in RestoreHpBar.
     public void DropHpBar()
     {
-        var bc = BattleCharaPtr;
-        if (bc != null) bc->Health = 1;
+        if (Proxy is { Exists: true } chara) chara.Health = 1;
     }
 
     public void RestoreHpBar()
     {
-        var bc = BattleCharaPtr;
-        if (bc != null && bc->Health < bc->MaxHealth) bc->Health = bc->MaxHealth;
+        if (Proxy is { Exists: true } chara && chara.Health < chara.MaxHealth) chara.Health = chara.MaxHealth;
     }
 
     // Real native MaxHealth before it was overridden; null if inactive.
@@ -33,22 +29,20 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
     // Despawn restores it no matter what a host sent.
     public void ApplyNetworkHp(uint currentHp, uint maxHp)
     {
-        var bc = BattleCharaPtr;
-        if (bc == null || maxHp == 0) return;
-        realMaxHealth ??= bc->MaxHealth;
-        bc->MaxHealth = maxHp;
-        bc->Health = Math.Min(currentHp, maxHp);
+        if (Proxy is not { Exists: true } chara || maxHp == 0) return;
+        realMaxHealth ??= chara.MaxHealth;
+        chara.MaxHealth = maxHp;
+        chara.Health = Math.Min(currentHp, maxHp);
     }
 
     // Must run before RestoreHpBar: restore MaxHealth first, then clamp Health down.
     public void RestoreRealMaxHealth()
     {
-        var bc = BattleCharaPtr;
         if (realMaxHealth is not { } original) return;
-        if (bc != null)
+        if (Proxy is { Exists: true } chara)
         {
-            bc->MaxHealth = original;
-            if (bc->Health > original) bc->Health = original;
+            chara.MaxHealth = original;
+            if (chara.Health > original) chara.Health = original;
         }
         realMaxHealth = null;
     }
@@ -61,7 +55,7 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
     public bool IsMoving { get; private set; }
     public bool IsActing { get; private set; }
 
-    internal override BattleChara* BattleCharaPtr => (BattleChara*)(Plugin.ObjectTable.LocalPlayer?.Address ?? 0);
+    internal override IBattleCharaProxy Proxy => Natives.BattleCharas.LocalPlayer;
 
     private protected override PlayerMovement Movement => field ??= new PlayerMovement(this);
 
@@ -85,14 +79,14 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
     {
         get
         {
-            var bc = BattleCharaPtr;
-            return bc != null && bc->CastInfo.IsCasting && LimitBreakHandler.IsLimitBreak(bc->CastInfo.ActionId);
+            var chara = Proxy;
+            return chara.IsCasting && LimitBreakHandler.IsLimitBreak(chara.CastActionId);
         }
     }
 
     private void SampleActivity()
     {
-        var hooks = Plugin.PlayerInputHooks;
+        var hooks = Natives.PlayerInput;
         // Drained every frame, even while dead, so a stale press can't carry over.
         var actedThisFrame = hooks.PollActionUsed();
         if (Dead)
@@ -126,8 +120,7 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
         // Unconditional: also covers a godmode preview drop, where Dead is never set.
         RestoreHpBar();
         // PartyHud's sim shield would otherwise stay on the real character's HP bar.
-        var bc = BattleCharaPtr;
-        if (bc != null) bc->ShieldValue = 0;
+        Proxy.ClearShield();
         if (Dead)
         {
             ResetActionTimelineNative();
@@ -146,7 +139,7 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
 
     private void SyncInputLock()
     {
-        var hooks = Plugin.PlayerInputHooks;
+        var hooks = Natives.PlayerInput;
         var asleep = !Dead && HasStatus(StatusIdSleep);
         var confused = !Dead && HasStatus(StatusIdConfused);
         var bound = !Dead && HasStatus(StatusIdBind);

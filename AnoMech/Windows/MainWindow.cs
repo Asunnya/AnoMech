@@ -15,6 +15,7 @@ using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Scenarios;
 using static AnoMech.Core.Game.Game;
+using AnoMech.Core.Native.Implementations;
 
 namespace AnoMech.Windows;
 

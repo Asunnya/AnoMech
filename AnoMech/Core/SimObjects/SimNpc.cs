@@ -1,34 +1,25 @@
-using System;
-using System.Numerics;
 using AnoMech.Core.Game;
-using AnoMech.Core.Native;
-using AnoMech.Pointers;
+using AnoMech.Core.Native.Interfaces;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
-using FFXIVClientStructs.FFXIV.Client.Game.Object;
 
 namespace AnoMech.Core.SimObjects;
 
-// SimCharacter backed by a BattleChara we allocated via ClientObjectManager.
-// Identified by its CO index. Overlay state (VFX, statuses) lives on the base;
-// this layer adds Index-based pointer lookup, movement, and the "free the
-// handle on Despawn" lifecycle.
-public unsafe class SimNpc : SimCharacter
+// SimCharacter backed by a BattleChara we allocated in a CharacterManager slot. Overlay state
+// (VFX, statuses) lives on the base; this layer adds movement and the "free the slot on
+// Despawn" lifecycle.
+public class SimNpc : SimCharacter
 {
-    public const int InvalidIndex = -1;
-
-    private int index;
+    private IBattleCharaProxy? proxy;
     private bool pendingDraw;
     private int pendingDrawFrames;
 
-    // The CharacterManager slot this wrapper reads (InvalidIndex once despawned).
-    protected int Index => index;
+    internal override IBattleCharaProxy? Proxy => proxy;
 
     // Forget the slot without touching what it holds: a packet spawn whose slot ended up with
     // somebody else's actor.
     protected void DetachSlot()
     {
-        index = InvalidIndex;
+        proxy = null;
         pendingDraw = false;
     }
 
@@ -36,41 +27,24 @@ public unsafe class SimNpc : SimCharacter
     // EnemySpawnConfig.PacketSpawnEnableDraw).
     protected void RequestDraw()
     {
-        pendingDraw = index != InvalidIndex;
+        pendingDraw = proxy != null;
         pendingDrawFrames = 0;
     }
 
     private protected override Movement Movement => field ??= new Movement(this);
 
-    internal override BattleChara* BattleCharaPtr => (BattleChara*)(index == InvalidIndex ? null : CharacterManager.Instance()->BattleCharas[index]);
-
     // pendingDraw=false for an actor the engine's own spawn handler created: it enables the
     // draw itself, as for a real server spawn.
-    protected SimNpc(int index, Coordinates coordinates, bool pendingDraw = true) : base(coordinates)
+    protected SimNpc(IBattleCharaProxy proxy, Coordinates coordinates, bool pendingDraw = true) : base(coordinates)
     {
-        this.index = index;
-        this.pendingDraw = pendingDraw && index != InvalidIndex;
+        this.proxy = proxy;
+        this.pendingDraw = pendingDraw;
     }
 
-    public override bool IsActive => index != InvalidIndex && BattleCharaPtr != null;
-
-
-    public void SetModelState(byte value)
-    {
-        var chara = BattleCharaPtr;
-        if (chara == null) return;
-        TimelineFunctions.SetModelState(&chara->Timeline, value);
-    }
+    public void SetModelState(byte value) => proxy?.SetModelState(value);
 
     // Sampled for peers.
-    public byte ModelState
-    {
-        get
-        {
-            var chara = BattleCharaPtr;
-            return chara == null ? (byte)0 : chara->Timeline.ModelState;
-        }
-    }
+    public byte ModelState => proxy?.ModelState ?? 0;
 
     // ModelContainer.ModeAttributeFlags (e.g. Omega-M's shield: 0x00 = shield, 0x10 = none)
     // is an INPUT the engine reads only while building the monster model
@@ -84,9 +58,8 @@ public unsafe class SimNpc : SimCharacter
     // view early.
     public void SetModeAttributeFlags(byte value)
     {
-        var chara = BattleCharaPtr;
-        if (chara == null) return;
-        chara->ModelContainer.ModeAttributeFlags = value;
+        if (proxy is not { Exists: true } chara) return;
+        chara.SetModeAttributeFlags(value);
         ReloadModel();
     }
 
@@ -97,11 +70,8 @@ public unsafe class SimNpc : SimCharacter
     // its next EnableDraw from the visibility system, so we never force it visible.
     protected void ReloadModel()
     {
-        var obj = BattleCharaPtr;
-        if (obj == null) return;
-        var draw = obj->DrawObject;
-        if (draw == null) return; //|| !draw->IsVisible) return;
-        obj->DisableDraw();
+        if (proxy is not { HasDrawObject: true } chara) return;
+        chara.DisableDraw();
         pendingDraw = true;
     }
 
@@ -134,56 +104,32 @@ public unsafe class SimNpc : SimCharacter
 
         if (pendingDraw)
         {
-            var obj = BattleCharaPtr;
-            if (obj == null)
+            if (proxy is not { Exists: true } chara)
             {
                 pendingDraw = false;
             }
-            else if (obj->IsReadyToDraw())
+            else if (chara.IsReadyToDraw)
             {
-                obj->EnableDraw();
+                chara.EnableDraw();
                 pendingDraw = false;
-                DiagnosticLog.Info($"[SimNpc] EnableDraw fired for goid {obj->GetGameObjectId()} at pos {Position}.");
+                DiagnosticLog.Info($"[SimNpc] EnableDraw fired for goid {chara.GameObjectId} at pos {Position}.");
             }
             else
             {
                 pendingDrawFrames++;
                 // Once, well past a normal model load, for an IsReadyToDraw stuck false.
                 if (pendingDrawFrames == 300)
-                    DiagnosticLog.Warn($"[SimNpc] still pendingDraw after {pendingDrawFrames} ticks, goid {obj->GetGameObjectId()} -- IsReadyToDraw() never returned true.");
+                    DiagnosticLog.Warn($"[SimNpc] still pendingDraw after {pendingDrawFrames} ticks, goid {chara.GameObjectId} -- IsReadyToDraw() never returned true.");
             }
         }
     }
 
     public override void Despawn()
     {
-        if (index == InvalidIndex) return;
+        if (proxy == null) return;
         base.Despawn();
-        var obj = BattleCharaPtr;
-        if (obj != null)
-        {
-            // DeleteObjectByIndex runs Character::Terminate, which walks all 14 sequencer slots;
-            // a still-live one crashes on freed scheduler state (see QuiesceActionTimeline).
-            QuiesceActionTimeline();
-            obj->DisableDraw();
-
-            var characterManager = CharacterManager.Instance();
-
-            if (characterManager == null)
-            {
-                Plugin.Log.Warning("[SimNpc.Despawn] CharacterManager.Instance() was null.");
-            }
-            else
-            {
-                var packet = new DespawnCharacterPacket
-                {
-                    Index = (byte)index
-                };
-
-                PacketDispatcherPointers.HandleDespawnCharacterPacket(0, &packet);
-            }
-        }
-        index = InvalidIndex;
+        proxy.Despawn();
+        proxy = null;
         pendingDraw = false;
     }
 }

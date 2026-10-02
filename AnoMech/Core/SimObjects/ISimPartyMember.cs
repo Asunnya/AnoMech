@@ -2,7 +2,6 @@ using System;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
 
 namespace AnoMech.Core.SimObjects;
 

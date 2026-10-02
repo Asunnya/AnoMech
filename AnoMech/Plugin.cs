@@ -9,11 +9,13 @@ using Lumina.Excel.Sheets;
 using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Map;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Implementations;
+using AnoMech.Core.Native.Implementations.Interop;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Multiplayer;
 using AnoMech.Core.UserActions;
 using AnoMech.Windows;
-using AnoMech.Pointers;
+using AnoMech.Core.Native.Implementations.Pointers;
 using CSFramework = FFXIVClientStructs.FFXIV.Client.System.Framework.Framework;
 
 namespace AnoMech;
@@ -66,6 +68,14 @@ public sealed class Plugin : IDalamudPlugin
     private DamageDebugWindow DamageDebugWindow { get; init; }
 #endif
 
+    // The native implementations behind Natives that hold hooks or game state to hand back.
+    private ZoneSession? zoneSession;
+    private MapEffects? mapEffects;
+    private EnmityHud? enmityHud;
+    private Bgm? bgm;
+    private VfxSpawnLog? vfxSpawnLog;
+    private OpcodeUpdater? opcodeUpdater;
+
     public Plugin()
     {
         // First, so every subsequent construction step's own logging is captured from the start.
@@ -79,6 +89,8 @@ public sealed class Plugin : IDalamudPlugin
             if (Config.EnableEventLogging) LogManager.Open();
 
             PlayerInputHooks = new LocalPlayerInputHooks(GameInterop);
+            InstallNatives();
+            opcodeUpdater = new OpcodeUpdater();
             Game = new Game();
             GameInstance = Game;
             MultiplayerInstance = Multiplayer;
@@ -156,6 +168,33 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    private void InstallNatives()
+    {
+        Natives.Data = new GameData();
+        Natives.BattleCharas = new BattleCharas();
+        Natives.EventObjects = new EventObjects();
+        Natives.HiddenObjects = new HiddenObjects();
+        Natives.PlayerInput = PlayerInputHooks;
+        Natives.Vfx = new VfxFunctions();
+        Natives.TimelinePreload = new ActionTimelinePreload();
+        Natives.RawActionEffect = new RawActionEffect();
+        Natives.MapEffects = mapEffects = new MapEffects();
+        Natives.Zone = zoneSession = new ZoneSession();
+        Natives.Layout = new LayoutFunctions();
+        Natives.Director = new InstanceContentDirector();
+        Natives.Rsv = new RsvFunctions();
+        Natives.Rsf = new RsfFunctions();
+        Natives.PartyHud = new PartyHud();
+        Natives.EnmityHud = enmityHud = new EnmityHud();
+        Natives.LimitBreak = new LimitBreakController();
+        Natives.Markings = new Markings();
+        Natives.Waymarks = new Waymarks();
+        Natives.Messages = new GameMessages();
+        Natives.Bgm = bgm = new Bgm();
+        Natives.Framework = new FrameworkThread();
+        Natives.VfxSpawnLog = vfxSpawnLog = new VfxSpawnLog();
+    }
+
     // Null-tolerant throughout: the constructor's failure path calls this on a half-built
     // instance, where anything past the throwing step was never assigned.
     public void Dispose()
@@ -189,10 +228,16 @@ public sealed class Plugin : IDalamudPlugin
 
         WindowSystem.RemoveAllWindows();
 
-        Core.Native.TimelineDebug.Shutdown();
-        Core.Native.VfxSpawnLog.Dispose();
+        TimelineDebug.Shutdown();
+        vfxSpawnLog?.Dispose();
         Multiplayer.Dispose();
         Game?.Dispose();
+        // After Game.Dispose, whose World teardown still writes through them.
+        bgm?.Dispose();
+        enmityHud?.Dispose();
+        mapEffects?.Dispose();
+        zoneSession?.Dispose();
+        opcodeUpdater?.Dispose();
         UserActions?.Dispose();
         // After Game.Dispose so World.Dispose → SimPlayer.Despawn can still clear
         // the lock flags through the hooks before they're torn down.

@@ -2,8 +2,7 @@ using System;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -12,7 +11,7 @@ namespace AnoMech.Core.SimObjects;
 // skips it the way it skips SimPlayer; only ApplyNetworkPose moves it.
 //
 // Not a SimPartyNpc subclass: that class is sealed and the two share only a dozen lines.
-public sealed unsafe class SimNetworkPuppet : SimNpc, ISimPartyMember
+public sealed class SimNetworkPuppet : SimNpc, ISimPartyMember
 {
     // Same smoothing model as SimEnemy's Network* fields: the catch-up speed is a floor once
     // the real pose interval is known, anything beyond SnapThreshold (spawn, lag spike,
@@ -46,7 +45,7 @@ public sealed unsafe class SimNetworkPuppet : SimNpc, ISimPartyMember
     public byte ClassJob { get; }
     public string DisplayName { get; }
 
-    internal SimNetworkPuppet(int index, Coordinates coordinates, PartyRole role, byte classJob, string name) : base(index, coordinates)
+    internal SimNetworkPuppet(IBattleCharaProxy proxy, Coordinates coordinates, PartyRole role, byte classJob, string name) : base(proxy, coordinates)
     {
         Role = role;
         ClassJob = classJob;
@@ -147,9 +146,9 @@ public sealed unsafe class SimNetworkPuppet : SimNpc, ISimPartyMember
     public void ClearPendingNetworkTeleport() => PendingNetworkTeleport = null;
 
     // The owner's client performs the carry; this copy follows their reported poses.
-    public (Vector3 Destination, Native.CarryMode Mode)? PendingNetworkCarry { get; private set; }
+    public (Vector3 Destination, CarryMode Mode)? PendingNetworkCarry { get; private set; }
 
-    public override void CarryTo(Vector3 destination, Native.CarryMode mode = Native.CarryMode.Native) => PendingNetworkCarry = (destination, mode);
+    public override void CarryTo(Vector3 destination, CarryMode mode = CarryMode.Native) => PendingNetworkCarry = (destination, mode);
 
     public void ClearPendingNetworkCarry() => PendingNetworkCarry = null;
 
@@ -173,11 +172,8 @@ public sealed unsafe class SimNetworkPuppet : SimNpc, ISimPartyMember
         Dead = true;
         StopMoving();
         interpAnimActive = false;
-        var bc = BattleCharaPtr;
-        if (bc == null) return;
-        bc->Health = 0;
-        bc->Mana = 0;
-        bc->Mode = CharacterModes.Dead;
+        if (Proxy is not { Exists: true } chara) return;
+        chara.ApplyDeadState();
         this.PlayKoActionTimeline();
     }
 }

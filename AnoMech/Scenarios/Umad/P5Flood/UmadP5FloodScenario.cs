@@ -7,13 +7,12 @@ using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
-using AnoMech.Core.Native;
 using AnoMech.Core.SimObjects;
 using AnoMech.Multiplayer;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
-using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using static AnoMech.Scenarios.Umad.UmadConstants;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Scenarios.Umad.P5Flood;
 
@@ -152,7 +151,7 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
 
         // Render-side ground truth for the run. Opt-in: it hooks a destructor the whole client
         // shares, so a practice run shouldn't be carrying it. Off again in DespawnAll.
-        if (settingsWindow.Overrides.VfxRenderLog) VfxSpawnLog.Enable();
+        if (settingsWindow.Overrides.VfxRenderLog) Natives.VfxSpawnLog.Enable();
         timeline.Add(0f, SpawnKefka);
         timeline.Add(FloodCastStart, () => kefka?.Cast(ActionId.FloodCast, castSeconds: FloodCastBar, fireDelay: FloodCastFireDelay, animationLock: FloodCastAnimationLock));
 
@@ -199,7 +198,7 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
     // Host and peer alike: a peer's wave carriers replay the same gimmick timelines.
     public void RunInstanceEvents(SimWorld instanceWorld)
     {
-        if (settingsWindow.Overrides.PreloadWaveTimelines) ActionTimelinePreload.Preload(WaveTimelines, "UmadP5Flood");
+        if (settingsWindow.Overrides.PreloadWaveTimelines) Natives.TimelinePreload.Preload(WaveTimelines, "UmadP5Flood");
     }
 
     // The mechanic runs on the private `timeline`, so the default (world.Events.IsEmpty)
@@ -399,7 +398,7 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
         var mode = settingsWindow.Overrides.WaveDelivery;
         // The frame stamp matches VfxSpawnLog's counter. Expected: z5r2_b2_g02_c0v within a frame
         // or two at this position and yaw, destroyed ~90 frames later.
-        DiagnosticLog.Info($"[SimEnemy] Cast: Flood ({ActionId.FloodAOE}) from ({carrier.Position.X:F1},{carrier.Position.Z:F1}) rot={carrier.Rotation:F3} delivery={mode}, animTarget=self. frame={VfxSpawnLog.Frame} expect vfx z5r2_b2_g02_c0v at world ({world.Coordinates.ToGlobal(carrier.Position).X:F2},{world.Coordinates.ToGlobal(carrier.Position).Z:F2}) for ~90 frames.");
+        DiagnosticLog.Info($"[SimEnemy] Cast: Flood ({ActionId.FloodAOE}) from ({carrier.Position.X:F1},{carrier.Position.Z:F1}) rot={carrier.Rotation:F3} delivery={mode}, animTarget=self. frame={Natives.VfxSpawnLog.Frame} expect vfx z5r2_b2_g02_c0v at world ({world.Coordinates.ToGlobal(carrier.Position).X:F2},{world.Coordinates.ToGlobal(carrier.Position).Z:F2}) for ~90 frames.");
         if (mode == FloodWaveDelivery.RawPacket && !TryInjectWavePacket(carrier))
             mode = FloodWaveDelivery.NativeEffect;
         if (mode == FloodWaveDelivery.DirectTimeline)
@@ -435,7 +434,8 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
     private bool TryInjectWavePacket(SimEnemy carrier)
     {
         var capture = UmadRealPackets.RawActionEffects[nameof(UmadRealPackets.FloodAoeEffect8)];
-        if (!RawActionEffect.TryInject(world, carrier, capture.Body, capture.Opcode, capture.GameVersion, "FloodAOE ActionEffect8"))
+        if (!Natives.RawActionEffect.TryInject(carrier.EntityId, carrier.Rotation, capture.Body, capture.Opcode, capture.GameVersion,
+                $"FloodAOE ActionEffect8, carrier {carrier.DisplayName} at {carrier.Position}"))
             return false;
         carrier.NoteRawActionEffect(ActionId.FloodAOE, nameof(UmadRealPackets.FloodAoeEffect8), HelperAnimationLock);
         return true;
@@ -463,11 +463,11 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
         TickAnchorWatch();
     }
 
-    private unsafe void TickAnchorWatch()
+    private void TickAnchorWatch()
     {
         if (anchorWatchFrames < 0 || anchorWatchTarget is not { } target) return;
         if (Array.IndexOf(AnchorWatchFrames, anchorWatchFrames) >= 0)
-            DiagnosticLog.Info($"[UmadP5Flood] stack anchor {(target as ISimPartyMember)?.Role.ToString() ?? "?"} +{anchorWatchFrames}f: {SimEnemy.DescribeActionTimeline(target.BattleCharaPtr)}");
+            DiagnosticLog.Info($"[UmadP5Flood] stack anchor {(target as ISimPartyMember)?.Role.ToString() ?? "?"} +{anchorWatchFrames}f: {target.Proxy?.DescribeActionTimeline() ?? "no BattleChara"}");
         anchorWatchFrames++;
         if (anchorWatchFrames > AnchorWatchFrames[^1]) anchorWatchFrames = -1;
     }
@@ -480,7 +480,7 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
 
     private void DespawnAll()
     {
-        VfxSpawnLog.Disable();
+        Natives.VfxSpawnLog.Disable();
         kefka?.Despawn();
         chaoticFloodCaster?.Despawn();
         chaoticFloodCaster = null;

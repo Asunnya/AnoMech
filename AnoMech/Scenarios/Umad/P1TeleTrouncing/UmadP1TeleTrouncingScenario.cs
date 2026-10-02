@@ -7,7 +7,6 @@ using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
 using AnoMech.Core.SimObjects;
 using AnoMech.Multiplayer;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
@@ -15,6 +14,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.Character;
 namespace AnoMech.Scenarios.Umad.P1TeleTrouncing;
 
 using Constants = UmadP1TeleTrouncingConstants;
+using AnoMech.Core.Native.Interfaces;
 
 // Dancing Mad P1 from Kefka's Tele-trouncing cast to the boss going untargetable: arrows,
 // Confused/Sleep, Confetti-3, then Mystery Magic's three overlapping resolves. Cast bars are the
@@ -121,13 +121,13 @@ public sealed class UmadP1TeleTrouncingScenario : IMultiplayerReplayable
     private float statueCatchUpReadyAt;
 
     // Graven Image is ModelChara Type=0: no baked-in mesh, the engine builds one from
-    // CustomizeData. PartyCreator.WriteCustomize's Lalafell values, proven to load a body.
+    // CustomizeData. The party doppels' Lalafell values, proven to load a body.
     // EyeShape (0x10) and Mouth (0x13) are written by offset: they are 1-based rows where the 0
     // an initializer leaves aborts the whole human model build, and their bitfield accessors
     // aren't verified in this CS build.
     private static readonly CustomizeData GravenImageCustomize = BuildGravenImageCustomize();
 
-    private static unsafe CustomizeData BuildGravenImageCustomize()
+    private static CustomizeData BuildGravenImageCustomize()
     {
         var c = new CustomizeData
         {
@@ -137,7 +137,7 @@ public sealed class UmadP1TeleTrouncingScenario : IMultiplayerReplayable
             Eyebrows = 1, Nose = 1, Jaw = 1, LipColorFurPattern = 1,
             MuscleMass = 50, TailShape = 1, BustSize = 50, FacePaintColor = 1,
         };
-        var raw = (byte*)&c;
+        var raw = System.Runtime.InteropServices.MemoryMarshal.AsBytes(new Span<CustomizeData>(ref c));
         raw[0x10] = 1; // EyeShape
         raw[0x13] = 1; // Mouth
         return c;
@@ -415,7 +415,7 @@ public sealed class UmadP1TeleTrouncingScenario : IMultiplayerReplayable
     // Host and peer alike (see IScenario.RunInstanceEvents), so broadcast: false.
     public void RunInstanceEvents(SimWorld instanceWorld)
     {
-        ActionTimelinePreload.Preload(ThunderFireTimelines, "UmadP1TeleTrouncing");
+        Natives.TimelinePreload.Preload(ThunderFireTimelines, "UmadP1TeleTrouncing");
 
         instanceWorld.Events.Add(3f, () => instanceWorld.Map.LogArena("3s"));
         instanceWorld.Events.Add(10f, () => instanceWorld.Map.LogArena("10s"));

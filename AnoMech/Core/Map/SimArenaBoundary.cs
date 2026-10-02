@@ -1,8 +1,7 @@
 using System.Numerics;
 using AnoMech.Core.Game;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.SimObjects;
-using FFXIVClientStructs.FFXIV.Client.Graphics.Scene;
 
 namespace AnoMech.Core.Map;
 
@@ -15,7 +14,7 @@ namespace AnoMech.Core.Map;
 //
 // Added to SimWorld.children via MapController.EnforceArenaBoundary so it gets
 // cleared as a normal scenario child on Reset.
-internal sealed unsafe class SimArenaBoundary : ISimObject
+internal sealed class SimArenaBoundary : ISimObject
 {
     // Donut omen has a fixed inner/outer ratio of 0.82. Scale by radius/0.82 so the
     // inner edge aligns with the kill boundary (outer edge extends ~4.4y beyond it).
@@ -24,7 +23,7 @@ internal sealed unsafe class SimArenaBoundary : ISimObject
     private readonly SimParty party;
     private readonly float radiusSq;
     private readonly string cause;
-    private readonly VfxObject* ringVfx;
+    private readonly IStaticVfxProxy? ringVfx;
 
     public bool IsAlive => true;
     public bool IsActive => true;
@@ -35,8 +34,8 @@ internal sealed unsafe class SimArenaBoundary : ISimObject
         this.radiusSq = radius * radius;
         this.cause = cause;
 
-        if (showVfx && Plugin.DataManager.FileExists(RingVfxPath))
-            ringVfx = VfxFunctions.SpawnStaticVfx(RingVfxPath, new Placement(world.ScenarioOrigin, 0f), new Vector3(radius / 0.82f, 1f, radius / 0.82f));
+        if (showVfx && Natives.Data.FileExists(RingVfxPath))
+            ringVfx = Natives.Vfx.SpawnStatic(RingVfxPath, new Placement(world.ScenarioOrigin, 0f), new Vector3(radius / 0.82f, 1f, radius / 0.82f));
     }
 
     // XZ distance test against the kill radius; shared by the per-frame fence and
@@ -54,6 +53,6 @@ internal sealed unsafe class SimArenaBoundary : ISimObject
 
     public void Despawn()
     {
-        VfxFunctions.RemoveStaticVfx(ringVfx);
+        ringVfx?.Remove();
     }
 }

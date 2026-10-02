@@ -1,10 +1,10 @@
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
-using AnoMech.Helpers;
 using AnoMech.Multiplayer;
 using System;
 using System.Collections.Generic;
@@ -64,7 +64,7 @@ public sealed class TopP5OmegaScenario : IMultiplayerReplayable
 
     private void Run_InstanceEvents()
     {
-        world.Events.Add(30.96f, () => InstanceContentDirectorHelper.ProcessDirectorUpdate(0x80000004U, 0x1517U));
+        world.Events.Add(30.96f, () => Natives.Director.ProcessDirectorUpdate(0x80000004U, 0x1517U));
     }
 
     private void Run_OtherDebuffs()

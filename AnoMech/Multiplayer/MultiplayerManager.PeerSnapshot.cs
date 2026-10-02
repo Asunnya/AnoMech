@@ -11,7 +11,7 @@ using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Implementations;
 using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
@@ -20,6 +20,8 @@ using AnoMech.Scenarios;
 using AnoMech.Scenarios.Umad;
 using AnoMech.Scenarios.Umad.P3BlackHole;
 using static AnoMech.Scenarios.Umad.UmadConstants;
+using AnoMech.Core.Native.Implementations.Interop;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Multiplayer;
 
@@ -201,8 +203,8 @@ public sealed partial class MultiplayerManager
                     var rawName = NetGuard.Clean(e.LastInstantCastRawPacket);
                     var rawDelivered = rawName.Length > 0
                         && UmadRealPackets.RawActionEffects.TryGetValue(rawName, out var capture)
-                        && RawActionEffect.TryInject(world, enemy, capture.Body, capture.Opcode, capture.GameVersion,
-                            $"{rawName} replay, enemy NetId {e.NetId}");
+                        && Natives.RawActionEffect.TryInject(enemy.EntityId, enemy.Rotation, capture.Body, capture.Opcode, capture.GameVersion,
+                            $"{rawName} replay, enemy NetId {e.NetId}, carrier {enemy.DisplayName} at {enemy.Position}");
                     if (rawDelivered)
                         DiagnosticLog.Info($"[Multiplayer] Peer: enemy NetId {e.NetId} delivered {rawName} as a raw packet.");
                     else if (e.LastInstantCastIsNativeEffect)
@@ -571,7 +573,7 @@ public sealed partial class MultiplayerManager
             // Our own character goes through SimPlayer so the real MaxHealth is restored on Despawn.
             var maxHp = Math.Min(r.MaxHp, NetGuard.MaxHp);
             var currentHp = Math.Min(r.CurrentHp, maxHp);
-            var bc = member.BattleCharaPtr;
+            var bc = member.BattleCharaPtr();
             if (maxHp > 0)
             {
                 if (member is SimPlayer me) me.ApplyNetworkHp(currentHp, maxHp);
@@ -649,7 +651,7 @@ public sealed partial class MultiplayerManager
     {
         if (!PeerInRun) return;
         if (!NetGuard.TryPosition(msg.X, msg.Y, msg.Z, out var destination)) return;
-        var mode = NetGuard.InRange(msg.Mode, 3) ? (Core.Native.CarryMode)msg.Mode : Core.Native.CarryMode.Native;
+        var mode = NetGuard.InRange(msg.Mode, 3) ? (Core.SimObjects.CarryMode)msg.Mode : Core.SimObjects.CarryMode.Native;
         OwnMember(msg.Role, "Carry")?.CarryTo(destination, mode);
     }
 

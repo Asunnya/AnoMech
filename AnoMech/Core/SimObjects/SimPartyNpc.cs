@@ -3,21 +3,20 @@ using System.Collections.Generic;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.UserActions;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
 
 namespace AnoMech.Core.SimObjects;
 
-public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
+public sealed class SimPartyNpc : SimNpc, ISimPartyMember
 {
     public PartyRole Role { get; set; }
     public bool Dead { get; private set; }
     public byte ClassJob { get; }
     public string DisplayName { get; }
 
-    internal SimPartyNpc(int index, Coordinates coordinates, PartyRole role, byte classJob, string name) : base(index, coordinates)
+    internal SimPartyNpc(IBattleCharaProxy proxy, Coordinates coordinates, PartyRole role, byte classJob, string name) : base(proxy, coordinates)
     {
         Role = role;
         ClassJob = classJob;
@@ -73,16 +72,8 @@ public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
     {
         Dead = true;
         StopMoving();
-        var bc = BattleCharaPtr;
-        if (bc == null) return;
-        ApplyDeadState(bc);
+        if (Proxy is not { Exists: true } chara) return;
+        chara.ApplyDeadState();
         this.PlayKoActionTimeline();
-    }
-
-    private static void ApplyDeadState(BattleChara* bc)
-    {
-        bc->Health = 0;
-        bc->Mana = 0;
-        bc->Mode = CharacterModes.Dead;
     }
 }
