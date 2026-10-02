@@ -31,29 +31,6 @@ internal unsafe class ResourceGauge
 // StatusClearedOnAction table removes statuses by action. See reference-resource-generation.
 internal static unsafe class JobActions
 {
-    // ClassJob RowIds.
-    private const uint Gnb = 37;
-    private const uint War = 21;
-    private const uint Drk = 32;
-    private const uint Drg = 22;
-    private const uint Nin = 30;
-    private const uint Rpr = 39;
-    private const uint Sam = 34;
-    private const uint Mch = 31;
-    private const uint Rdm = 35;
-    private const uint Sch = 28;
-    private const uint Vpr = 41;
-    private const uint Whm = 24;
-    private const uint Dnc = 38;
-    private const uint Pld = 19;
-    private const uint Mnk = 20;
-    private const uint Brd = 23;
-    private const uint Blm = 25;
-    private const uint Smn = 27;
-    private const uint Ast = 33;
-    private const uint Pct = 42;
-    private const uint Sge = 40;
-
     private static readonly ResourceGauge GnbCartridge = new()
     {
         Read = jgm => jgm->Gunbreaker.Ammo,
@@ -258,12 +235,12 @@ internal static unsafe class JobActions
     // Gauges with time-based behavior, ticked by TimedGaugeHandler.
     public static readonly TimedGauge[] TimedGauges =
     [
-        new(Whm, WhmLily, 20f, decay: false, writeTimer: (jgm, v) => jgm->WhiteMage.LilyTimer = (short)v),        // Healing Lily: +1 every 20s
-        new(Sge, SgeAddersgall, 20f, decay: false, writeTimer: (jgm, v) => jgm->Sage.AddersgallTimer = (short)v), // Addersgall: +1 every 20s
-        new(Gnb, GnbComboStep, 30f, decay: true),    // Gnashing Fang combo: resets to 0 after 30s (no visual timer field)
-        new(Pld, PldConfiteorStep, 30f, decay: true), // Confiteor route: safety reset if abandoned mid-combo
-        new(Drk, DrkDeliriumStep, 30f, decay: true),  // Scarlet Delirium route: safety reset if abandoned mid-combo
-        new(Blm, BlmPolyglot, 30f, decay: false),     // Polyglot: +1/30s (real gen needs active Enochian; approximated as always-on in-sim)
+        new(JobId.WhiteMage, WhmLily, 20f, decay: false, writeTimer: (jgm, v) => jgm->WhiteMage.LilyTimer = (short)v),        // Healing Lily: +1 every 20s
+        new(JobId.Sage, SgeAddersgall, 20f, decay: false, writeTimer: (jgm, v) => jgm->Sage.AddersgallTimer = (short)v), // Addersgall: +1 every 20s
+        new(JobId.Gunbreaker, GnbComboStep, 30f, decay: true),    // Gnashing Fang combo: resets to 0 after 30s (no visual timer field)
+        new(JobId.Paladin, PldConfiteorStep, 30f, decay: true), // Confiteor route: safety reset if abandoned mid-combo
+        new(JobId.DarkKnight, DrkDeliriumStep, 30f, decay: true),  // Scarlet Delirium route: safety reset if abandoned mid-combo
+        new(JobId.BlackMage, BlmPolyglot, 30f, decay: false),     // Polyglot: +1/30s (real gen needs active Enochian; approximated as always-on in-sim)
     ];
 
     private static readonly Dictionary<uint, IActionEffect[]> Actions = new()
@@ -724,17 +701,17 @@ internal static unsafe class JobActions
     // the job that owns each scalar gauge is listed; the other job's same-cost-type spender no-ops.
     // Non-scalar costs (SAM Sen 40, MNK nadi 79, PCT canvas 94, SMN attunement 71 bitfield) and
     // non-gauge costs (MP/GP/CP, status/HP, AST cards) are intentionally absent → left alone.
-    private static readonly Dictionary<(uint Job, uint CostType), ResourceGauge[]> CostGauges = new()
+    private static readonly Dictionary<(JobId Job, uint CostType), ResourceGauge[]> CostGauges = new()
     {
-        [(War, 22u)] = [WarBeast], [(Drk, 25u)] = [DrkBlood], [(Nin, 27u)] = [NinNinki], [(Mnk, 28u)] = [MnkChakra],
-        [(Sch, 30u)] = [SchAetherflow], [(Sam, 39u)] = [SamKenki], [(Rdm, 43u)] = [RdmWhite, RdmBlack],  // RDM: N of each colour
-        [(Dnc, 53u)] = [DncFeathers], [(Dnc, 54u)] = [DncEsprit], [(Gnb, 55u)] = [GnbCartridge],
-        [(Whm, 56u)] = [WhmBloodLily], [(Whm, 57u)] = [WhmLily], [(Brd, 59u)] = [BrdSoulVoice],
-        [(Mch, 61u)] = [MchHeat], [(Mch, 62u)] = [MchBattery], [(Sam, 63u)] = [SamMeditation],
-        [(Rpr, 64u)] = [RprSoul], [(Rpr, 65u)] = [RprShroud], [(Rpr, 66u)] = [RprLemureShroud], [(Rpr, 67u)] = [RprVoidShroud],
-        [(Sge, 68u)] = [SgeAddersgall], [(Sge, 69u)] = [SgeAddersting], [(Drg, 75u)] = [DrgFocus],
-        [(Vpr, 87u)] = [VprRattlingCoil], [(Vpr, 88u)] = [VprSerpentOffering], [(Vpr, 89u)] = [VprAnguineTribute], [(Vpr, 90u)] = [VprAnguineTribute], [(Pct, 91u)] = [PctPalette],
-        [(Blm, 23u)] = [BlmPolyglot],   // Foul / Xenoglossy spend 1 Polyglot
+        [(JobId.Warrior, 22u)] = [WarBeast], [(JobId.DarkKnight, 25u)] = [DrkBlood], [(JobId.Ninja, 27u)] = [NinNinki], [(JobId.Monk, 28u)] = [MnkChakra],
+        [(JobId.Scholar, 30u)] = [SchAetherflow], [(JobId.Samurai, 39u)] = [SamKenki], [(JobId.RedMage, 43u)] = [RdmWhite, RdmBlack],  // RDM: N of each colour
+        [(JobId.Dancer, 53u)] = [DncFeathers], [(JobId.Dancer, 54u)] = [DncEsprit], [(JobId.Gunbreaker, 55u)] = [GnbCartridge],
+        [(JobId.WhiteMage, 56u)] = [WhmBloodLily], [(JobId.WhiteMage, 57u)] = [WhmLily], [(JobId.Bard, 59u)] = [BrdSoulVoice],
+        [(JobId.Machinist, 61u)] = [MchHeat], [(JobId.Machinist, 62u)] = [MchBattery], [(JobId.Samurai, 63u)] = [SamMeditation],
+        [(JobId.Reaper, 64u)] = [RprSoul], [(JobId.Reaper, 65u)] = [RprShroud], [(JobId.Reaper, 66u)] = [RprLemureShroud], [(JobId.Reaper, 67u)] = [RprVoidShroud],
+        [(JobId.Sage, 68u)] = [SgeAddersgall], [(JobId.Sage, 69u)] = [SgeAddersting], [(JobId.Dragoon, 75u)] = [DrgFocus],
+        [(JobId.Viper, 87u)] = [VprRattlingCoil], [(JobId.Viper, 88u)] = [VprSerpentOffering], [(JobId.Viper, 89u)] = [VprAnguineTribute], [(JobId.Viper, 90u)] = [VprAnguineTribute], [(JobId.Pictomancer, 91u)] = [PctPalette],
+        [(JobId.BlackMage, 23u)] = [BlmPolyglot],   // Foul / Xenoglossy spend 1 Polyglot
     };
 
     // Generic spender pass: subtract an action's gauge cost, read straight from the sheet.
@@ -742,8 +719,7 @@ internal static unsafe class JobActions
     {
         var sheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
         if (!sheet.TryGetRow(actionId, out var row)) return;
-        var job = Plugin.PlayerState.ClassJob.RowId;
-        if (!CostGauges.TryGetValue((job, (uint)row.PrimaryCostType), out var gauges)) return;
+        if (!CostGauges.TryGetValue((PlayerJob.Current, (uint)row.PrimaryCostType), out var gauges)) return;
         int amount = row.PrimaryCostValue;
         if (amount <= 0) return;
         var jgm = JobGaugeManager.Instance();

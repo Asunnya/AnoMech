@@ -46,6 +46,7 @@ public sealed unsafe class UserActions : IDisposable
     [
         new TimedGaugeHandler(),
         new CastInterruptHandler(),
+        new AutoAttackHandler(),
     ];
 
     // A hard cast whose effects are deferred until it completes.

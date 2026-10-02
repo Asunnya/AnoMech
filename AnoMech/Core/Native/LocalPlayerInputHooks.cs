@@ -7,6 +7,7 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility.Signatures;
+using AnoMech.Core.UserActions;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Gauge;
@@ -230,7 +231,6 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
     // mitigation (Holy Sheltron needs 50 Oath) would look disabled. Topped up for display only;
     // the real value is saved once and restored when the sim ends.
     private byte? savedOathGauge;
-    private const byte PaladinClassJobId = 19;
 
     private void UpdateGaugeIllusion()
     {
@@ -240,7 +240,7 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
             return;
         }
         // Only Holy Sheltron (Paladin/Oath) needs this today.
-        if (Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId != PaladinClassJobId) return;
+        if (PlayerJob.Current != JobId.Paladin) return;
         var gauge = (PaladinGauge*)Plugin.JobGauges.Address;
         if (gauge == null) return;
         savedOathGauge ??= gauge->OathGauge;
@@ -251,7 +251,7 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
     public void RestoreGaugeIllusion()
     {
         if (savedOathGauge is not { } saved) return;
-        if (Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId == PaladinClassJobId)
+        if (PlayerJob.Current == JobId.Paladin)
         {
             var gauge = (PaladinGauge*)Plugin.JobGauges.Address;
             if (gauge != null) gauge->OathGauge = saved;

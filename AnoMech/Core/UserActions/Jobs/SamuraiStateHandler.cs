@@ -13,12 +13,10 @@ namespace AnoMech.Core.UserActions.Jobs;
 // bonus (read PRE-advance combo via PlayerCombo — so state handlers run before ComboHandler).
 internal sealed unsafe class SamuraiStateHandler : IUserActionHandler
 {
-    private const uint Sam = 34;
-
     public void OnAction(ActionType actionType, uint actionId)
     {
         if (actionType != ActionType.Action) return;
-        if (Plugin.PlayerState.ClassJob.RowId != Sam) return;
+        if (PlayerJob.Current != JobId.Samurai) return;
         var jgm = JobGaugeManager.Instance();
         if (jgm == null) return;
 
