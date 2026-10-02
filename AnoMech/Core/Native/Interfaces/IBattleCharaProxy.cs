@@ -112,7 +112,7 @@ public interface IBattleCharaProxy
 
     // ── Effects ──────────────────────────────────────────────────────────────
 
-    // Check the path with IVfxFunctions.PathExists first: a bad path crashes on the file thread.
+    // Check the path with IGameData.FileExists first: a bad path crashes on the file thread.
     // Null when the spawn failed.
     IActorVfxProxy? AttachVfx(string path);
 

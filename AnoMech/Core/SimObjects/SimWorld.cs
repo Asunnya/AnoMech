@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Dalamud.Game.Text;
 using System.Numerics;
 using AnoMech.Core;
 using AnoMech.Core.Game;
@@ -159,7 +160,7 @@ public sealed class SimWorld : ISimObject, IDisposable
 
     public void Announce(string text)
     {
-        Natives.Messages.PrintSystemMessage($"[AnoMech] {text}");
+        Plugin.ChatGui.Print(new XivChatEntry { Type = XivChatType.SystemMessage, Message = $"[AnoMech] {text}" });
         Announced?.Invoke(text);
     }
 

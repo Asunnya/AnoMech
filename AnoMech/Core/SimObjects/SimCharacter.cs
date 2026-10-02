@@ -161,7 +161,12 @@ public abstract class SimCharacter(Coordinates coordinates) : ISimObject, IPosit
     // (see AttachLockonVfx), and the derived path names no VfxPath constant a peer would accept.
     private void AddVfx(string path, float duration, bool persistent, bool fromLockon)
     {
-        if (!Natives.Vfx.PathExists(path) || !IsActive) return;
+        if (!Natives.Data.FileExists(path))
+        {
+            Plugin.Log.Warning($"VFX path not found '{path}'");
+            return;
+        }
+        if (!IsActive) return;
         if (persistent && FindVfx(path) is {} existing)
         {
             existing.Refresh(duration);

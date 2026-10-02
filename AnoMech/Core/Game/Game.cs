@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using Dalamud.Game.Text;
 using System.Numerics;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
@@ -205,7 +206,7 @@ public sealed class Game : IDisposable
         waitingStart = null;
         StartWaitingOn = null;
         lastRun = p;
-        Natives.Framework.Run(() => { RunScenarioInternal(p, null, null, isPeer: false); });
+        Plugin.Framework.Run(() => { RunScenarioInternal(p, null, null, isPeer: false); });
     }
 
     private void RetryWaitingStart()
@@ -247,7 +248,7 @@ public sealed class Game : IDisposable
     // null once the run is up; an exception counts as a refusal.
     private static void RunResolved(Func<string?> start, Action<string?> resolved)
     {
-        Natives.Framework.Run(() =>
+        Plugin.Framework.Run(() =>
         {
             string? refusal;
             try
@@ -395,7 +396,7 @@ public sealed class Game : IDisposable
             Natives.Bgm.Play(phase.Bgm, scenario.BgmSecondsAtStart);
 
         // networkRoles null, not solo: a peer passes selectedAi null too.
-        Natives.Messages.PrintSystemMessage($"[AnoMech] Starting: {FullName(scenario)}{(networkRoles is null ? " (Solo)" : "")}");
+        Plugin.ChatGui.Print(new XivChatEntry { Type = XivChatType.SystemMessage, Message = $"[AnoMech] Starting: {FullName(scenario)}{(networkRoles is null ? " (Solo)" : "")}" });
         return null;
     }
 
@@ -529,7 +530,7 @@ public sealed class Game : IDisposable
     }
 
     private static void PrintDeath(ISimPartyMember target, string cause)
-        => Natives.Messages.PrintSystemMessage($"[AnoMech] {DescribeName(target)} died: {cause}");
+        => Plugin.ChatGui.Print(new XivChatEntry { Type = XivChatType.SystemMessage, Message = $"[AnoMech] {DescribeName(target)} died: {cause}" });
 
     private static string DescribeName(ISimPartyMember target) => target switch
     {
@@ -540,9 +541,9 @@ public sealed class Game : IDisposable
     };
 
     private static void ShowFirstDeathOverlay(ISimPartyMember target, string cause)
-        => Natives.Messages.ShowErrorText($"{DescribeName(target)} died: {cause}");
+        => Plugin.ToastGui.ShowError($"{DescribeName(target)} died: {cause}");
 
-    public void Reset() => Natives.Framework.Run(() =>
+    public void Reset() => Plugin.Framework.Run(() =>
     {
         CancelWaitingStart();
         if (activeScenario is not null)
@@ -584,7 +585,7 @@ public sealed class Game : IDisposable
     {
         // Leaving always finalizes its own log segment.
         AnoMech.Core.DiagnosticLog.RotateNow();
-        Natives.Framework.Run(() =>
+        Plugin.Framework.Run(() =>
         {
             CancelWaitingStart();
             ResetInternal();

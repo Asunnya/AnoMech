@@ -5,10 +5,9 @@ namespace AnoMech.Tests;
 // The game client behind Natives for a headless run.
 internal sealed class FakeGame
 {
-    public FakeGameData Data { get; } = new();
     public FakeBattleCharas BattleCharas { get; } = new();
     public FakeEventObjects EventObjects { get; } = new();
-    public FakeFrameworkThread Framework { get; } = new();
+    public FakeFramework Framework { get; } = FakeFramework.Create();
     public FakeZoneSession Zone { get; }
     public FakeMapEffects MapEffects { get; } = new();
 
@@ -17,7 +16,7 @@ internal sealed class FakeGame
     public static FakeGame Install()
     {
         var game = new FakeGame();
-        Natives.Data = game.Data;
+        Natives.Data = new DataminingGameData();
         Natives.BattleCharas = game.BattleCharas;
         Natives.EventObjects = game.EventObjects;
         Natives.HiddenObjects = new FakeHiddenObjects();
@@ -37,10 +36,9 @@ internal sealed class FakeGame
         Natives.LimitBreak = new FakeLimitBreakController();
         Natives.Markings = new FakeMarkings();
         Natives.Waymarks = new FakeWaymarks();
-        Natives.Messages = new FakeGameMessages();
         Natives.Bgm = new FakeBgm();
-        Natives.Framework = game.Framework;
         Natives.VfxSpawnLog = new FakeVfxSpawnLog();
+        DalamudServices.Install(nameof(Plugin.Framework), game.Framework);
         return game;
     }
 

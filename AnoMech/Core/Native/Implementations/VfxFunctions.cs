@@ -35,7 +35,7 @@ internal sealed unsafe class VfxFunctions : IVfxFunctions
         return new StaticVfxProxy(vfx);
     }
 
-    public bool PathExists(string path)
+    private static bool PathExists(string path)
     {
         try
         {

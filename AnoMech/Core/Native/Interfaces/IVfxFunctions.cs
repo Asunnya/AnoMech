@@ -10,8 +10,6 @@ public interface IVfxFunctions
     // crashes on the file thread, so it is checked first.
     IStaticVfxProxy? SpawnStatic(string path, Placement placement, Vector3 scale);
 
-    bool PathExists(string path);
-
     // Lockon-sheet icon name for a head marker (vfx/lockon/eff/{name}.avfx); null for an unknown id.
     string? LockonIconName(uint lockonId);
 }

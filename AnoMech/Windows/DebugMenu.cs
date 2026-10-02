@@ -654,7 +654,7 @@ internal sealed unsafe class DebugMenu
             Plugin.Log.Warning("Spawn VFX: empty path");
             return;
         }
-        if (!Natives.Vfx.PathExists(path)) return;
+        if (!Natives.Data.FileExists(path)) return;
 
         SimCharacter? chara = null;
         var who = "player";

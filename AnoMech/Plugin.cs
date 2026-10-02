@@ -35,6 +35,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ISigScanner SigScanner { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInterop { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
+    [PluginService] internal static IToastGui ToastGui { get; private set; } = null!;
     [PluginService] internal static IFlyTextGui FlyText { get; private set; } = null!;
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
@@ -189,9 +190,7 @@ public sealed class Plugin : IDalamudPlugin
         Natives.LimitBreak = new LimitBreakController();
         Natives.Markings = new Markings();
         Natives.Waymarks = new Waymarks();
-        Natives.Messages = new GameMessages();
         Natives.Bgm = bgm = new Bgm();
-        Natives.Framework = new FrameworkThread();
         Natives.VfxSpawnLog = vfxSpawnLog = new VfxSpawnLog();
     }
 

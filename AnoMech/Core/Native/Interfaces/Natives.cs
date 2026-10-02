@@ -28,9 +28,7 @@ public static class Natives
     public static ILimitBreakController LimitBreak { get; internal set; } = null!;
     public static IMarkings Markings { get; internal set; } = null!;
     public static IWaymarks Waymarks { get; internal set; } = null!;
-    public static IGameMessages Messages { get; internal set; } = null!;
     public static IBgm Bgm { get; internal set; } = null!;
 
-    public static IFrameworkThread Framework { get; internal set; } = null!;
     public static IVfxSpawnLog VfxSpawnLog { get; internal set; } = null!;
 }
