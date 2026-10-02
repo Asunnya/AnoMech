@@ -1,8 +1,11 @@
 using AnoMech.Core.Native.Interfaces;
 using LuminaAction = Lumina.Excel.Sheets.Action;
+using LuminaBNpcBase = Lumina.Excel.Sheets.BNpcBase;
 using LuminaBNpcName = Lumina.Excel.Sheets.BNpcName;
 using LuminaClassJob = Lumina.Excel.Sheets.ClassJob;
 using LuminaKnockback = Lumina.Excel.Sheets.Knockback;
+using LuminaModelChara = Lumina.Excel.Sheets.ModelChara;
+using LuminaModelSkeleton = Lumina.Excel.Sheets.ModelSkeleton;
 using LuminaStatus = Lumina.Excel.Sheets.Status;
 
 namespace AnoMech.Core.Native.Implementations;
@@ -34,6 +37,21 @@ internal sealed class GameData : IGameData
     public ClassJobRow? ClassJob(uint classJobId)
         => Plugin.DataManager.GetExcelSheet<LuminaClassJob>().TryGetRow(classJobId, out var row)
             ? new ClassJobRow(classJobId, row.LimitBreak1.RowId, row.LimitBreak2.RowId, row.LimitBreak3.RowId)
+            : null;
+
+    public BNpcBaseRow? BNpcBase(uint bnpcBaseId)
+        => Plugin.DataManager.GetExcelSheet<LuminaBNpcBase>().TryGetRow(bnpcBaseId, out var row)
+            ? new BNpcBaseRow(bnpcBaseId, row.Scale, row.ModelChara.RowId)
+            : null;
+
+    public ModelCharaRow? ModelChara(uint modelCharaId)
+        => Plugin.DataManager.GetExcelSheet<LuminaModelChara>().TryGetRow(modelCharaId, out var row)
+            ? new ModelCharaRow(modelCharaId, row.Type, row.Model, row.Unknown0)
+            : null;
+
+    public ModelSkeletonRow? ModelSkeleton(uint skeletonId)
+        => Plugin.DataManager.GetExcelSheet<LuminaModelSkeleton>().TryGetRow(skeletonId, out var row)
+            ? new ModelSkeletonRow(skeletonId, row.Radius)
             : null;
 
     public string? StatusName(ushort statusId)

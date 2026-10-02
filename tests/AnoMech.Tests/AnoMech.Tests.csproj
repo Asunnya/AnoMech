@@ -36,7 +36,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <DataminingSheet Include="Action;BNpcName;ClassJob;Knockback;Omen;Status" />
+    <DataminingSheet Include="Action;BNpcBase;BNpcName;ClassJob;Knockback;ModelChara;ModelSkeleton;Omen;Status" />
   </ItemGroup>
 
   <Target Name="DownloadDataminingSheets" BeforeTargets="BeforeBuild">

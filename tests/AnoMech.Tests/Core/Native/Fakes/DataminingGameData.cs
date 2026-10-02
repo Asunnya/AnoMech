@@ -9,9 +9,12 @@ namespace AnoMech.Tests;
 internal sealed class DataminingGameData : IGameData
 {
     private static readonly Lazy<Sheet> Actions = Load("Action");
+    private static readonly Lazy<Sheet> BNpcBases = Load("BNpcBase");
     private static readonly Lazy<Sheet> BNpcNames = Load("BNpcName");
     private static readonly Lazy<Sheet> ClassJobs = Load("ClassJob");
     private static readonly Lazy<Sheet> Knockbacks = Load("Knockback");
+    private static readonly Lazy<Sheet> ModelCharas = Load("ModelChara");
+    private static readonly Lazy<Sheet> ModelSkeletons = Load("ModelSkeleton");
     private static readonly Lazy<Sheet> Omens = Load("Omen");
     private static readonly Lazy<Sheet> Statuses = Load("Status");
 
@@ -40,6 +43,21 @@ internal sealed class DataminingGameData : IGameData
     public ClassJobRow? ClassJob(uint classJobId)
         => ClassJobs.Value.Row(classJobId) is { } row
             ? new ClassJobRow(classJobId, row.UInt("LimitBreak1"), row.UInt("LimitBreak2"), row.UInt("LimitBreak3"))
+            : null;
+
+    public BNpcBaseRow? BNpcBase(uint bnpcBaseId)
+        => BNpcBases.Value.Row(bnpcBaseId) is { } row
+            ? new BNpcBaseRow(bnpcBaseId, row.Float("Scale"), row.UInt("ModelChara"))
+            : null;
+
+    public ModelCharaRow? ModelChara(uint modelCharaId)
+        => ModelCharas.Value.Row(modelCharaId) is { } row
+            ? new ModelCharaRow(modelCharaId, row.Byte("Type"), row.UShort("Model"), row.Float("Radius"))
+            : null;
+
+    public ModelSkeletonRow? ModelSkeleton(uint skeletonId)
+        => ModelSkeletons.Value.Row(skeletonId) is { } row
+            ? new ModelSkeletonRow(skeletonId, row.Float("Radius"))
             : null;
 
     public string? StatusName(ushort statusId) => NonEmpty(Statuses.Value.Row(statusId)?.Text("Name"));
@@ -85,6 +103,8 @@ internal sealed class DataminingGameData : IGameData
         public string Text(string column) => fields[sheet.Column(column)];
         public uint UInt(string column) => uint.Parse(Text(column), CultureInfo.InvariantCulture);
         public byte Byte(string column) => byte.Parse(Text(column), CultureInfo.InvariantCulture);
+        public ushort UShort(string column) => ushort.Parse(Text(column), CultureInfo.InvariantCulture);
+        public float Float(string column) => float.Parse(Text(column), CultureInfo.InvariantCulture);
         public bool Bool(string column) => bool.Parse(Text(column));
     }
 }

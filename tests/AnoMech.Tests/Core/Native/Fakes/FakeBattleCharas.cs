@@ -2,6 +2,8 @@ using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.SimObjects;
+using FFXIVClientStructs.FFXIV.Client.Game.Network;
+using System.Runtime.InteropServices;
 
 namespace AnoMech.Tests;
 
@@ -15,6 +17,8 @@ internal sealed class FakeBattleCharas : IBattleCharas
     private const uint DoppelMaxHealth = 100_000;
     private const uint EnemyMaxHealth = 1_000_000;
     private const float DoppelHitboxRadius = 0.5f;
+    private const float DefaultUnscaledRadius = 0.5f;
+    private const uint DemihumanSkeletonIdBase = 10000;
     private const byte IsTargetable = 0x02;
     private const int OrphanForgetFrames = 300;
 
@@ -38,6 +42,11 @@ internal sealed class FakeBattleCharas : IBattleCharas
 
     public IBattleCharaProxy? SpawnBattleNpc(EnemySpawnConfig config, Placement placement)
     {
+        if (Natives.Data.BNpcBase(config.BNpcBaseId) is not { } bnpc) return null;
+        var modelCharaId = config.ModelCharaId != 0 ? config.ModelCharaId : bnpc.ModelChara;
+        if (Natives.Data.ModelChara(modelCharaId) is not { } modelChara) return null;
+        var scale = config.Scale > 0f ? config.Scale : bnpc.Scale;
+
         var slot = FindFreeSlot();
         if (slot < 0) return null;
         var name = Natives.Data.BNpcName(config.NameId) ?? $"BNpc {config.BNpcBaseId:X}";
@@ -45,9 +54,7 @@ internal sealed class FakeBattleCharas : IBattleCharas
         {
             Position = placement.Position,
             Rotation = placement.Rotation,
-            // The native radius comes from the model (CalculateUnscaledRadius); without it only an
-            // explicit config value is known.
-            HitboxRadius = config.HitboxRadius,
+            HitboxRadius = SpawnHitboxRadius(config, modelChara, scale),
             MaxHealth = EnemyMaxHealth,
             Health = EnemyMaxHealth,
         };
@@ -66,7 +73,7 @@ internal sealed class FakeBattleCharas : IBattleCharas
         {
             Position = placement.Position,
             Rotation = placement.Rotation,
-            HitboxRadius = config.HitboxRadius,
+            HitboxRadius = PacketHitboxRadius(config.NpcSpawnTemplate),
             MaxHealth = EnemyMaxHealth,
             Health = EnemyMaxHealth,
         };
@@ -138,6 +145,38 @@ internal sealed class FakeBattleCharas : IBattleCharas
 
         Player.Tick(deltaSeconds);
         foreach (var actor in slots) actor?.Tick(deltaSeconds);
+    }
+
+    // BattleCharas.SpawnBattleNpc's per-Type split: the native path ignores config.HitboxRadius.
+    private static float SpawnHitboxRadius(EnemySpawnConfig config, ModelCharaRow modelChara, float scale)
+        => modelChara.Type switch
+        {
+            0 when config.Customize is not null => config.HitboxRadius > 0f ? config.HitboxRadius : DoppelHitboxRadius,
+            1 => config.HitboxRadius > 0f ? config.HitboxRadius : (modelChara.Radius > 0f ? modelChara.Radius : DefaultUnscaledRadius) * scale,
+            _ => NativeHitboxRadius(modelChara, scale),
+        };
+
+    // UNVERIFIED: assumes the engine's packet handler sizes the actor like SpawnBattleNpc's native path.
+    private static float PacketHitboxRadius(byte[] template)
+    {
+        var packet = MemoryMarshal.Read<SpawnNpcPacket>(template);
+        var bnpc = Natives.Data.BNpcBase(packet.Common.BaseId);
+        var modelChara = Natives.Data.ModelChara(packet.Common.ModelChara);
+        return bnpc == null || modelChara == null ? 0f : NativeHitboxRadius(modelChara, bnpc.Scale);
+    }
+
+    // ModelContainer.UpdateHitboxRadius: Scale × CalculateUnscaledRadius, which prefers the
+    // ModelChara row's radius over its skeleton's. Type 2 and the skeleton-less types are UNVERIFIED.
+    private static float NativeHitboxRadius(ModelCharaRow modelChara, float scale)
+    {
+        if (modelChara.Radius > 0f) return modelChara.Radius * scale;
+        var skeletonId = modelChara.Type switch
+        {
+            2 => modelChara.Model + DemihumanSkeletonIdBase,
+            3 => modelChara.Model,
+            _ => 0u,
+        };
+        return (Natives.Data.ModelSkeleton(skeletonId)?.Radius ?? 0f) * scale;
     }
 
     private int FindFreeSlot()
