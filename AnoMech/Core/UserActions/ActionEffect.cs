@@ -37,6 +37,17 @@ internal sealed unsafe class GaugeEffect(ResourceGauge gauge, int amount) : IAct
     }
 }
 
+// Leaf: set a job gauge to an absolute value, clamped like Add.
+internal sealed unsafe class SetGaugeEffect(ResourceGauge gauge, int value) : IActionEffect
+{
+    public void Apply(ActionContext ctx)
+    {
+        if (!ctx.CasterIsPlayer) return;
+        var jgm = JobGaugeManager.Instance();
+        if (jgm != null) gauge.Add(jgm, value - gauge.Read(jgm));
+    }
+}
+
 // Leaf: grant a status to the player for `duration` seconds (replaces any existing copy).
 // `stacks` sets Status.Param — 0 for a plain buff, or the stack count for a stacking buff
 // (Requiescat, Sacred Sight); we don't decrement per-consume yet, it just expires.

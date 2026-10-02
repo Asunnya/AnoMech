@@ -7,10 +7,8 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility.Signatures;
-using AnoMech.Core.UserActions;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
-using FFXIVClientStructs.FFXIV.Client.Game.Gauge;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.System.Input;
 
@@ -161,8 +159,6 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
 
     public void Dispose()
     {
-        // Game.Dispose doesn't route through ResetInternal.
-        RestoreGaugeIllusion();
         rmiWalkHook?.Dispose();
         checkStrafeKeybindHook?.Dispose();
         isInputIdPressedHook?.Dispose();
@@ -212,7 +208,6 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
     {
         updateHook.Original(self);
         ScanAndLogActiveStatuses();
-        UpdateGaugeIllusion();
         // A missed clear must not pin rotation outside an instance.
         if (LockedRotation is { } lockedRot)
         {
@@ -224,39 +219,6 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         if (!DisableAllActions) return;
         var autosOn = UIState.Instance()->WeaponState.AutoAttackState.IsAutoAttacking;
         if (autosOn) self->UseAction(ActionType.GeneralAction, 1);
-    }
-
-    // ---- Gauge illusion (client-side only) -----------------------------------
-    // The hotbar icon reads the real job gauge to render as available, so a gauge-gated
-    // mitigation (Holy Sheltron needs 50 Oath) would look disabled. Topped up for display only;
-    // the real value is saved once and restored when the sim ends.
-    private byte? savedOathGauge;
-
-    private void UpdateGaugeIllusion()
-    {
-        if (Plugin.GameInstance is not { } game || !game.World.Map.IsInInstance)
-        {
-            RestoreGaugeIllusion();
-            return;
-        }
-        // Only Holy Sheltron (Paladin/Oath) needs this today.
-        if (PlayerJob.Current != JobId.Paladin) return;
-        var gauge = (PaladinGauge*)Plugin.JobGauges.Address;
-        if (gauge == null) return;
-        savedOathGauge ??= gauge->OathGauge;
-        gauge->OathGauge = 100;
-    }
-
-    // Also called from Game.ResetInternal so the restore is immediate on Reset/Leave.
-    public void RestoreGaugeIllusion()
-    {
-        if (savedOathGauge is not { } saved) return;
-        if (PlayerJob.Current == JobId.Paladin)
-        {
-            var gauge = (PaladinGauge*)Plugin.JobGauges.Address;
-            if (gauge != null) gauge->OathGauge = saved;
-        }
-        savedOathGauge = null;
     }
 
     private bool UseActionDetour(ActionManager* self, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)

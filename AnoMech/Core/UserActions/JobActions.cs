@@ -231,6 +231,7 @@ internal static unsafe class JobActions
     private static readonly ResourceGauge PctPalette = new() { Read = jgm => jgm->Pictomancer.PalleteGauge, Write = (jgm, v) => jgm->Pictomancer.PalleteGauge = (byte)v, Max = 100 };
     private static readonly ResourceGauge PctPaint = new() { Read = jgm => jgm->Pictomancer.Paint, Write = (jgm, v) => jgm->Pictomancer.Paint = (byte)v, Max = 5 };
     private static readonly ResourceGauge BlmPolyglot = new() { Read = jgm => jgm->BlackMage.PolyglotStacks, Write = (jgm, v) => jgm->BlackMage.PolyglotStacks = (byte)v, Max = 3 };
+    private static readonly ResourceGauge PldOath = new() { Read = jgm => jgm->Paladin.OathGauge, Write = (jgm, v) => jgm->Paladin.OathGauge = (byte)v, Max = 100 };
 
     // Gauges with time-based behavior, ticked by TimedGaugeHandler.
     public static readonly TimedGauge[] TimedGauges =
@@ -587,6 +588,19 @@ internal static unsafe class JobActions
         [24309] = [Gauge(SgeAddersgall, 1)],              // Rhizomata → +1 Addersgall (passive fill in TimedGauges)
     };
 
+    // What one landed auto-attack swing does, per job.
+    private static readonly Dictionary<JobId, IActionEffect[]> AutoAttacks = new()
+    {
+        [JobId.Paladin] = [Gauge(PldOath, 5)],   // Oath Mastery
+    };
+
+    // The resources the player holds when a scenario starts. Phases start mid-fight, so the
+    // server-built resources a player would walk in with are seeded here.
+    private static readonly Dictionary<JobId, IActionEffect[]> StartingResources = new()
+    {
+        [JobId.Paladin] = [SetGauge(PldOath, 100)],
+    };
+
     // status → predicates that clear it. OR-semantics: any match removes the status. The
     // dispatcher runs this BEFORE the action's effects, so a line action re-grants after
     // its own weaponskill clear.
@@ -683,6 +697,19 @@ internal static unsafe class JobActions
         foreach (var effect in effects) effect.Apply(ctx);
     }
 
+    public static void ApplyAutoAttack(SimCharacter caster, uint actionId, ulong targetId, System.Random rng)
+        => ApplyJobEffects(AutoAttacks, caster, actionId, targetId, rng);
+
+    public static void ApplyStartingResources(SimCharacter caster, System.Random rng)
+        => ApplyJobEffects(StartingResources, caster, 0, 0, rng);
+
+    private static void ApplyJobEffects(Dictionary<JobId, IActionEffect[]> table, SimCharacter caster, uint actionId, ulong targetId, System.Random rng)
+    {
+        if (!table.TryGetValue(PlayerJob.Current, out var effects)) return;
+        var ctx = new ActionContext(actionId, targetId, caster, rng);
+        foreach (var effect in effects) effect.Apply(ctx);
+    }
+
     // Consumes one stack of every status the given action clears — `AddStatus(id, 0, -1)`
     // decrements a stacking buff (Requiescat, Meikyo…) and despawns a plain proc (Stacks 0
     // → 0 → removed), so both cases fall out of one call.
@@ -712,6 +739,7 @@ internal static unsafe class JobActions
         [(JobId.Sage, 68u)] = [SgeAddersgall], [(JobId.Sage, 69u)] = [SgeAddersting], [(JobId.Dragoon, 75u)] = [DrgFocus],
         [(JobId.Viper, 87u)] = [VprRattlingCoil], [(JobId.Viper, 88u)] = [VprSerpentOffering], [(JobId.Viper, 89u)] = [VprAnguineTribute], [(JobId.Viper, 90u)] = [VprAnguineTribute], [(JobId.Pictomancer, 91u)] = [PctPalette],
         [(JobId.BlackMage, 23u)] = [BlmPolyglot],   // Foul / Xenoglossy spend 1 Polyglot
+        [(JobId.Paladin, 41u)] = [PldOath],         // Sheltron / Holy Sheltron / Intervention / Cover
     };
 
     // Generic spender pass: subtract an action's gauge cost, read straight from the sheet.
@@ -728,6 +756,7 @@ internal static unsafe class JobActions
     }
 
     private static IActionEffect Gauge(ResourceGauge gauge, int amount) => new GaugeEffect(gauge, amount);
+    private static IActionEffect SetGauge(ResourceGauge gauge, int value) => new SetGaugeEffect(gauge, value);
     private static IActionEffect Status(ushort statusId, float duration, int stacks = 0) => new StatusEffect(statusId, duration, stacks);
     private static IActionEffect TargetStatus(ushort statusId, float duration, int stacks = 0) => new TargetStatusEffect(statusId, duration, stacks);
     private static IActionEffect EnemyStatus(ushort statusId, float duration, int stacks = 0) => new EnemyStatusEffect(statusId, duration, stacks);

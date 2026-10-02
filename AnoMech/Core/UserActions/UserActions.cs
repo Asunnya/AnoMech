@@ -20,6 +20,9 @@ public sealed unsafe class UserActions : IDisposable
     // tied to starting the cast, and it does its own cast-completion tracking for the Dualcast grant.
     private readonly IUserActionHandler castTime = new CastTimeHandler();
 
+    // Runs after every other handler's OnScenarioStart so a handler's own reset can't undo the seed.
+    private readonly IUserActionHandler startingResources = new StartingResourcesHandler();
+
     // The spell's own effects (gauge writes, status grants/clears, combo advancement). Applied at cast
     // RESOLUTION — immediately for an instant cast, on completion for a hard cast, and not at all if the
     // cast is interrupted (a spell resolves when its cast bar finishes, not when it starts). In order:
@@ -98,6 +101,7 @@ public sealed unsafe class UserActions : IDisposable
         castTime.OnScenarioStart();
         foreach (var handler in effectHandlers) handler.OnScenarioStart();
         foreach (var handler in tickHandlers) handler.OnScenarioStart();
+        startingResources.OnScenarioStart();
         pendingResolve = false;
     }
 

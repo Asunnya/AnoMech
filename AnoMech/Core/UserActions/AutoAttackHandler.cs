@@ -25,6 +25,7 @@ internal sealed unsafe class AutoAttackHandler : IUserActionHandler
     private float swingCooldown;
     private byte swingCount;
     private string? lastHold;
+    private readonly System.Random rng = new();
 
     public void OnScenarioStart()
     {
@@ -74,6 +75,7 @@ internal sealed unsafe class AutoAttackHandler : IUserActionHandler
         lastHold = null;
         DiagnosticLog.Info($"[AutoAttack] Swing: action {actionId} variation {variation} at 0x{enemy.GameObjectId.ObjectId:X8}, next in {swingCooldown:F2}s.");
         ActionEffects.FireAutoAttack((Character*)player, actionId, enemy.GameObjectId, variation);
+        JobActions.ApplyAutoAttack(game.Player, actionId, enemy.GameObjectId, rng);
     }
 
     private void Hold(string reason)

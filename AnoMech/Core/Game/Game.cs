@@ -617,7 +617,6 @@ public sealed class Game : IDisposable
         World.Despawn();
         // A wipe or Leave never reaches the scenario's own cleanup.
         Core.Native.VfxSpawnLog.Disable();
-        Plugin.PlayerInputHooks.RestoreGaugeIllusion();
         // BGM is the callers': resetting here would restart a same-track scenario switch.
 
         Paused = false;
