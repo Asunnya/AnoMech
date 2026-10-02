@@ -17,11 +17,8 @@ public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
     public byte ClassJob { get; }
     public string DisplayName { get; }
 
-    private readonly LimitBreakGauge limitBreak;
-
-    internal SimPartyNpc(int index, Coordinates coordinates, LimitBreakGauge limitBreak, PartyRole role, byte classJob, string name) : base(index, coordinates)
+    internal SimPartyNpc(int index, Coordinates coordinates, PartyRole role, byte classJob, string name) : base(index, coordinates)
     {
-        this.limitBreak = limitBreak;
         Role = role;
         ClassJob = classJob;
         DisplayName = name;
@@ -34,22 +31,14 @@ public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
         JobActions.ApplyEffects(this, actionId, (ulong)GameObjectId, Random.Shared);
     }
 
-    // Uses the level the gauge's filled bars allow. False if KO'd, no bar is filled, or the job
-    // has no limit break at that level.
-    public bool UseLimitBreak()
+    // level 1-3. False if KO'd or the job has no limit break at that level.
+    internal bool UseLimitBreak(int level)
     {
         if (!this.IsAlive()) return false;
-        var level = limitBreak.FilledBars;
-        if (level == 0)
-        {
-            DiagnosticLog.Info($"[SimPartyNpc] {Role} limit break skipped: no bar is filled.");
-            return false;
-        }
         var actionId = LimitBreakHandler.ActionId(ClassJob, level);
         if (actionId == 0) return false;
         DiagnosticLog.Info($"[SimPartyNpc] {Role} (job {ClassJob}) uses LB{level} {ActionLookup.Name(actionId)}.");
         UseAction(actionId);
-        limitBreak.Spend();
         return true;
     }
 

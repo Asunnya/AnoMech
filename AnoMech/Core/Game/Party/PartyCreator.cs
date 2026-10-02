@@ -93,17 +93,17 @@ internal static unsafe class PartyCreator
             var localPos = new Vector3(MathF.Sin(angle) * distance, 0f, MathF.Cos(angle) * distance);
             var facingPlayer = MathF.Atan2(-localPos.X, -localPos.Z);
 
-            var member = Spawn(preset, world, party.LimitBreak, role, new Placement(localPos, facingPlayer), itemSheet);
+            var member = Spawn(preset, world, role, new Placement(localPos, facingPlayer), itemSheet);
             if (member != null) party.SetSlot(role, member);
         }
     }
 
-    private static SimPartyNpc? Spawn(PartyMemberPreset preset, SimWorld world, LimitBreakGauge limitBreak, PartyRole role, Placement placement, ExcelSheet<Item> itemSheet)
+    private static SimPartyNpc? Spawn(PartyMemberPreset preset, SimWorld world, PartyRole role, Placement placement, ExcelSheet<Item> itemSheet)
     {
         if (!SpawnNative(preset, world, placement, itemSheet, out var idx)) return null;
 
         Plugin.Log.Info($"PartyCreator: spawned {preset.Name} ({role}, job {preset.ClassJob}) at index {idx}");
-        var member = new SimPartyNpc(idx, world.Coordinates, limitBreak, role, preset.ClassJob, preset.Name);
+        var member = new SimPartyNpc(idx, world.Coordinates, role, preset.ClassJob, preset.Name);
         // Bots steer around the scenario's geometry; only doppels get the live
         // field (bosses/player/puppets keep ObstacleField.Empty and move in straight lines).
         member.Obstacles = world.Obstacles;

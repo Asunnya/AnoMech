@@ -304,12 +304,9 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     private void BotTankLimitBreak()
     {
         if (!(settingsWindow.Overrides.BotTankLimitBreak ?? !party.PlayerRole.IsTank())) return;
-        if (UseLimitBreak(PartyRole.MainTank) || UseLimitBreak(PartyRole.OffTank)) return;
+        if (party.UseLimitBreak(PartyRole.MainTank) || party.UseLimitBreak(PartyRole.OffTank)) return;
         DiagnosticLog.Warn("[UmadP3LimitCut] No bot tank used LB3.");
     }
-
-    private bool UseLimitBreak(PartyRole role)
-        => party.Get(role) is ISimPartyMember tank && tank.UseLimitBreak();
 
     private void ChaosLands()
     {
