@@ -131,6 +131,11 @@ public class DsrConstants
         public const ushort HolyShieldBash = 0x54;
     }
 
+    public class EObjId
+    {
+        public const uint PlanarPrison = 0x1EB681;
+    }
+
     public class LockonId
     {
         public const uint HyperdimensionalSlash = 0xEA;

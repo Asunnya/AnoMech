@@ -85,6 +85,7 @@ public sealed class DsrP1KnightsScenario : IScenario
     private SimEnemy? haurchefant;
     private SimEnemy? spear;
     private SimEnemy? thordan;
+    private SimEventObject? prisonCircle;
     private readonly List<SimEnemy> helpers = [];
     private readonly List<SimEnemy?> slashCasters = [];
     private readonly List<(SimEnemy? Tear, Vector3 At)> portals = [];
@@ -179,7 +180,9 @@ public sealed class DsrP1KnightsScenario : IScenario
         world.Events.Add(110.08f, () => zephirin = SpawnKnight(BNpcBaseId.Zephirin, BNpcNameId.Zephirin, ZephirinMaxHp, new Placement(new Vector3(Geometry.ArenaHalfWidth, 0f, 0f), -MathF.PI / 2f), false, EnemyListMode.Never));
         world.Events.Add(112.31f, ResolvePlanarPrison);
         world.Events.Add(112.31f, ZephirinThrowsSpear);
+        world.Events.Add(112.62f, SpawnPrisonCircle);
         world.Events.Add(112.84f, () => charibert?.NativeCast(ActionId.PureOfHeart, ActionType.Action, 0f, 35.2f, false, targetId: charibert.GameObjectId));
+        world.Events.Add(115.28f, () => prisonCircle?.SetState(1));
         world.Events.Add(121.39f, HaurchefantArrives);
         world.Events.Add(122.28f, () => PlayEffect(zephirin, ActionId.SpearOfTheFury, 1.1f, target: haurchefant?.GameObjectId));
         world.Events.Add(122.30f, SpawnSpear);
@@ -190,6 +193,8 @@ public sealed class DsrP1KnightsScenario : IScenario
         world.Events.Add(136.82f, () => haurchefant?.Despawn());
         world.Events.Add(141.58f, () => world.Map.DirectorUpdate(ArenaDirector.Music, ArenaDirector.ThordanMusic));
         world.Events.Add(145.32f, ReleasePrison);
+        world.Events.Add(147.64f, () => prisonCircle?.SetState(0));
+        world.Events.Add(148.14f, () => prisonCircle?.Despawn());
         world.Events.Add(148.31f, () => Raidwide(charibert, ActionId.PureOfHeart, PureOfHeartDamage));
         world.Events.Add(149.40f, KnightsDepart);
         world.Events.Add(151.38f, ThordanArrives);
@@ -716,6 +721,13 @@ public sealed class DsrP1KnightsScenario : IScenario
                 member.Die("Left the Planar Prison");
     }
 
+    private void SpawnPrisonCircle() =>
+        prisonCircle = world.SpawnEventObject(new EventObjectSpawnConfig
+        {
+            EObjId = EObjId.PlanarPrison,
+            Placement = new Placement(DsrP1KnightsState.PrisonCentre, MathF.PI / 2f),
+        });
+
     private void ReleasePrison()
     {
         prisonActive = false;
@@ -809,6 +821,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         foreach (var chain in burningChains) chain.Despawn();
         burningChains.Clear();
         prisonActive = false;
+        prisonCircle?.Despawn();
         foreach (var enemy in new[] { adelphel, grinnaux, charibert, charibertCaster, zephirin, haurchefant, spear, thordan })
             enemy?.Despawn();
         foreach (var helper in helpers) helper.Despawn();
