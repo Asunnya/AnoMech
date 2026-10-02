@@ -1,7 +1,8 @@
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Implementations;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using AnoMech.Core.Native.Implementations.Interop;
 
 namespace AnoMech.Core.UserActions;
 

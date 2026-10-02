@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Implementations;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.UserActions.Jobs;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
@@ -11,7 +12,7 @@ namespace AnoMech.Core.UserActions;
 // client-side, filling in the server responses the sim firewall blocks. Sprint is
 // resolved unconditionally; the feature handlers only while Enabled. Nothing in the
 // engine depends on it.
-public sealed unsafe class UserActions : IDisposable
+public sealed unsafe class UserActions : IUserActions, IDisposable
 {
     private readonly LocalPlayerInputHooks hooks;
     private readonly IUserActionHandler sprint = new SprintHandler();
@@ -19,6 +20,9 @@ public sealed unsafe class UserActions : IDisposable
     // Cast-time enablers. Runs when the cast BEGINS: enabler bookkeeping (Swiftcast/Dualcast/…) is
     // tied to starting the cast, and it does its own cast-completion tracking for the Dualcast grant.
     private readonly IUserActionHandler castTime = new CastTimeHandler();
+
+    // Runs after every other handler's OnScenarioStart so a handler's own reset can't undo the seed.
+    private readonly IUserActionHandler startingResources = new StartingResourcesHandler();
 
     // The spell's own effects (gauge writes, status grants/clears, combo advancement). Applied at cast
     // RESOLUTION — immediately for an instant cast, on completion for a hard cast, and not at all if the
@@ -46,6 +50,7 @@ public sealed unsafe class UserActions : IDisposable
     [
         new TimedGaugeHandler(),
         new CastInterruptHandler(),
+        new AutoAttackHandler(),
     ];
 
     // A hard cast whose effects are deferred until it completes.
@@ -97,6 +102,7 @@ public sealed unsafe class UserActions : IDisposable
         castTime.OnScenarioStart();
         foreach (var handler in effectHandlers) handler.OnScenarioStart();
         foreach (var handler in tickHandlers) handler.OnScenarioStart();
+        startingResources.OnScenarioStart();
         pendingResolve = false;
     }
 

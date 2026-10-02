@@ -4,20 +4,19 @@ using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Geometry;
-using AnoMech.Core.Native;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
+using AnoMech.Core.Native.Interfaces;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
-using Lumina.Excel.Sheets;
 
 namespace AnoMech.Core.SimObjects;
 
 // Common base for anything in the simulated world that has a BattleChara behind it
-public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject, IPositioned
+public abstract class SimCharacter(Coordinates coordinates) : ISimObject, IPositioned
 {
     private readonly List<SimVfx> vfx = [];
     private readonly List<SimStatus> statusList = [];
 
-    internal abstract BattleChara* BattleCharaPtr { get; }
+    // Null once the character has no native object to stand for (despawned).
+    internal abstract IBattleCharaProxy? Proxy { get; }
 
     private protected abstract Movement Movement { get; }
 
@@ -28,7 +27,7 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
     // doppels at world.Obstacles so only bots avoid geometry.
     internal ObstacleField Obstacles { get; set; } = ObstacleField.Empty;
 
-    public virtual bool IsActive => BattleCharaPtr != null;
+    public virtual bool IsActive => Proxy is { Exists: true };
 
     // True while the character is rooted by an in-progress action (cast bar up or
     // release animation still playing). The Movement subsystem reads this to hold
@@ -36,25 +35,16 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
     // that simulate casts (SimEnemy) override it.
     public virtual bool AnimationLock => false;
 
-    public GameObjectId GameObjectId => BattleCharaPtr == null ? default : BattleCharaPtr->GetGameObjectId();
-    public float HitboxRadius => BattleCharaPtr == null ? 0f : BattleCharaPtr->HitboxRadius;
-
-    public uint EntityId
-    {
-        get
-        {
-            var obj = BattleCharaPtr;
-            return obj == null ? 0u : obj->EntityId;
-        }
-    }
+    public GameObjectId GameObjectId => Proxy?.GameObjectId ?? default;
+    public float HitboxRadius => Proxy?.HitboxRadius ?? 0f;
+    public uint EntityId => Proxy?.EntityId ?? 0u;
 
     public virtual void Tick(float deltaSeconds)
     {
-        var native = BattleCharaPtr;
-        if (native != null)
+        if (Proxy is { Exists: true } native)
         {
-            position = Coordinates.ToLocal(native->Position);
-            Rotation = native->Rotation;
+            position = Coordinates.ToLocal(native.Position);
+            Rotation = native.Rotation;
         }
         statusList.Update(deltaSeconds);
         vfx.Update(deltaSeconds);
@@ -79,7 +69,7 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
             Movement.Carry(destination, CarryStartDelay, CarrySlideSeconds);
             return;
         }
-        ForcedMovement.CarryTo(EntityId, Coordinates.ToGlobal(destination), Rotation, selfTarget: mode == CarryMode.NativeSelfTarget);
+        Proxy?.CarryTo(Coordinates.ToGlobal(destination), Rotation, selfTarget: mode == CarryMode.NativeSelfTarget);
         carryStart = Position;
         carryDestination = destination;
         carryElapsed = 0f;
@@ -114,19 +104,15 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
 
     public void SetPosition(Vector3 newPosition)
     {
-        var obj = BattleCharaPtr;
-        if (obj == null) return;
-        var w = Coordinates.ToGlobal(newPosition);
-        obj->SetPosition(w.X, w.Y, w.Z);
-        if (obj->DrawObject != null) obj->DrawObject->Object.Position = w;
+        if (Proxy is not { Exists: true } obj) return;
+        obj.SetPosition(Coordinates.ToGlobal(newPosition));
         position = newPosition; // early update, will be updated on next tick anyway
     }
 
     public void SetRotation(float rotation)
     {
-        var obj = BattleCharaPtr;
-        if (obj == null) return;
-        obj->SetRotation(MathUtil.NormalizeRotation(rotation));
+        if (Proxy is not { Exists: true } obj) return;
+        obj.SetRotation(MathUtil.NormalizeRotation(rotation));
         Rotation = rotation; // early update, will be updated on next tick anyway
     }
 
@@ -176,7 +162,12 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
     // (see AttachLockonVfx), and the derived path names no VfxPath constant a peer would accept.
     private void AddVfx(string path, float duration, bool persistent, bool fromLockon)
     {
-        if (!VfxFunctions.VfxPathExists(path) || !IsActive) return;
+        if (!Natives.Data.FileExists(path))
+        {
+            Plugin.Log.Warning($"VFX path not found '{path}'");
+            return;
+        }
+        if (!IsActive) return;
         if (persistent && FindVfx(path) is {} existing)
         {
             existing.Refresh(duration);
@@ -226,7 +217,7 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
 
     public void AttachLockonVfx(uint lockonId, float duration = 0f, bool persistent = true)
     {
-        if (VfxFunctions.LockonVfxIconName(lockonId) is not {} iconName) return;
+        if (Natives.Vfx.LockonIconName(lockonId) is not {} iconName) return;
         AddVfx($"vfx/lockon/eff/{iconName}.avfx", duration, persistent, fromLockon: true);
         LastLockonVfxId = lockonId;
         if (pendingLockonVfxIds.Count < AnoMech.Multiplayer.NetGuard.MaxLockonVfxPerEntity) pendingLockonVfxIds.Add(lockonId);
@@ -250,7 +241,7 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
 
     // FIXME: minor, keep track of tethers and slots attached to character
     public bool HasTetherInSlot0(ushort tetherId)
-        => BattleCharaPtr != null && VfxFunctions.GetTetherId((Character*)BattleCharaPtr, 0) == tetherId;
+        => Proxy is { Exists: true } chara && chara.GetTetherId(0) == tetherId;
 
     // -------------------------
     // Status Subsystem
@@ -343,13 +334,7 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
     }
 
     internal void PlayActionTimelineNative(ushort timelineId, ushort loopId = 0, ushort baseOverride = 0)
-    {
-        var chara = BattleCharaPtr;
-        if (chara == null) return;
-        if (chara->Timeline.TimelineSequencer.Parent == null) return;
-        chara->Timeline.BaseOverride = baseOverride;
-        chara->Timeline.PlayActionTimeline(timelineId, loopId);
-    }
+        => Proxy?.PlayActionTimeline(timelineId, loopId, baseOverride);
 
     public void ResetActionTimeline()
     {
@@ -359,32 +344,9 @@ public abstract unsafe class SimCharacter(Coordinates coordinates) : ISimObject,
         ResetActionTimelineNative();
     }
 
-    internal void ResetActionTimelineNative()
-    {
-        var bc = BattleCharaPtr;
-        if (bc == null) return;
-        bc->Timeline.BaseOverride = 0;
-        bc->Timeline.ModelState = 0;
-        bc->Timeline.AnimationState[0] = 0;
-        bc->Timeline.AnimationState[1] = 0;
-        // Sequencer ops need a live skeleton (Parent); guard before touching it.
-        if (bc->Timeline.TimelineSequencer.Parent == null) return;
-        bc->Timeline.TimelineSequencer.SetSlotTimeline(0, 0);
-    }
+    internal void ResetActionTimelineNative() => Proxy?.ResetActionTimeline();
 
-    // Despawn-only: Character::Terminate walks all 14 sequencer slots and crashes on a still-live
-    // one (a mid-cast release animation occupies the UpperBody/Facial/Lips slots);
-    // ResetActionTimeline only clears slot 0.
-    public void QuiesceActionTimeline()
-    {
-        var bc = BattleCharaPtr;
-        if (bc == null) return;
-        bc->Timeline.BaseOverride = 0;
-        bc->Timeline.ModelState = 0;
-        bc->Timeline.AnimationState[0] = 0;
-        bc->Timeline.AnimationState[1] = 0;
-        if (bc->Timeline.TimelineSequencer.Parent == null) return;
-        for (uint slot = 0; slot < 14; slot++)
-            bc->Timeline.TimelineSequencer.SetSlotTimeline(slot, 0);
-    }
+    // The server's ActorControl packet for this character, through the client's own dispatcher.
+    public void ActorControl(uint category, uint arg1 = 0, uint arg2 = 0, uint arg3 = 0, uint arg4 = 0, uint arg5 = 0, uint arg6 = 0, uint arg7 = 0, uint arg8 = 0)
+        => Proxy?.ActorControl(category, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }

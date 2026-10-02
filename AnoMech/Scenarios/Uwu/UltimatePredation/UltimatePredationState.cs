@@ -14,7 +14,7 @@ public class UltimatePredationState
     public Placement TitanPlacement { get; init; }
     public UltimatePredationScenarioObjects ScenarioObjects { get; } = new();
 
-    public readonly Rng Rng = new();
+    public readonly Rng Rng = Rng.Detached;
 
     // Unlike other scenarios' State, UltimatePredationAi.Run makes live RNG tie-break draws
     // instead of resolving randomness once in the constructor. A peer replaying with a fresh
@@ -27,8 +27,9 @@ public class UltimatePredationState
     public Placement? ResolvedSafeFirstSet;
     public Placement? ResolvedSafeSecondSet;
 
-    public UltimatePredationState(UltimatePredationStateOverrides overrides)
+    public UltimatePredationState(Rng rng, UltimatePredationStateOverrides overrides)
     {
+        Rng = rng;
         var centerDodge = overrides.CenterDodge ?? false;
 
         (GarudaPlacement, var garudaIntercardinal) = GetPlacement(Geometry.GarudaPlacements);

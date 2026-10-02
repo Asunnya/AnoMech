@@ -5,6 +5,8 @@ using System.Numerics;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 
+using AnoMech.Scenarios;
+
 namespace AnoMech.Scenarios.Uwu.P1Garuda;
 
 // The opening Mistral Song always targets a healer.
@@ -17,7 +19,6 @@ public sealed class UwuP1GarudaState
     public static readonly Vector3 ChiradaTetherSpot = new(15f, 0f, 0f);
 
     public const float BubbleRadius = 6f;
-    public const float BubbleCleanseSeconds = 1.4f;
 
     private static readonly Vector3[] SatinPlumeSpots =
     [
@@ -48,18 +49,17 @@ public sealed class UwuP1GarudaState
     public SimTether? SuparnaMesohigh { get; set; }
     public SimTether? ChiradaMesohigh { get; set; }
 
-    public UwuP1GarudaState()
+    public UwuP1GarudaState(Rng rng)
     {
-        var rng = new Random();
-        var cardinals = new[] { 0f, 90f, 180f, 270f }.OrderBy(_ => rng.Next()).Take(2).ToArray();
+        var cardinals = rng.Shuffle(0f, 90f, 180f, 270f).Take(2).ToArray();
         SuparnaSongSpot = AtBearing(cardinals[0], SongSpotRadius);
         ChiradaSongSpot = AtBearing(cardinals[1], SongSpotRadius);
         MistralSongTarget = Healers[rng.Next(Healers.Length)];
-        SistersSongTargets = NonTanks.OrderBy(_ => rng.Next()).Take(2).ToList();
+        SistersSongTargets = rng.Shuffle(NonTanks).Take(2).ToList();
         FrictionTargets = [NonTanks[rng.Next(NonTanks.Length)], NonTanks[rng.Next(NonTanks.Length)]];
-        SatinPlumesFirst = SatinPlumeSpots.OrderBy(_ => rng.Next()).Take(4).ToList();
-        SatinPlumesSecond = SatinPlumeSpots.OrderBy(_ => rng.Next()).Take(4).ToList();
-        MesohighTargets = Enum.GetValues<PartyRole>().OrderBy(_ => rng.Next()).Take(2).ToList();
+        SatinPlumesFirst = rng.Shuffle(SatinPlumeSpots).Take(4).ToList();
+        SatinPlumesSecond = rng.Shuffle(SatinPlumeSpots).Take(4).ToList();
+        MesohighTargets = rng.Shuffle(Enum.GetValues<PartyRole>()).Take(2).ToList();
     }
 
     // Compass degrees: 0 = north (-Z), 90 = east (+X).

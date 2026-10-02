@@ -46,10 +46,11 @@ public sealed class M9sAetherlettingState
     public Vector3?[] Puddles { get; } = new Vector3?[8];
     private readonly bool[] diagonalCross = new bool[8];
 
-    private readonly Rng rng = new();
+    private readonly Rng rng;
 
-    public M9sAetherlettingState(M9sAetherlettingStateOverrides overrides)
+    public M9sAetherlettingState(Rng rng, M9sAetherlettingStateOverrides overrides)
     {
+        this.rng = rng;
         FirstConeBearing = rng.NextInt(4) * 45f;
         Spin = overrides.Spin ?? rng.NextObj(ConeSpin.Clockwise, ConeSpin.CounterClockwise);
 

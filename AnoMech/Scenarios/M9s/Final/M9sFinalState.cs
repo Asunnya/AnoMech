@@ -36,9 +36,8 @@ public sealed class M9sFinalState
     public float HalfMoonShortRotation => M9sHalfMoon.ShortRotation(BossTanked.Rotation, HalfMoon);
     public float HalfMoonLongRotation => M9sHalfMoon.LongRotation(BossTanked.Rotation, HalfMoon);
 
-    public M9sFinalState(M9sFinalStateOverrides overrides)
+    public M9sFinalState(Rng rng, M9sFinalStateOverrides overrides)
     {
-        var rng = new Rng();
         Bats = new M9sBatPattern(overrides.Spin, rng, StompShift);
         HalfMoon = overrides.Order ?? rng.NextObj(CleaveOrder.LeftFirst, CleaveOrder.RightFirst);
         ScratchFirstOffset = rng.NextObj(0f, 22.5f);

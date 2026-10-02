@@ -23,9 +23,6 @@ public interface IScenario
     // from each strat's IScenarioAi.Group.
     IReadOnlyList<IScenarioAi> AiStrats { get; }
 
-    // Tanks spawn at this HP so their bar reads like a real tank's; null = the generic doppel HP.
-    uint? TankMaxHealth => null;
-
     // How far into the phase's track the real fight is when this scenario starts.
     float BgmSecondsAtStart => 0f;
 

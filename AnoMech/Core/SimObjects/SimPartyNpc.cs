@@ -1,22 +1,22 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.UserActions;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
 
 namespace AnoMech.Core.SimObjects;
 
-public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
+public sealed class SimPartyNpc : SimNpc, ISimPartyMember
 {
     public PartyRole Role { get; set; }
     public bool Dead { get; private set; }
     public byte ClassJob { get; }
     public string DisplayName { get; }
 
-    internal SimPartyNpc(int index, Coordinates coordinates, PartyRole role, byte classJob, string name) : base(index, coordinates)
+    internal SimPartyNpc(IBattleCharaProxy proxy, Coordinates coordinates, PartyRole role, byte classJob, string name) : base(proxy, coordinates)
     {
         Role = role;
         ClassJob = classJob;
@@ -24,10 +24,37 @@ public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
     }
 
     // A bot's button press: the animation, then the same JobActions effects a player's press applies.
-    public void UseAction(uint actionId)
+    private void UseAction(uint actionId)
     {
         PlayAction(actionId);
         JobActions.ApplyEffects(this, actionId, (ulong)GameObjectId, Random.Shared);
+    }
+
+    // level 1-3. False if KO'd or the job has no limit break at that level.
+    internal bool UseLimitBreak(int level)
+    {
+        if (!this.IsAlive()) return false;
+        var actionId = LimitBreakHandler.ActionId(ClassJob, level);
+        if (actionId == 0) return false;
+        DiagnosticLog.Info($"[SimPartyNpc] {Role} (job {ClassJob}) uses LB{level} {ActionLookup.Name(actionId)}.");
+        UseAction(actionId);
+        return true;
+    }
+
+    private static readonly Dictionary<byte, uint> InvulnActionIdByJob = new()
+    {
+        [19] = 30,    // Paladin: Hallowed Ground
+        [21] = 43,    // Warrior: Holmgang
+        [32] = 3638,  // Dark Knight: Living Dead
+        [37] = 16152, // Gunbreaker: Superbolide
+    };
+
+    // False for a non-tank job.
+    public bool UseInvuln()
+    {
+        if (!InvulnActionIdByJob.TryGetValue(ClassJob, out var actionId)) return false;
+        UseAction(actionId);
+        return true;
     }
 
     public void Knockback(Vector3 source, float distance, float speed) => Movement.Knockback(source, distance, speed);
@@ -45,16 +72,8 @@ public sealed unsafe class SimPartyNpc : SimNpc, ISimPartyMember
     {
         Dead = true;
         StopMoving();
-        var bc = BattleCharaPtr;
-        if (bc == null) return;
-        ApplyDeadState(bc);
+        if (Proxy is not { Exists: true } chara) return;
+        chara.ApplyDeadState();
         this.PlayKoActionTimeline();
-    }
-
-    private static void ApplyDeadState(BattleChara* bc)
-    {
-        bc->Health = 0;
-        bc->Mana = 0;
-        bc->Mode = CharacterModes.Dead;
     }
 }

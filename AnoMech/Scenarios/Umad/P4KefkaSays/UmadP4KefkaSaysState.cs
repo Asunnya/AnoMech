@@ -63,7 +63,7 @@ public sealed record ChaosMystery(ChaosCast Cast, bool IsTrue)
 // the duration of one play. See UmadP2ForsakenState for the canonical shape.
 public sealed class UmadP4KefkaSaysState
 {
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
     public IReadOnlyList<ChaosMystery> ChaosMysteries { get; }
     
@@ -106,8 +106,9 @@ public sealed class UmadP4KefkaSaysState
     public ushort BeyondDeathStatus => Wave3True ? StatusId.BeyondDeath : StatusId.AllaganField;
     public ushort AllaganFieldStatus => Wave3True ? StatusId.AllaganField : StatusId.BeyondDeath;
 
-    public UmadP4KefkaSaysState(SimParty party, UmadP4KefkaSaysStateOverrides overrides)
+    public UmadP4KefkaSaysState(Rng rng, SimParty party, UmadP4KefkaSaysStateOverrides overrides)
     {
+        this.rng = rng;
         // Chaos casts are controlled by position: shuffle which element casts first, then
         // apply the per-cast Real/Fake override (or randomize). InfernoMystery / TsunamiMystery
         // point back at the same instances so the later Mana Release resolution
@@ -137,9 +138,9 @@ public sealed class UmadP4KefkaSaysState
                             .Select(i => NextMystery(i == 0 ? overrides : null))
                             .ToList(); 
 
-        Wave1 = RoleList.RandomRoleStable(party);
+        Wave1 = RoleList.RandomRoleStable(rng, party);
         Wave2 = CalcWave2();
-        Wave3 = RoleList.RandomRoleStable(party);
+        Wave3 = RoleList.RandomRoleStable(rng, party);
         Wounds = Enumerable.Range(0, 8).Select(_ => rng.NextBool()).ToArray();
         NeoExdeathDirection = rng.NextDirection();
         

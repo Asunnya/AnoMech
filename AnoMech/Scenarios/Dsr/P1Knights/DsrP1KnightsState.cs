@@ -43,13 +43,12 @@ public sealed class DsrP1KnightsState
 
     public SimTether? ShieldBashTether { get; set; }
 
-    public DsrP1KnightsState()
+    public DsrP1KnightsState(Rng rng)
     {
-        var rng = new Random();
         ShieldBashSeed = NonTanks[rng.Next(NonTanks.Length)];
         HeavensblazeTarget = NonTanks[rng.Next(NonTanks.Length)];
 
-        var shuffled = Enum.GetValues<PartyRole>().OrderBy(_ => rng.Next()).ToList();
+        var shuffled = rng.Shuffle(Enum.GetValues<PartyRole>()).ToList();
         FirstSlashTargets = shuffled.Take(4).OrderBy(r => r).ToList();
         SecondSlashTargets = shuffled.Skip(4).OrderBy(r => r).ToList();
 
@@ -58,7 +57,7 @@ public sealed class DsrP1KnightsState
 
         var crossTank = Tanks[rng.Next(2)];
         var crossHealer = Healers[rng.Next(2)];
-        var dps = Dps.OrderBy(_ => rng.Next()).ToList();
+        var dps = rng.Shuffle(Dps).ToList();
         var symbols = new Dictionary<PartyRole, ChainSymbol>
         {
             [crossTank] = ChainSymbol.Cross,

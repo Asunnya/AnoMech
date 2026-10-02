@@ -65,7 +65,7 @@ public sealed class M9sDeathmatchScenario : IScenario
         leashes.Clear();
         Array.Clear(bats);
 
-        state = new M9sDeathmatchState(settingsWindow.Overrides);
+        state = new M9sDeathmatchState(world.Rng, settingsWindow.Overrides);
         scratch = new M9sSanguineScratch(damage, state.Satisfied, SpawnHelper);
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<M9sDeathmatchState>)AiStrats[idx]).Run(state, world);

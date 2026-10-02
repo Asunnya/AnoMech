@@ -28,8 +28,8 @@ doesn't work. Marks: ✅ works · ⚠️ partial · ❌ not simulated · ➖ not
 | SMN | Arcanum (Ifrit/Titan/Garuda-Ready) summon-select bits |
 | VPR | Twinfang/Twinblood reciprocal venom grants; Ready-to-Reawaken over-charges SO |
 | RDM | unbalanced-mana coupling; Magicked Swordplay free-cast |
-| PLD | Holy Spirit/Circle double-consume Divine Might + a Requiescat stack; Oath Gauge not generated/spent |
-| SGE | Addersting never generated (Toxikon unusable) |
+| PLD | Holy Spirit/Circle double-consume Divine Might + a Requiescat stack |
+| SGE | Addersting never generated (Toxikon unusable); Eukrasia gauge byte unwritten |
 | WHM | none (fully simulated) |
 | SAM | Meditate's channeled Meditation/Kenki build; Hagakure adds no Kenki |
 | WAR | Lv96 Burgeoning Fury → Wrathful → Primal Wrath chain; Defiance icon |

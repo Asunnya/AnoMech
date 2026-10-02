@@ -24,7 +24,7 @@ public sealed class UmadP3LimitCutScenarioObjects
 // would reach 6/2 far too often.
 public sealed class UmadP3LimitCutState
 {
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
     public UmadP3LimitCutScenarioObjects Objects { get; } = new();
     public int StartSpot { get; }
@@ -57,8 +57,9 @@ public sealed class UmadP3LimitCutState
     // The run's own dice, for the one choice made mid-run: who a dead number's clone charges.
     public T PickRandom<T>(T[] values) => rng.NextObj(values);
 
-    public UmadP3LimitCutState(SimParty party, UmadP3LimitCutStateOverrides overrides)
+    public UmadP3LimitCutState(Rng rng, SimParty party, UmadP3LimitCutStateOverrides overrides)
     {
+        this.rng = rng;
         StartSpot = overrides.StartSpot ?? rng.NextInt(8);
         Clockwise = overrides.Clockwise ?? rng.NextBool();
         BossSpot = overrides.BossSpot ?? rng.NextObj(1, 3, 5, 7);

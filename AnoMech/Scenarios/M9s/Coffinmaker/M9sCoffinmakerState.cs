@@ -49,10 +49,11 @@ public sealed class M9sCoffinmakerState
     public M9sSatisfied Satisfied { get; } = new(0);
     public bool[] CycleIsMore { get; } = new bool[4];
 
-    private readonly Rng rng = new();
+    private readonly Rng rng;
 
-    public M9sCoffinmakerState(M9sCoffinmakerStateOverrides overrides)
+    public M9sCoffinmakerState(Rng rng, M9sCoffinmakerStateOverrides overrides)
     {
+        this.rng = rng;
         FirstSide = overrides.FirstSide ?? rng.NextObj(BossSide.East, BossSide.West);
         SawKill = overrides.SawKill ?? rng.NextObj(SawKill.Fast, SawKill.Fast, SawKill.Fast, SawKill.Average, SawKill.Average, SawKill.Slow);
         var s = (int)FirstSide;

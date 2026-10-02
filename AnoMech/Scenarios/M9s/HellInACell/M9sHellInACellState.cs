@@ -71,9 +71,8 @@ public sealed class M9sHellInACellState
     public IReadOnlyList<Vector3>[] PulpingPulses { get; }
     public M9sSatisfied Satisfied { get; } = new(8);
 
-    public M9sHellInACellState(M9sHellInACellStateOverrides overrides)
+    public M9sHellInACellState(Rng rng, M9sHellInACellStateOverrides overrides)
     {
-        var rng = new Rng();
         var first = FirstSets[overrides.Layout ?? rng.NextObj(0, 1, 1, 2, 3)];
         TowerBearings = [first, AllBearings.Except(first).ToList()];
         UltrasonicOrder =

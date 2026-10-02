@@ -91,6 +91,7 @@ public class UwuConstants
         public const uint MistralShriek = 11092;
         public const uint AerialBlast = 11093;
         public const uint SuperCycloneAwaken = 11189;
+        public const uint SuperCycloneOverload = 11190;
         public const uint Incinerate = 11094;
         public const uint VulcanBurst = 11095;
         public const uint InfernalSurge = 11096;

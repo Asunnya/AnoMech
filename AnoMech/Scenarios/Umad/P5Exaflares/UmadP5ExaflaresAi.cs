@@ -87,7 +87,6 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
     private UmadP5ExaflaresState state = null!;
     private SimWorld world = null!;
     private EventScheduler timeline = null!;
-    private readonly Random rng = new();
     private readonly bool[] relaxMoving = new bool[8];
     private bool spreadPhase;
     private float innerRing = InnerFallback;
@@ -180,8 +179,8 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
 
                 var cur = bot.Position;
                 float baseAngle = MathF.Atan2(cur.X, cur.Z);        // its spawn-ring angle (localPos = sin,cos)
-                float angle = baseAngle + ((float)rng.NextDouble() - 0.5f) * FanAngleJitter;
-                float radius = inner + (float)rng.NextDouble() * (outer - inner);
+                float angle = baseAngle + ((float)world.Rng.NextDouble() - 0.5f) * FanAngleJitter;
+                float radius = inner + (float)world.Rng.NextDouble() * (outer - inner);
                 var target = new Vector3(MathF.Sin(angle) * radius, 0f, MathF.Cos(angle) * radius);
                 bot.MoveTo(target, FanSpeed);
             }
@@ -237,7 +236,7 @@ public sealed class UmadP5ExaflaresAi : IScenarioAi<UmadP5ExaflaresState>
             }
     }
 
-    private float Jitter() => ((float)rng.NextDouble() - 0.5f) * TargetJitter;
+    private float Jitter() => ((float)world.Rng.NextDouble() - 0.5f) * TargetJitter;
 
     // Split a world position into the wave's crit/perp diagonal coords. a = X-Z, b = X+Z; the crit axis
     // is the one this wave's fire runs along (a for a left wave, b for a right wave), perp the other.

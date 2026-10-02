@@ -23,7 +23,7 @@ public sealed record EndAttack(uint CastBarAction, uint KefkaResolveAction, uint
 // for the duration of one play. See TopP5DeltaState for the canonical shape.
 public sealed class UmadP2ForsakenState
 {
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
     public EndAttack[] EndAttacks { get; }
     
@@ -33,8 +33,9 @@ public sealed class UmadP2ForsakenState
     
     public Dictionary<PartyRole, uint> Lockons = [];
 
-    public UmadP2ForsakenState(SimParty party, UmadP2ForsakenStateOverrides overrides)
+    public UmadP2ForsakenState(Rng rng, SimParty party, UmadP2ForsakenStateOverrides overrides)
     {
+        this.rng = rng;
         EndAttacks = [overrides.FirstEndAttack ?? NextEnd(), NextEnd(), NextEnd(), NextEnd()];
         NewNorth = overrides.NewNorth ?? rng.NextDirection();
         Rotation = rng.NextSign();

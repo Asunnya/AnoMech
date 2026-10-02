@@ -136,3 +136,11 @@ indent_style = space
 indent_size = 4
 tab_width = 4
 dotnet_style_parentheses_in_other_operators=always_for_clarity:silent
+
+# Seeded-run rule (BannedSymbols.txt): scenario code draws only from the run's Rng. Core may use
+# System.Random, except where it picks targets or positions (those take the run's Rng).
+[*.cs]
+dotnet_diagnostic.RS0030.severity = none
+
+[AnoMech/Scenarios/**.cs]
+dotnet_diagnostic.RS0030.severity = error

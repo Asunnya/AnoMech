@@ -48,7 +48,7 @@ public sealed class M9sCoffinmakerScenario : IScenario
         corridorActive = false;
         sawAlive = true;
 
-        state = new M9sCoffinmakerState(settingsWindow.Overrides);
+        state = new M9sCoffinmakerState(world.Rng, settingsWindow.Overrides);
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<M9sCoffinmakerState>)AiStrats[idx]).Run(state, world);
 

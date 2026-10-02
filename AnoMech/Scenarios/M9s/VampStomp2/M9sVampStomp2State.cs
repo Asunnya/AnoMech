@@ -37,9 +37,8 @@ public sealed class M9sVampStomp2State
     public float HalfMoonLongRotation => M9sHalfMoon.LongRotation(BossTanked.Rotation, HalfMoon);
     public bool HalfMoonIsMore { get; set; }
 
-    public M9sVampStomp2State(M9sVampStomp2StateOverrides overrides)
+    public M9sVampStomp2State(Rng rng, M9sVampStomp2StateOverrides overrides)
     {
-        var rng = new Rng();
         Bats = new M9sBatPattern(overrides.Spin, rng);
         HalfMoon = overrides.Order ?? rng.NextObj(CleaveOrder.LeftFirst, CleaveOrder.RightFirst);
         BrutalRainTarget = rng.NextObj(PartyRole.RegenHealer, PartyRole.ShieldHealer);

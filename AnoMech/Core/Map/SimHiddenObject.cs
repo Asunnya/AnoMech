@@ -1,4 +1,4 @@
-using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.SimObjects;
 
 namespace AnoMech.Core.Map;
@@ -14,7 +14,7 @@ namespace AnoMech.Core.Map;
 // recreated object isn't mistaken for the original. Tick is a no-op today; if
 // the game's event system later re-enables drawing on the persistent object, a
 // re-assert in Tick is the natural place for it.
-public sealed unsafe class SimHiddenObject : ISimObject
+public sealed class SimHiddenObject : ISimObject
 {
     private readonly ushort objectIndex;
     private readonly uint baseId;
@@ -32,15 +32,7 @@ public sealed unsafe class SimHiddenObject : ISimObject
     // such object is in the current zone.
     public static SimHiddenObject? Hide(uint baseId)
     {
-        foreach (var go in Plugin.ObjectTable)
-        {
-            if (go.BaseId != baseId) continue;
-            var obj = (GameObject*)go.Address;
-            obj->DisableDraw();
-            obj->RenderFlags |= VisibilityFlags.Model | VisibilityFlags.Nameplate;
-            return new SimHiddenObject(go.ObjectIndex, baseId);
-        }
-        return null;
+        return Natives.HiddenObjects.Hide(baseId) is { } objectIndex ? new SimHiddenObject(objectIndex, baseId) : null;
     }
 
     public bool IsAlive => hidden;
@@ -50,19 +42,7 @@ public sealed unsafe class SimHiddenObject : ISimObject
     public void Despawn()
     {
         if (!hidden) return;
-        var obj = Lookup();
-        if (obj != null)
-        {
-            obj->RenderFlags &= ~(VisibilityFlags.Model | VisibilityFlags.Nameplate);
-            obj->EnableDraw();
-        }
+        Natives.HiddenObjects.Restore(objectIndex, baseId);
         hidden = false;
-    }
-
-    private GameObject* Lookup()
-    {
-        var obj = (GameObject*)Plugin.ObjectTable.GetObjectAddress(objectIndex);
-        if (obj == null || obj->BaseId != baseId) return null;
-        return obj;
     }
 }

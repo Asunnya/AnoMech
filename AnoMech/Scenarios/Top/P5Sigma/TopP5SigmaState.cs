@@ -14,7 +14,7 @@ namespace AnoMech.Scenarios.Top.P5Sigma
 
     public sealed class TopP5SigmaState
     {
-        private readonly Rng rng = new();
+        private readonly Rng rng = Rng.Detached;
 
         public RoleList Order { get; }
         public RoleList WaveCannonTargets { get; }
@@ -49,14 +49,15 @@ namespace AnoMech.Scenarios.Top.P5Sigma
         public int FirstMissing;
         public int SecondMissing;
 
-        public TopP5SigmaState(SimParty party, TopP5SigmaStateOverrides overrides)
+        public TopP5SigmaState(Rng rng, SimParty party, TopP5SigmaStateOverrides overrides)
         {
-            Order = RoleList.Random(party);
+            this.rng = rng;
+            Order = RoleList.Random(rng, party);
             DynamisTargets = new RoleListBuilder
             {
                 Size = 6,
                 Membership = overrides.ResolveDynamis(party.PlayerRole),
-            }.Build(party);
+            }.Build(rng, party);
             WaveCannonTargets = SelectWaveCannonTargets(Order);
 
             NewNorthA = overrides.NewNorthA ?? rng.NextDirection();
@@ -72,7 +73,7 @@ namespace AnoMech.Scenarios.Top.P5Sigma
                 Size = 2,
                 Slots = helloSlots,
                 Membership = helloMembership,
-            }.Build(party);
+            }.Build(rng, party);
 
             HandBait = DynamisTargets.Random(rng, 2, HelloWorldTargets.List);
             HelloWorldJumpOrder = new RoleList(party, Enum.GetValues<PartyRole>())
@@ -157,7 +158,7 @@ namespace AnoMech.Scenarios.Top.P5Sigma
             if (skip2 >= skip1 / 2 * 2) skip2 += 2;
             FirstMissing = skip1;
             SecondMissing = skip2;
-            return RoleList.AllExcept(tethers.Party, tethers[skip1], tethers[skip2]);
+            return RoleList.AllExcept(rng, tethers.Party, tethers[skip1], tethers[skip2]);
         }
 
         public (PartyRole left, PartyRole right) FullPair(int index)

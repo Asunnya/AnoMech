@@ -1,7 +1,8 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.SimObjects;
-using LuminaAction = Lumina.Excel.Sheets.Action;
 
 namespace AnoMech.Core.UserActions;
 
@@ -48,8 +49,8 @@ internal static class ActionTargets
         }
     }
 
-    private static bool TryGetAction(uint actionId, out LuminaAction action)
-        => Plugin.DataManager.GetExcelSheet<LuminaAction>().TryGetRow(actionId, out action);
+    private static bool TryGetAction(uint actionId, [NotNullWhen(true)] out ActionRow? action)
+        => (action = Natives.Data.Action(actionId)) != null;
 
     // An AoE reaches a target whose hitbox edge is inside it, not just its centre.
     private static bool InRange(SimCharacter caster, SimCharacter target, float range)

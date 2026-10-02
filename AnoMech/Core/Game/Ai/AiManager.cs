@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.Game.Ai;
 
@@ -26,7 +27,6 @@ public sealed class AiManager
     private const float MoveDeadlineSafetyMargin = 0.25f;
 
     private readonly SimWorld world;
-    private readonly Random rng = new();
 
     public AiManager(SimWorld world)
     {
@@ -109,26 +109,25 @@ public sealed class AiManager
         });
     }
 
-    // Schedule temporary death-immunity for `role` at scenario-time `time`, e.g.
-    // ai.GiveInvuln(28f, PartyRole.OffTank).
-    public void GiveInvuln(float time, PartyRole role, float seconds = 10f)
-        => world.Events.Add(time, () => world.Party.GiveInvuln(role, seconds));
+    public void UseInvuln(float time, PartyRole role)
+        => world.Events.Add(time, () => (world.Party.Get(role) as ISimPartyMember)?.UseInvuln());
 
     public void Automarker(float time, Func<Dictionary<PartyRole, Sign>> mapping)
     {
         world.Events.Add(time, () =>
         {
-            Markings.ClearAll();
+            Natives.Markings.ClearAll();
             var marks = mapping();
             AnoMech.Core.DiagnosticLog.Info($"[AiManager] Automarker@{time:F1}: [{string.Join(", ", marks.Select(kv => $"{kv.Key}={kv.Value}"))}].");
             foreach (var (role, sign) in marks)
                 if (world.Party.Get(role) is { } member && member.IsAlive())
-                    Markings.Set(sign, member.GameObjectId);
+                    Natives.Markings.Set(sign, member.GameObjectId);
         });
     }
 
     private Vector3 Jitter(Vector3 target, float radius)
     {
+        var rng = world.Stream("ai-jitter");
         var theta = rng.NextDouble() * 2.0 * Math.PI;
         var r = radius * MathF.Sqrt((float)rng.NextDouble());
         return new Vector3(

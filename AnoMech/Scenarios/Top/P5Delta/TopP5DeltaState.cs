@@ -77,10 +77,8 @@ public sealed class TopP5DeltaState
                           .FirstOrDefault(0);
     }
 
-    public TopP5DeltaState(TopP5DeltaStateOverrides overrides, PartyRole playerRole)
+    public TopP5DeltaState(Rng rng, TopP5DeltaStateOverrides overrides, PartyRole playerRole)
     {
-        var rng = new Random();
-
         var roles = ShuffleRoles(rng);
 
         var tethers = Requests(overrides.Tether, playerRole);
@@ -138,7 +136,7 @@ public sealed class TopP5DeltaState
     // that asked for a band is swapped into it in seat order; a seat arriving at a band whose
     // slots are all claimed keeps whatever the shuffle gave it.
     private static void SeatTethers(
-        Random rng, PartyRole[] roles,
+        Rng rng, PartyRole[] roles,
         Dictionary<PartyRole, PlayerTetherAssignment> tethers,
         Dictionary<PartyRole, bool> monitors,
         Dictionary<PartyRole, HelloWorldOption> hellos,
@@ -194,7 +192,7 @@ public sealed class TopP5DeltaState
 
     // One of the four close slots for a job only one player can have. A seat that asked for it
     // takes it (earliest seat first); otherwise it goes to a slot nobody refused.
-    private static int PickCloseSlot(Random rng, PartyRole[] roles, Dictionary<PartyRole, bool> want, params int[] taken)
+    private static int PickCloseSlot(Rng rng, PartyRole[] roles, Dictionary<PartyRole, bool> want, params int[] taken)
     {
         var free = Enumerable.Range(0, 4).Where(i => !taken.Contains(i)).ToList();
         if (free.Count == 0) free = [0, 1, 2, 3];
@@ -242,9 +240,9 @@ public sealed class TopP5DeltaState
                eyeSpawnIsNorth, swivelCannonSideIsLeft, armHandednessIsLeft, farWorldRole, nearWorldRole,
                farWorldTetherIndex);
 
-    private static Side RandomSide(Random rng) => rng.Next(2) == 0 ? Side.Left : Side.Right;
+    private static Side RandomSide(Rng rng) => rng.Next(2) == 0 ? Side.Left : Side.Right;
 
-    private static PartyRole[] ShuffleRoles(Random rng)
+    private static PartyRole[] ShuffleRoles(Rng rng)
     {
         var roles = (PartyRole[])Enum.GetValues(typeof(PartyRole));
         for (int i = roles.Length - 1; i > 0; i--)
@@ -256,7 +254,7 @@ public sealed class TopP5DeltaState
         return roles;
     }
 
-    private static Side[] ShuffleSides(Random rng)
+    private static Side[] ShuffleSides(Rng rng)
     {
         var sides = new[] { Side.Left, Side.Left, Side.Left, Side.Right, Side.Right, Side.Right };
         for (int i = sides.Length - 1; i > 0; i--)
@@ -268,7 +266,7 @@ public sealed class TopP5DeltaState
         return sides;
     }
 
-    private static T[] ShuffleInPlace<T>(T[] values, Random rng)
+    private static T[] ShuffleInPlace<T>(T[] values, Rng rng)
     {
         for (int i = values.Length - 1; i > 0; i--)
         {

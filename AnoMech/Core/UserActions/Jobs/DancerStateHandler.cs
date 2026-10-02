@@ -10,14 +10,12 @@ namespace AnoMech.Core.UserActions.Jobs;
 // Standard/Technical Step + Finish statuses stay in the JobActions data table.
 internal sealed unsafe class DancerStateHandler : IUserActionHandler
 {
-    private const uint Dnc = 38;
-
     private readonly System.Random _rng = new();
 
     public void OnAction(ActionType actionType, uint actionId)
     {
         if (actionType != ActionType.Action) return;
-        if (Plugin.PlayerState.ClassJob.RowId != Dnc) return;
+        if (PlayerJob.Current != JobId.Dancer) return;
         var jgm = JobGaugeManager.Instance();
         if (jgm == null) return;
 

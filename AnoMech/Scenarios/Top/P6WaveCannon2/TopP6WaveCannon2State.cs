@@ -8,16 +8,17 @@ namespace AnoMech.Scenarios.Top.P6WaveCannon2;
 // for the duration of one play. See TopP5DeltaState for the canonical shape.
 public sealed class TopP6WaveCannon2State
 {
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
     public RoleList ProteanOrder { get; }
     public PartyRole WildChargeTarget { get; }
     
     public bool InFirst { get; }
 
-    public TopP6WaveCannon2State(SimParty party, TopP6WaveCannon2StateOverrides overrides)
+    public TopP6WaveCannon2State(Rng rng, SimParty party, TopP6WaveCannon2StateOverrides overrides)
     {
-        ProteanOrder = RoleList.Random(party);
+        this.rng = rng;
+        ProteanOrder = RoleList.Random(rng, party);
         WildChargeTarget = rng.NextRole();
         InFirst = overrides.InFirst ?? rng.NextBool();
     }

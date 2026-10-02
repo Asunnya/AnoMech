@@ -23,7 +23,6 @@ namespace AnoMech.Core.UserActions;
 // statuses are still present when we check them.
 internal sealed unsafe class CastTimeHandler : IUserActionHandler
 {
-    private const uint Rdm = 35;
     private const ushort SwiftcastStatus = 167, DualcastStatus = 1393, TriplecastStatus = 1211;
     private const ushort Acceleration = 1238, Firestarter = 165, Thunderhead = 3870;
     private const uint SwiftcastAction = 7561, TriplecastAction = 7421, Foul = 7422;
@@ -75,7 +74,7 @@ internal sealed unsafe class CastTimeHandler : IUserActionHandler
 
         // Grant Dualcast when a genuine RDM hard cast completes (OnTick). Skip if Dualcast was just
         // consumed on this cast, or if the cast was made instant (no cast bar).
-        if (isCastTimeSpell && !dualcastConsumed && Plugin.PlayerState.ClassJob.RowId == Rdm)
+        if (isCastTimeSpell && !dualcastConsumed && PlayerJob.Current == JobId.RedMage)
         {
             var bc = (BattleChara*)(Plugin.ObjectTable.LocalPlayer?.Address ?? 0);
             if (bc != null && bc->CastInfo.IsCasting && bc->CastInfo.TotalCastTime > 0.1f)

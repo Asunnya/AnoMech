@@ -24,7 +24,6 @@ public sealed class UmadP3BlackHoleScenario : IMultiplayerReplayable
     public string Name => "Black Hole";
     public IPhase Phase => UmadZone.P3;
     public bool SupportsMultiplayer => true;
-    public uint? TankMaxHealth => Tunables.RealTankMaxHealth;
 
     public void DrawSettings() => settingsWindow.Draw();
     public bool HasPerPlayerSettings => true;

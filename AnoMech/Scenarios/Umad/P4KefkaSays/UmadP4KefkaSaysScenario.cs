@@ -7,10 +7,10 @@ using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
-using AnoMech.Core.Native;
 using AnoMech.Core.SimObjects;
 using AnoMech.Multiplayer;
 using static AnoMech.Scenarios.Umad.UmadConstants;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Scenarios.Umad.P4KefkaSays;
 
@@ -23,7 +23,6 @@ public sealed class UmadP4KefkaSaysScenario : IMultiplayerReplayable
     public string Name => "Kefka Says";
     public IPhase Phase => UmadZone.P4;
     public bool SupportsMultiplayer => true;
-    public uint? TankMaxHealth => Tunables.RealTankMaxHealth;
 
     public void DrawSettings() => settingsWindow.Draw();
     public object SettingsOverrides => settingsWindow.Overrides;
@@ -53,7 +52,7 @@ public sealed class UmadP4KefkaSaysScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new UmadP4KefkaSaysState(party, settingsWindow.Overrides);
+        state = new UmadP4KefkaSaysState(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UmadP4KefkaSaysState>)AiStrats[idx]).Run(state, world);
@@ -87,8 +86,8 @@ public sealed class UmadP4KefkaSaysScenario : IMultiplayerReplayable
     // Scheduled by host and peer alike, so each client fakes its own tank's LB3 gauge.
     public void RunInstanceEvents(SimWorld instanceWorld)
     {
-        ActionTimelinePreload.Preload(NeoExdeathTimelines, "UmadP4KefkaSays");
-        instanceWorld.SetLimitBreakGauge(3f);
+        Natives.TimelinePreload.Preload(NeoExdeathTimelines, "UmadP4KefkaSays");
+        instanceWorld.Party.LimitBreak.Set(3f);
     }
 
     private void Run_InstanceEvents()

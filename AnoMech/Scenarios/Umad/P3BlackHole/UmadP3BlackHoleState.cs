@@ -13,7 +13,7 @@ namespace AnoMech.Scenarios.Umad.P3BlackHole;
 // the duration of one play. See UmadP4KefkaSaysState for the canonical shape.
 public sealed class UmadP3BlackHoleState
 {
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
     public UmadP3BlackHoleScenarioObjects ScenarioObjects { get; }
 
@@ -42,6 +42,7 @@ public sealed class UmadP3BlackHoleState
 
     public UmadP3BlackHoleState(SimWorld world, UmadP3BlackHoleStateOverrides overrides)
     {
+        rng = world.Rng;
         var party = world.Party;
         // Only the debug "aim every cone at me" option needs a single subject; the first seat
         // asking for it wins.
@@ -133,7 +134,7 @@ public sealed class UmadP3BlackHoleState
                 if (TrySeatRoles(swap, requests) is { } relaxed)
                     return new RoleList(party, relaxed);
         }
-        return RoleList.RandomRoleStable(party);
+        return RoleList.RandomRoleStable(rng, party);
     }
 
     // Backtracking fill of the eight final slots. A seat with no request goes anywhere its role

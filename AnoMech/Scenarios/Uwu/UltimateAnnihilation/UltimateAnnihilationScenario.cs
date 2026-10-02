@@ -103,7 +103,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
         party = world.Party;
         utils = new UwuUtils(world);
         damage = new DamageSolver(party);
-        state = new UltimateAnnihilationState(party, settingsWindow.Overrides);
+        state = new UltimateAnnihilationState(world.Rng, party, settingsWindow.Overrides);
         orbs.Clear();
         searingWindHits.Clear();
         superCycloneSpots.Clear();
@@ -291,7 +291,7 @@ public sealed class UltimateAnnihilationScenario : IScenario
         var spots = new Vector3[WeightOfTheLandPuddles];
         world.Events.Add(castAt, () =>
         {
-            var targets = RoleList.Random(party, WeightOfTheLandPuddles).List;
+            var targets = RoleList.Random(world.Rng, party, WeightOfTheLandPuddles).List;
             for (var i = 0; i < spots.Length; i++)
             {
                 spots[i] = Get(targets[i])?.Position ?? Vector3.Zero;

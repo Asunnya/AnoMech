@@ -19,6 +19,8 @@ public readonly record struct Mitigation(
 
     public bool IsShield => ShieldHp > 0f || ShieldPotency > 0f;
 
+    private float ShieldFractionOfMaxHp => ShieldHp + ShieldPotency * ShieldHpPerPotency;
+
     public static bool IsInvuln(ushort statusId) => ByStatusId.TryGetValue(statusId, out var m) && m.Damage >= Invulnerable;
 
     public static readonly IReadOnlyDictionary<ushort, Mitigation> ByStatusId = new Dictionary<ushort, Mitigation>
@@ -79,9 +81,19 @@ public readonly record struct Mitigation(
         {
             if (!ByStatusId.TryGetValue(id, out var m)) continue;
             taken *= (1f - m.Damage) * (1f - (kind == DamageKind.Magic ? m.Magic : m.Physical));
-            pool += m.ShieldHp + m.ShieldPotency * ShieldHpPerPotency + m.MaxHp;
+            pool += m.ShieldFractionOfMaxHp + m.MaxHp;
         }
         return 1f - taken / pool;
+    }
+
+    // Banked shield as a fraction of max HP: what the gold overlay on the HP bar shows.
+    public static float ShieldFraction(IEnumerable<ushort> statusIds)
+    {
+        var shield = 0f;
+        foreach (var id in statusIds)
+            if (ByStatusId.TryGetValue(id, out var m))
+                shield += m.ShieldFractionOfMaxHp;
+        return shield;
     }
 
     // A shield is used up by the hit it was counted against. A status carries either a

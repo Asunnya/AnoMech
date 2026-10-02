@@ -37,9 +37,8 @@ public sealed class M9sFlailsState
     public int Layout { get; }
     public M9sSatisfied Satisfied { get; } = new(4);
 
-    public M9sFlailsState(M9sFlailsStateOverrides overrides)
+    public M9sFlailsState(Rng rng, M9sFlailsStateOverrides overrides)
     {
-        var rng = new Rng();
         Layout = overrides.Layout ?? rng.NextObj(0, 1, 1, 2, 3, 3);
         Rounds = Sequences[Layout];
     }
