@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game;
@@ -10,12 +9,12 @@ using AnoMech.Core.SimObjects;
 using AnoMech.Multiplayer;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
-using FFXIVClientStructs.FFXIV.Client.Network;
 using static AnoMech.Scenarios.Uwu.UwuConstants;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Scenarios.Uwu.UltimateSuppression;
 
-public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
+public class UltimateSuppressionScenario : IMultiplayerReplayable
 {
     public string Name => "Ultimate Suppression";
     public IPhase Phase => UwuZone.Ultima;
@@ -47,8 +46,9 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
     private SimEnemy?[] dummies = new SimEnemy?[13];
 
     private bool razorPlumesDamage = false;
-    private Stopwatch razorPlumesRotate = new();
-    private Stopwatch razorPlumesBack = new();
+    // Seconds into each plume movement; null while it isn't running.
+    private float? razorPlumesRotate;
+    private float? razorPlumesBack;
     private Dictionary<SimEnemy, Placement> razorPlumes = new();
 
     // The arena reveal is fixed-time and independent of this run's randomization, so it belongs
@@ -69,12 +69,12 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
         this.world = world;
         party = world.Party;
 
-        state = new(party, settingsWindow.Overrides);
+        state = new(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
 
         razorPlumesDamage = false;
-        razorPlumesRotate.Reset();
-        razorPlumesBack.Reset();
+        razorPlumesRotate = null;
+        razorPlumesBack = null;
         DespawnRazorPlumes();
 
         if (selectedAi is { } idx && idx < AiStrats.Count)
@@ -90,9 +90,10 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
 
     public void Tick(float delta, float elapsed)
     {
-        if (razorPlumesRotate.IsRunning)
+        if (razorPlumesRotate is { } rotateElapsed)
         {
-            var fraction = float.Min((float)razorPlumesRotate.Elapsed.TotalSeconds / Duration.RazorPlumeRotation, 1);
+            razorPlumesRotate = rotateElapsed + delta;
+            var fraction = float.Min(razorPlumesRotate.Value / Duration.RazorPlumeRotation, 1);
             var angle = fraction * Geometry.RazorPlumeRotation;
 
             foreach (var (razorPlume, placement) in razorPlumes)
@@ -101,9 +102,10 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
                 razorPlume!.SetPosition(rotatedPlacement);
             }
         }
-        else if (razorPlumesBack.IsRunning)
+        else if (razorPlumesBack is { } backElapsed)
         {
-            var fraction = float.Min((float)razorPlumesBack.Elapsed.TotalSeconds / Duration.RazorPlumeBack, 1);
+            razorPlumesBack = backElapsed + delta;
+            var fraction = float.Min(razorPlumesBack.Value / Duration.RazorPlumeBack, 1);
             var distance = fraction * Geometry.RazorPlumeBackDistance;
 
             foreach (var (razorPlume, placement) in razorPlumes)
@@ -429,23 +431,23 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
 
         world.Events.Add(20.82f, () =>
         {
-            garuda?.Face(party.GetRandom());
-            razorPlumesRotate.Start();
+            garuda?.Face(party.GetRandom(world.Rng));
+            razorPlumesRotate = 0f;
         });
 
         world.Events.Add(20.82f + Duration.RazorPlumeRotation, () =>
         {
-            razorPlumesRotate.Stop();
+            razorPlumesRotate = null;
 
             foreach (var key in razorPlumes.Keys)
             {
                 razorPlumes[key] = key.Placement();
             }
 
-            razorPlumesBack.Start();
+            razorPlumesBack = 0f;
         });
 
-        world.Events.Add(20.82f + Duration.RazorPlumeRotation + Duration.RazorPlumeBack, razorPlumesBack.Stop);
+        world.Events.Add(20.82f + Duration.RazorPlumeRotation + Duration.RazorPlumeBack, () => razorPlumesBack = null);
 
         // ActionId.MistralSong is Animation Only (TODO: does this actually do damage outside the cone?)
         utils.Cast(getGaruda,
@@ -536,8 +538,8 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
         {
             foreach (var (razorPlume, _) in razorPlumes)
             {
-                PacketDispatcher.HandleActorControlPacket(razorPlume!.EntityId, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0xE0000000, false); // Death Animation
-                PacketDispatcher.HandleActorControlPacket(razorPlume!.EntityId, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0xE0000000, false); // Set Mode
+                razorPlume!.ActorControl(14); // Death Animation
+                razorPlume!.ActorControl(2, 2); // Set Mode
             }
 
             razorPlumesDamage = false;
@@ -547,7 +549,7 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
         {
             foreach (var (razorPlume, _) in razorPlumes)
             {
-                PacketDispatcher.HandleActorControlPacket(razorPlume!.EntityId, 39, 0, 0, 0, 0, 0, 0, 0, 0, 0xE0000000, false); // Fade-Out
+                razorPlume!.ActorControl(39); // Fade-Out
             }
         });
 
@@ -665,7 +667,7 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
 
         world.Events.Add(21.32f, () =>
         {
-            PacketDispatcher.HandleActorControlPacket(state.PlayerGaol!.EntityId, 54, 0, 0, 0, 0, 0, 0, 0, 0, 0xE0000000, false); // Make Untargetable
+            state.PlayerGaol!.ActorControl(54); // Make Untargetable
 
             state.PlayerGaol!.AddStatusParam(StatusId.Fetters, 0);
             state.PlayerGaol.StopMoving();
@@ -692,7 +694,7 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
         );
 
         // Unknown
-        world.Events.Add(23.32f, () => PacketDispatcher.HandleActorControlPacket(graniteGaol!.EntityId, 36, 1, 142, 0, 0, 0, 0, 0, 0, 0xE0000000, false));
+        world.Events.Add(23.32f, () => graniteGaol!.ActorControl(36, 1, 142));
 
         world.Events.Add(23.54f, () =>
         {
@@ -714,7 +716,7 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
         // Gaol gets removed as soon as cast ends, to not give that much of an advantage to the player
         world.Events.Add(30.24f, () =>
         {
-            PacketDispatcher.HandleActorControlPacket(state.PlayerGaol!.EntityId, 54, 1, 0, 0, 0, 0, 0, 0, 0, 0xE0000000, false); // Make Targetable
+            state.PlayerGaol!.ActorControl(54, 1); // Make Targetable
 
             state.PlayerGaol!.RemoveStatus(StatusId.Fetters);
 
@@ -723,14 +725,14 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
                 SetStun(false);
             }
 
-            ((Character*)graniteGaol!.BattleCharaPtr)->SetMode(CharacterModes.Dead, 0);
-            PacketDispatcher.HandleActorControlPacket(graniteGaol!.EntityId, 15, 540, 1, ActionId.GraniteImpact, 1, 0, 0, 0, 0, 0xE0000000, false); // Cast Interrupt
-            PacketDispatcher.HandleActorControlPacket(graniteGaol!.EntityId, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0xE0000000, false); // Death Animation
+            graniteGaol!.Proxy?.SetMode(CharacterModes.Dead);
+            graniteGaol!.ActorControl(15, 540, 1, ActionId.GraniteImpact, 1); // Cast Interrupt
+            graniteGaol!.ActorControl(14); // Death Animation
         });
 
         world.Events.Add(32.84f, () =>
         {
-            var bait = party.GetRandom();
+            var bait = party.GetRandom(world.Rng);
             titan?.Face(bait);
         });
 
@@ -744,7 +746,7 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
 
         utils.LandslideLines(() => titan, [() => dummies[3], () => dummies[4], () => dummies[5], () => dummies[6], () => dummies[7]], 35.07f, 37.22f, LandslideType.Awaken);
 
-        world.Events.Add(36.95f, () => PacketDispatcher.HandleActorControlPacket(graniteGaol!.EntityId, 39, 0, 0, 0, 0, 0, 0, 0, 0, 0xE0000000, false)); // Fade-Out
+        world.Events.Add(36.95f, () => graniteGaol!.ActorControl(39)); // Fade-Out
 
         world.Events.Add(38.78f, () => graniteGaol?.Despawn());
 
@@ -887,14 +889,12 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
 
     private void SetStun(bool value)
     {
-        var condition = Conditions.Instance();
-        condition->SufferingStatusAffliction = value;
-        condition->SufferingStatusAffliction2 = value;
+        Natives.PlayerInput.SetStatusAffliction(value);
     }
 
     private void Lockon(SimCharacter? target, uint lockonId)
     {
-        PacketDispatcher.HandleActorControlPacket(target!.EntityId, 34, lockonId, target!.GameObjectId.ObjectId, 0, 0, 0, 0, 0, 0, 0xE0000000, false);
+        target!.ActorControl(34, lockonId, target.GameObjectId.ObjectId);
     }
 
     private Vector3 ResolveMistralSong(IReadOnlyList<SimCharacter> snapshot)

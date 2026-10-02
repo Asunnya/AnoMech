@@ -16,6 +16,7 @@ using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using AnoMech.Scenarios;
 using AnoMech.Scenarios.Umad;
+using AnoMech.Core.Native.Implementations.Interop;
 
 namespace AnoMech.Multiplayer;
 
@@ -279,7 +280,7 @@ public sealed partial class MultiplayerManager
                     DiagnosticLog.Info($"[Multiplayer] Host: role {role} NewLockonVfxIds -> [{string.Join(",", newLockonVfxIds)}].");
                 newVfx = DrainVfx(member, $"role {role}");
                 statuses = member.ActiveStatuses.Select(s => new EnemyStatusState(s.StatusId, s.Stacks, s.RemainingTime, s.Instance)).ToList();
-                var bc = member.BattleCharaPtr;
+                var bc = member.BattleCharaPtr();
                 if (bc != null)
                 {
                     currentHp = bc->Health;

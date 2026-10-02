@@ -38,7 +38,7 @@ public sealed class TopP2PartySynergyScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new TopP2PartySynergyState(world.Party, settingsWindow.Overrides);
+        state = new TopP2PartySynergyState(world.Rng, world.Party, settingsWindow.Overrides);
         LastState = state;
         topUtils = new TopUtils(world);
         damage = new DamageSolver(world.Party);
@@ -95,7 +95,7 @@ public sealed class TopP2PartySynergyScenario : IMultiplayerReplayable
     {
         if(solo)
         {
-            world.Events.Add(7.93f, () => state.Order.ForEach(p => p.AttachLockonVfx(LockonId.Playstation[new Random().Next(4)], persistent: false)));
+            world.Events.Add(7.93f, () => state.Order.ForEach(p => p.AttachLockonVfx(LockonId.Playstation[world.Rng.Next(4)], persistent: false)));
             return;
         }
         world.Events.Add(7.93f, () => state.Order.ForEach((i, p) =>

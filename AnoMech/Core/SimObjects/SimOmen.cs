@@ -1,8 +1,7 @@
 using System;
 using System.Numerics;
 using AnoMech.Core.Game;
-using AnoMech.Core.Native;
-using FFXIVClientStructs.FFXIV.Client.Graphics.Scene;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -25,14 +24,14 @@ namespace AnoMech.Core.SimObjects;
 //
 // Bad VFX paths crash on the file thread, so every candidate is validated via
 // DataManager.FileExists (ResolveOmenPath) before StaticVfxCreate is called.
-public sealed unsafe class SimOmen : ISimObject
+public sealed class SimOmen : ISimObject
 {
     // Like every SimObject, SimOmen works in scenario-local coordinates and converts
-    // to global only at the native boundary (SpawnStaticVfx).
+    // to global only at the native boundary (IVfxFunctions.SpawnStatic).
     private readonly Coordinates coordinates;
 
-    private VfxObject* primary;
-    private VfxObject* alt;
+    private IStaticVfxProxy? primary;
+    private IStaticVfxProxy? alt;
 
     // null = persistent (cleared explicitly by the owner); otherwise seconds left
     // before this omen reports itself inactive for reaping.
@@ -61,7 +60,7 @@ public sealed unsafe class SimOmen : ISimObject
             Plugin.Log.Warning($"SimOmen: omen file not found (raw='{omenPath}')");
             return;
         }
-        primary = VfxFunctions.SpawnStaticVfx(resolved, coordinates.ToGlobal(placement), scale);
+        primary = Natives.Vfx.SpawnStatic(resolved, coordinates.ToGlobal(placement), scale);
     }
 
     public bool IsActive => (primary != null || alt != null) && (remaining is not { } r || r > 0f);
@@ -73,32 +72,25 @@ public sealed unsafe class SimOmen : ISimObject
 
     public void Despawn()
     {
-        if (primary != null)
-        {
-            VfxFunctions.RemoveStaticVfx(primary);
-            primary = null;
-        }
-        if (alt != null)
-        {
-            VfxFunctions.RemoveStaticVfx(alt);
-            alt = null;
-        }
+        primary?.Remove();
+        primary = null;
+        alt?.Remove();
+        alt = null;
     }
 
     private void SpawnFromAction(uint actionId, Vector3 origin, float rotation)
     {
-        var actionSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
-        if (!actionSheet.TryGetRow(actionId, out var action))
+        if (Natives.Data.Action(actionId) is not { } action)
         {
             Plugin.Log.Information($"SimOmen: action row {actionId:X} ({actionId}) not found in sheet");
             return;
         }
-        if (action.Omen.ValueNullable is not { } omen || omen.RowId == 0)
+        if (action.OmenPath is not { } omenPath)
         {
             Plugin.Log.Information($"SimOmen: action {actionId:X} ({actionId}) has no Omen entry (Omen.RowId=0 or null)");
             return;
         }
-        var resolvedPath = ResolveActionOmenPath(actionId, omen.Path.ToString());
+        var resolvedPath = ResolveActionOmenPath(actionId, omenPath);
         if (resolvedPath == null) return;
         Plugin.Log.Information($"SimOmen: action {actionId:X} omen path resolved to '{resolvedPath}' (CastType={action.CastType}, EffectRange={action.EffectRange}, XAxisMod={action.XAxisModifier})");
 
@@ -113,7 +105,7 @@ public sealed unsafe class SimOmen : ISimObject
         };
         var globalOrigin = coordinates.ToGlobal(origin);
         Plugin.Log.Information($"SimOmen: action {actionId:X} origin(local)=<{origin.X:F2},{origin.Y:F2},{origin.Z:F2}> rot={rotation:F3} scale=<{scale.X:F2},{scale.Y:F2},{scale.Z:F2}>");
-        primary = VfxFunctions.SpawnStaticVfx(resolvedPath, new Placement(globalOrigin, rotation), scale);
+        primary = Natives.Vfx.SpawnStatic(resolvedPath, new Placement(globalOrigin, rotation), scale);
 
         // CastType 11 is a "+" cross whose Omen sheet entry points at the same single-bar
         // file (`general_x02f`) as a regular rect; the cross visual is formed by spawning
@@ -121,14 +113,14 @@ public sealed unsafe class SimOmen : ISimObject
         if (action.CastType == 11)
         {
             var perpRotation = MathUtil.NormalizeRotation(rotation + MathF.PI / 2f);
-            alt = VfxFunctions.SpawnStaticVfx(resolvedPath, new Placement(globalOrigin, perpRotation), scale);
+            alt = Natives.Vfx.SpawnStatic(resolvedPath, new Placement(globalOrigin, perpRotation), scale);
         }
-        else if (action.OmenAlt.ValueNullable is { } omenAlt && omenAlt.RowId != 0)
+        else if (action.OmenAltPath is { } omenAltPath)
         {
             // Defensive: some non-cross actions populate OmenAlt with a paired shape.
-            var altPath = ResolveActionOmenPath(actionId, omenAlt.Path.ToString());
+            var altPath = ResolveActionOmenPath(actionId, omenAltPath);
             if (altPath != null)
-                alt = VfxFunctions.SpawnStaticVfx(altPath, new Placement(globalOrigin, rotation), scale);
+                alt = Natives.Vfx.SpawnStatic(altPath, new Placement(globalOrigin, rotation), scale);
         }
     }
 
@@ -151,8 +143,8 @@ public sealed unsafe class SimOmen : ISimObject
         var fullPath = withExt.Contains('/') ? withExt : $"vfx/omen/eff/{withExt}";
         try
         {
-            if (Plugin.DataManager.FileExists(fullPath)) return fullPath;
-            if (fullPath != withExt && Plugin.DataManager.FileExists(withExt)) return withExt;
+            if (Natives.Data.FileExists(fullPath)) return fullPath;
+            if (fullPath != withExt && Natives.Data.FileExists(withExt)) return withExt;
         }
         catch (Exception ex)
         {

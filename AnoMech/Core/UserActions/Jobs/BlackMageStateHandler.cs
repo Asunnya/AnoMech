@@ -9,8 +9,6 @@ namespace AnoMech.Core.UserActions.Jobs;
 // A scalar ResourceGauge can't hold this. Polyglot stays in the JobActions data table (do not write it).
 internal sealed unsafe class BlackMageStateHandler : IUserActionHandler
 {
-    private const uint Blm = 25;
-
     // Resolved (post-GetAdjustedActionId) ids. Fire/Blizzard resolve to Paradox while its marker is up,
     // so the base ids only fire on the neutral/transition case. Fire II / Blizzard II upgrade to their
     // High-* variants at level 82 — both handled.
@@ -22,7 +20,7 @@ internal sealed unsafe class BlackMageStateHandler : IUserActionHandler
     public void OnAction(ActionType actionType, uint actionId)
     {
         if (actionType != ActionType.Action) return;
-        if (Plugin.PlayerState.ClassJob.RowId != Blm) return;
+        if (PlayerJob.Current != JobId.BlackMage) return;
         var jgm = JobGaugeManager.Instance();
         if (jgm == null) return;
         var g = &jgm->BlackMage;
@@ -107,7 +105,7 @@ internal sealed unsafe class BlackMageStateHandler : IUserActionHandler
 
     public void OnTick(float deltaSeconds)
     {
-        if (Plugin.PlayerState.ClassJob.RowId != Blm) return;
+        if (PlayerJob.Current != JobId.BlackMage) return;
         var jgm = JobGaugeManager.Instance();
         if (jgm == null) return;
         var g = &jgm->BlackMage;

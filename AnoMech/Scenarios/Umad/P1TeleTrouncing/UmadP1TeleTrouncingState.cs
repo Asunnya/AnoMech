@@ -28,7 +28,7 @@ public sealed class UmadP1TeleTrouncingState
     private static readonly TelePortentDirection[] AdjacentCycle =
         [TelePortentDirection.Up, TelePortentDirection.Right, TelePortentDirection.Down, TelePortentDirection.Left];
 
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
     public bool DpsGetsDifferent { get; }
     public bool DpsGetsConfused { get; }
@@ -101,8 +101,9 @@ public sealed class UmadP1TeleTrouncingState
     public static bool IsDps(PartyRole role) => role is PartyRole.MeleeDpsA or PartyRole.MeleeDpsB
         or PartyRole.PhysRangedDps or PartyRole.CasterDps;
 
-    public UmadP1TeleTrouncingState(UmadP1TeleTrouncingStateOverrides overrides)
+    public UmadP1TeleTrouncingState(Rng rng, UmadP1TeleTrouncingStateOverrides overrides)
     {
+        this.rng = rng;
         DpsGetsDifferent = overrides.DpsGetsDifferent ?? rng.NextBool();
         DpsGetsConfused = rng.NextBool();
         ConfettiStackSupport = rng.NextSupportRole();

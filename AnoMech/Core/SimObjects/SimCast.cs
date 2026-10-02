@@ -1,7 +1,6 @@
 using AnoMech.Core.Game;
-using AnoMech.Pointers;
+using AnoMech.Core.Native.Interfaces;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using System;
 using System.Numerics;
@@ -20,7 +19,7 @@ namespace AnoMech.Core.SimObjects;
 // owning SimEnemy reads IsCasting/Progress/ActionId for the cast-bar HUD and
 // IsBusy to decide when to root a following boss. All target coordinates handled
 // here are world-space — the SimEnemy adapter converts from scenario-local.
-public sealed unsafe class SimCast : ISimObject
+public sealed class SimCast : ISimObject
 {
     private readonly SimCharacter parent;
     private readonly Coordinates coordinates;
@@ -48,7 +47,7 @@ public sealed unsafe class SimCast : ISimObject
     // of the telegraph just started" versus "no telegraph behind this".
     private bool pendingNativeResolve;
 
-    public bool IsCasting => parent.BattleCharaPtr != null && parent.BattleCharaPtr->CastInfo.IsCasting;
+    public bool IsCasting => parent.Proxy?.IsCasting ?? false;
 
     public uint ActionId { get; private set; }
     // Read live from CastInfo: a bare NativeCast never enters Tick's `casting` path, so
@@ -57,9 +56,8 @@ public sealed unsafe class SimCast : ISimObject
     {
         get
         {
-            var chara = parent.BattleCharaPtr;
-            if (chara == null || total <= 0f) return 0f;
-            return Math.Clamp(chara->CastInfo.CurrentCastTime / total, 0f, 1f);
+            if (parent.Proxy is not { Exists: true } chara || total <= 0f) return 0f;
+            return Math.Clamp(chara.CurrentCastTime / total, 0f, 1f);
         }
     }
 
@@ -99,7 +97,7 @@ public sealed unsafe class SimCast : ISimObject
     public float LastInstantCastAnimationLock { get; private set; } = 0.6f;
     public GameObjectId? LastInstantCastActionTargetId { get; private set; }
     // Set instead when the resolve was delivered as a captured raw packet, so a peer delivers
-    // its own copy the same way (see Core.Native.RawActionEffect).
+    // its own copy the same way (see Core.Native.Implementations.RawActionEffect).
     public string? LastInstantCastRawPacket { get; private set; }
 
     // Records a raw-packet delivery the caller performed: the packet bypasses this class
@@ -140,21 +138,17 @@ public sealed unsafe class SimCast : ISimObject
     // omenRotate is an offset added to the caster's facing (0 = aligned with parent.Rotation).
     public bool Start(uint actionId, Vector3? localTargetLocation, float? castTime, GameObjectId? targetId, float omenDelay, float omenRotate, byte animationVariation, float animationLock, float? fireDelay = null)
     {
-        var chara = parent.BattleCharaPtr;
-        if (chara == null) return false;
-
+        if (parent.Proxy is not { Exists: true } chara) return false;
 
         if (castTime == null)
         {
-            var actionSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
-
-            if (!actionSheet.TryGetRow(actionId, out var action))
+            if (Natives.Data.Action(actionId) is not { } action)
             {
                 Plugin.Log.Warning($"[SimCast.Start] Action Row {actionId} not found");
                 return false;
             }
 
-            castTime = action.Cast100ms / 10f;
+            castTime = action.CastSeconds;
         }
 
         this.animationLock = animationLock;
@@ -166,9 +160,9 @@ public sealed unsafe class SimCast : ISimObject
         // for a VFX-less auto-attack.
         if (castTimeValue > 0)
         {
-            var target = targetId ?? chara->GetGameObjectId();
+            var target = targetId ?? chara.GameObjectId;
             NativeCast(actionId, ActionType.Action, omenDelay, castTimeValue, false, parent.Rotation + omenRotate, localTargetLocation, target);
-            total = chara->CastInfo.TotalCastTime;
+            total = chara.TotalCastTime;
             CastSeq++;
         }
         else
@@ -210,38 +204,9 @@ public sealed unsafe class SimCast : ISimObject
 
     public void NativeCast(uint actionId, ActionType actionType, float omenDelay, float castTime, bool interruptible, float? rotation = null, Vector3? position = null, GameObjectId? targetId = null, GameObjectId? ballistaId = null)
     {
-        var omenDelayByte = (byte)(omenDelay * 10);
-
-        var rot = rotation ?? parent.Rotation;
-        var qRotation = MathUtil.QuantizeRotation(rot);
-
-        var animationTargetId = targetId == null ? 0xE0000000 : targetId.Value.ObjectId;
-        var ballistaTargetId = ballistaId == null ? 0xE0000000 : ballistaId.Value.ObjectId;
-
-        var localPos = position ?? parent.Position;
-        var globalPos = coordinates.ToGlobal(localPos);
-
-        var qPosX = MathUtil.QuantizePosition(globalPos.X);
-        var qPosY = MathUtil.QuantizePosition(globalPos.Y);
-        var qPosZ = MathUtil.QuantizePosition(globalPos.Z);
-
-        var actorCastPacket = new ActorCastPacket
-        {
-            ActionId = (ushort)actionId,
-            ActionType = (byte)actionType,
-            OmenDelay = omenDelayByte,
-            ActionId_2 = actionId,
-            CastTime = castTime,
-            TargetEntityId = animationTargetId,
-            RotationInt = qRotation,
-            Interruptible = interruptible,
-            BallistaEntityId = ballistaTargetId,
-            PositionX = qPosX,
-            PositionY = qPosY,
-            PositionZ = qPosZ,
-        };
-
-        PacketDispatcherPointers.HandleActorCastPacket(parent.GameObjectId.ObjectId, &actorCastPacket);
+        parent.Proxy?.ReceiveActorCast(new ActorCastData(
+            actionId, actionType, castTime, omenDelay, interruptible,
+            rotation ?? parent.Rotation, coordinates.ToGlobal(position ?? parent.Position), targetId, ballistaId));
 
         // The bookkeeping Start() would do. `casting` stays false: the caller schedules its own
         // NativeActionEffect for the resolve (pendingNativeResolve), or Tick would fire the
@@ -257,53 +222,15 @@ public sealed unsafe class SimCast : ISimObject
 
     public void NativeActionEffect(uint actionId, float animationLock, ushort spellId, byte animationVariaton, ActionType actionType, byte flags, float? rotation = null, Vector3? position = null, GameObjectId? animationTargetId = null, GameObjectId? actionTargetId = null, GameObjectId? ballistaId = null)
     {
-        const uint NullObjectId = 0xE0000000;
-
-        var chara = parent.BattleCharaPtr;
-
-        if (chara == null)
+        if (parent.Proxy is not { Exists: true } chara)
         {
             return;
         }
 
-        var nullActionTarget = actionTargetId == null;
-
-        var animationTarget = animationTargetId == null ? new GameObjectId { ObjectId = NullObjectId, Type = 0 } : animationTargetId!.Value;
-        var actionTarget = nullActionTarget ? new GameObjectId { ObjectId = NullObjectId, Type = 0 } : actionTargetId!.Value;
-        var ballistaTarget = ballistaId == null ? NullObjectId : ballistaId.Value.ObjectId;
-
-        var rot = rotation ?? parent.Rotation;
-        var qRotation = MathUtil.QuantizeRotation(rot);
-
-        var localPos = position ?? Vector3.Zero;
-        var globalPos = coordinates.ToGlobal(localPos);
-
-        var header = new ActionEffectHandler.Header
-        {
-            AnimationTargetId = animationTarget,
-            ActionId = actionId,
-            GlobalSequence = 0,
-            AnimationLock = animationLock,
-            BallistaEntityId = ballistaTarget,
-            SourceSequence = 0,
-            RotationInt = qRotation,
-            SpellId = spellId,
-            AnimationVariation = animationVariaton,
-            ActionType = (byte)actionType,
-            Flags = flags,
-            NumTargets = (byte)(nullActionTarget ? 0 : 1)
-        };
-
-        var targetEffects = new ActionEffectHandler.TargetEffects();
-
-        ActionEffectHandler.Receive(
-            parent.GameObjectId.ObjectId,
-            (Character*)chara,
-            &globalPos,
-            &header,
-            &targetEffects,
-            &actionTarget
-            );
+        chara.ReceiveActionEffect(new ActionEffectData(
+            actionId, actionType, animationLock, spellId, animationVariaton, flags,
+            rotation ?? parent.Rotation, coordinates.ToGlobal(position ?? Vector3.Zero),
+            animationTargetId, actionTargetId, ballistaId));
 
         remainingAnimationLock = animationLock;
 
@@ -341,15 +268,13 @@ public sealed unsafe class SimCast : ISimObject
             return;
         }
 
-        var chara = parent.BattleCharaPtr;
-        if (chara == null)
+        if (parent.Proxy is not { Exists: true } chara)
         {
             casting = false;
             return;
         }
 
-        var castInfo = chara->CastInfo;
-        elapsed = castInfo.CurrentCastTime;
+        elapsed = chara.CurrentCastTime;
         castClock += deltaSeconds;
 
         // With a fire delay our own clock also counts as completion: the engine may clear
@@ -376,13 +301,7 @@ public sealed unsafe class SimCast : ISimObject
     // 20260529_193455).
     public void Despawn()
     {
-        var chara = parent.BattleCharaPtr;
-        if (chara != null)
-        {
-            chara->CastInfo.IsCasting = false;
-            chara->CastInfo.ActionId = 0;
-            chara->CastInfo.ActionType = 0;
-        }
+        parent.Proxy?.ClearCast();
         casting = false;
     }
 
@@ -407,13 +326,13 @@ public sealed unsafe class SimCast : ISimObject
     // on the final tick so the release animation plays in the intended direction even if
     // the target moved during the cast. FireActionEffect snapshots Rotation into the
     // packet header, so this must run first.
-    private void FaceTarget(BattleChara* chara)
+    private void FaceTarget(IBattleCharaProxy chara)
     {
         if (WorldTargetLocation is not { } loc) return;
-        var dx = loc.X - chara->Position.X;
-        var dz = loc.Z - chara->Position.Z;
+        var dx = loc.X - chara.Position.X;
+        var dz = loc.Z - chara.Position.Z;
         if (dx * dx + dz * dz < 1e-6f) return;
-        chara->Rotation = MathUtil.NormalizeRotation(MathF.Atan2(dx, dz));
+        chara.Rotation = MathUtil.NormalizeRotation(MathF.Atan2(dx, dz));
     }
 
     // Mimics the server's ActionEffect packet so the game plays the action's release
@@ -423,26 +342,20 @@ public sealed unsafe class SimCast : ISimObject
     // deliver to. When deliverTo is null, NumTargets=0 (used for self-targeted
     // casts and cast releases without an entity target) — the release animation
     // still plays.
-    private void FireActionEffect(BattleChara* chara, uint actionId, ActionType actionType, float animationLock, Vector3? localTargetLocation = null, GameObjectId? deliverTo = null, byte animationVariation = 0)
+    private void FireActionEffect(IBattleCharaProxy chara, uint actionId, ActionType actionType, float animationLock, Vector3? localTargetLocation = null, GameObjectId? deliverTo = null, byte animationVariation = 0)
     {
-        if (deliverTo is { } id)
+        if (deliverTo is { } id && !Natives.BattleCharas.IsInCharacterManager(id.ObjectId))
         {
-            var characterManager = CharacterManager.Instance();
-            var deliverToId = id.ObjectId;
-
-            if (characterManager == null || characterManager->LookupBattleCharaByEntityId(deliverToId) == null)
-            {
-                Plugin.Log.Warning(
-                    $"FireActionEffect: target {deliverToId:X} for action {actionId:X} on caster {chara->EntityId:X} not in CharacterManager._battleCharas; dropping deliverTo to avoid ApplyAll null-deref");
-                deliverTo = null;
-            }
+            Plugin.Log.Warning(
+                $"FireActionEffect: target {id.ObjectId:X} for action {actionId:X} on caster {chara.EntityId:X} not in CharacterManager._battleCharas; dropping deliverTo to avoid ApplyAll null-deref");
+            deliverTo = null;
         }
 
         var pos = localTargetLocation ?? parent.Position;
         firingCast = true;
         try
         {
-            NativeActionEffect(actionId, animationLock, (ushort)actionId, animationVariation, actionType, 0, chara->Rotation, pos, deliverTo, deliverTo);
+            NativeActionEffect(actionId, animationLock, (ushort)actionId, animationVariation, actionType, 0, chara.Rotation, pos, deliverTo, deliverTo);
         }
         finally
         {

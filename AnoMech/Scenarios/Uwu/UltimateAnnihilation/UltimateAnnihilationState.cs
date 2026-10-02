@@ -9,7 +9,7 @@ public class UltimateAnnihilationState
 {
     public readonly record struct Puddle(Vector2 Center, float Radius, float LandsAt);
 
-    public readonly Rng Rng = new();
+    public Rng Rng { get; }
 
     public List<Puddle> Puddles { get; } = [];
     public int UnpoppedOrbs { get; set; }
@@ -21,8 +21,9 @@ public class UltimateAnnihilationState
 
     public SimTether? Mesohigh;
 
-    public UltimateAnnihilationState(SimParty party, UltimateAnnihilationStateOverrides overrides)
+    public UltimateAnnihilationState(Rng rng, SimParty party, UltimateAnnihilationStateOverrides overrides)
     {
+        Rng = rng;
         var playerRole = party.PlayerRole;
         var playerIsHealer = !playerRole.IsTank() && !playerRole.IsDps();
 

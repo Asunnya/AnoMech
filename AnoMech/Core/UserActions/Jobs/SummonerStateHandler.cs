@@ -13,8 +13,6 @@ namespace AnoMech.Core.UserActions.Jobs;
 // 2-bit field (bits 2-3); on trance expiry they clear back to the default Bahamut state.
 internal sealed unsafe class SummonerStateHandler : IUserActionHandler
 {
-    private const uint Smn = 27;
-
     // Attunement type codes (Attunement & 3). Ordered Fire/Earth/Wind = Ifrit/Titan/Garuda,
     // mirroring the summon and cost-type (72/73/74) ordering.
     private const byte Fire = 1;   // VERIFY in-game: Ifrit == type 1
@@ -27,7 +25,7 @@ internal sealed unsafe class SummonerStateHandler : IUserActionHandler
     public void OnAction(ActionType actionType, uint actionId)
     {
         if (actionType != ActionType.Action) return;
-        if (Plugin.PlayerState.ClassJob.RowId != Smn) return;
+        if (PlayerJob.Current != JobId.Summoner) return;
         var jgm = JobGaugeManager.Instance();
         if (jgm == null) return;
         var g = &jgm->Summoner;
@@ -71,7 +69,7 @@ internal sealed unsafe class SummonerStateHandler : IUserActionHandler
 
     public void OnTick(float deltaSeconds)
     {
-        if (Plugin.PlayerState.ClassJob.RowId != Smn) return;
+        if (PlayerJob.Current != JobId.Summoner) return;
         var jgm = JobGaugeManager.Instance();
         if (jgm == null) return;
         var g = &jgm->Summoner;

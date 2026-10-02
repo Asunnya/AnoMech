@@ -6,7 +6,7 @@ namespace AnoMech.Scenarios.Top.P2PartySynergy;
 
 public class TopP2PartySynergyState
 {
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
     public Direction NewNorthA { get; }
     public Direction NewNorthB { get; }
@@ -17,12 +17,13 @@ public class TopP2PartySynergyState
     public OmegaAttack AttackM { get; }
     public OmegaAttack AttackF { get; }
 
-    public TopP2PartySynergyState(SimParty party, TopP2PartySynergyStateOverrides overrides)
+    public TopP2PartySynergyState(Rng rng, SimParty party, TopP2PartySynergyStateOverrides overrides)
     {
+        this.rng = rng;
         NewNorthA = overrides.NewNorthA ?? rng.NextDirection();
         NewNorthB = overrides.NewNorthB ?? rng.NextDirection();
-        Order = RoleList.Random(party);
-        Stacks = RoleList.Random(party, 2);
+        Order = RoleList.Random(rng, party);
+        Stacks = RoleList.Random(rng, party, 2);
         Glitch = overrides.Glitch ?? rng.NextObj(GlitchType.Far, GlitchType.Mid);
         AttackM = overrides.AttackM ?? rng.NextObj(OmegaAttack.Sword, OmegaAttack.Shield);
         AttackF = overrides.AttackF ?? rng.NextObj(OmegaAttack.Staff, OmegaAttack.Legs);

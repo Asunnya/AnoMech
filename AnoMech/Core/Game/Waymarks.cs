@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using FFXIVClientStructs.FFXIV.Client.Game.UI;
 
 namespace AnoMech.Core.Game;
 
@@ -37,47 +36,5 @@ public static class WaymarkPresets
             ring[i] = new Waymark(slots[i], new Vector3(radius * MathF.Sin(angle), 0, radius * MathF.Cos(angle)));
         }
         return ring;
-    }
-}
-
-// Bulk-applied waymark layout. Writes directly into MarkingController._fieldMarkers
-// instead of going through PlacePreset / ClearFieldMarkers — those are gated by
-// territory ("No markers allowed in territory" return code 5) and would no-op
-// in the overworld. The renderer reads _fieldMarkers each frame, so direct writes
-// place client-side markers anywhere. The layout sits until ClearAll (scenario
-// reset) blanks the eight slots. Mirrors Markings (party signs): a writer owned
-// by SimWorld, not a ticking SimObject. Offsets passed to Place are scenario-local;
-// the injected Coordinates resolves them against the live ScenarioOrigin.
-public sealed unsafe class Waymarks(Coordinates coordinates)
-{
-    private const int SlotCount = 8;
-
-    public void Place(IReadOnlyList<Waymark> waymarks)
-    {
-        if (waymarks.Count == 0) return;
-        var controller = MarkingController.Instance();
-        if (controller == null) { Plugin.Log.Warning("Waymarks: MarkingController unavailable"); return; }
-
-        for (int i = 0; i < waymarks.Count; i++)
-        {
-            var wm = waymarks[i];
-            var idx = (int)wm.Slot;
-            if (idx < 0 || idx >= SlotCount) continue;
-            var world = coordinates.ToGlobal(wm.Offset);
-            ref var slot = ref controller->FieldMarkers[idx];
-            slot.Position = world;
-            slot.X = (int)MathF.Round(world.X * 1000f);
-            slot.Y = (int)MathF.Round(world.Y * 1000f);
-            slot.Z = (int)MathF.Round(world.Z * 1000f);
-            slot.Active = true;
-        }
-    }
-
-    public void ClearAll()
-    {
-        var controller = MarkingController.Instance();
-        if (controller == null) return;
-        for (int i = 0; i < SlotCount; i++)
-            controller->FieldMarkers[i].Active = false;
     }
 }

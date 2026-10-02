@@ -53,7 +53,7 @@ public sealed record CelestriadTower(CelestriadElement Element, int SubIndex, Ve
 // randomization itself. State only ever exposes what's actually random.
 public sealed class UmadP5CelestriadState
 {
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
     // Clockwise sector shift from a debuffed player's own element in this run's layout:
     // set 0 -> next sector, set 1 -> sector after that, set 2 -> own element again.
@@ -85,8 +85,9 @@ public sealed class UmadP5CelestriadState
             ? TowerElementOrder[(TowerElementOrder.ToList().IndexOf(own) + SetOffset[set]) % TowerElementOrder.Count]
             : DoubleElement[set];
 
-    public UmadP5CelestriadState(SimParty party, UmadP5CelestriadStateOverrides overrides)
+    public UmadP5CelestriadState(Rng rng, SimParty party, UmadP5CelestriadStateOverrides overrides)
     {
+        this.rng = rng;
         // Each element doubles exactly once across the 3 sets: a shuffled permutation
         // guarantees that instead of leaving it to independent per-set coin flips.
         DoubleElement = overrides.DoubleOrder switch
@@ -216,7 +217,7 @@ public sealed class UmadP5CelestriadState
         }
 
         var next = 0;
-        foreach (var role in RoleList.Random(party).List)
+        foreach (var role in RoleList.Random(rng, party).List)
         {
             if (assigned.ContainsKey(role) || next >= pool.Count) continue;
             assigned[role] = pool[next++];

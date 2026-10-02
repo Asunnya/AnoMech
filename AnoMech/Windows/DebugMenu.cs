@@ -2,9 +2,9 @@
 using AnoMech.Core;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Implementations;
 using AnoMech.Core.SimObjects;
-using AnoMech.Helpers;
+using AnoMech.Core.Native.Implementations.Interop;
 using AnoMech.Scenarios;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Hooking;
@@ -19,6 +19,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Windows;
 
@@ -546,16 +547,16 @@ internal sealed unsafe class DebugMenu
             if (!TryParseId(debugBgmIdText, out var bgmId) || bgmId > ushort.MaxValue)
                 Plugin.Log.Warning($"BGM: can't parse BgmId '{debugBgmIdText}'");
             else
-                plugin.Game.Bgm.Play((ushort)bgmId);
+                Natives.Bgm.Play((ushort)bgmId);
         }
         ImGui.SameLine();
-        if (ImGui.Button("Stop##bgm")) plugin.Game.Bgm.Reset();
+        if (ImGui.Button("Stop##bgm")) Natives.Bgm.Reset();
         ImGui.SetNextItemWidth(80 * uiScale);
         ImGui.InputFloat("s##bgmseek", ref debugBgmSeekSeconds, 0f, 0f, "%.2f");
         ImGui.SameLine();
-        if (ImGui.Button("Sync##bgm")) plugin.Game.Bgm.Sync(debugBgmSeekSeconds);
+        if (ImGui.Button("Sync##bgm")) Natives.Bgm.Sync(debugBgmSeekSeconds);
         ImGui.SameLine();
-        if (ImGui.Button("Where##bgm")) plugin.Game.Bgm.LogPosition("debug");
+        if (ImGui.Button("Where##bgm")) Natives.Bgm.LogPosition("debug");
     }
 
     // Live read-only flag readout: green when set, dimmed when clear.
@@ -618,7 +619,7 @@ internal sealed unsafe class DebugMenu
             Plugin.Log.Warning($"Lockon: target '{target.Name}' is not a tracked sim character");
             return;
         }
-        var iconName = VfxFunctions.LockonVfxIconName(lockonId);
+        var iconName = Natives.Vfx.LockonIconName(lockonId);
         if (iconName == null)
         {
             Plugin.Log.Warning($"Lockon: no IconName for LockonId {lockonId}");
@@ -640,7 +641,7 @@ internal sealed unsafe class DebugMenu
             Plugin.Log.Warning("Spawn VFX: empty path");
             return;
         }
-        if (!VfxFunctions.VfxPathExists(path)) return;
+        if (!Natives.Data.FileExists(path)) return;
 
         SimCharacter? chara = null;
         var who = "player";

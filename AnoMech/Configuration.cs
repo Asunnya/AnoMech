@@ -69,7 +69,7 @@ public class Configuration : IPluginConfiguration
     // EnableUserActions.
     public float CastInterruptThreshold { get; set; } = 0.5f;
 
-    // Tankbusters check the tank's mitigation cooldowns and HP. Gated by EnableUserActions.
+    // Survivable hits kill a human player whose mitigation is below the hit's threshold; off, they always survive. Gated by EnableUserActions.
     public bool EnableTankMitigation { get; set; } = true;
 
     // Firewall opcode config — updated automatically by OpcodeUpdater on game version change.

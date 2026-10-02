@@ -67,14 +67,14 @@ public sealed class UmadP1TeleTrouncingSettingsWindow
         var carryIdx = (int)Overrides.ArrowCarry;
         SettingsGrid.ItemWidth(170);
         if (ImGui.Combo("##arrowcarry", ref carryIdx, CarryModeLabels, CarryModeLabels.Length))
-            Overrides.ArrowCarry = (AnoMech.Core.Native.CarryMode)carryIdx;
+            Overrides.ArrowCarry = (AnoMech.Core.SimObjects.CarryMode)carryIdx;
     }
 #endif
 
     private void ResetAll()
     {
         Overrides.ArrowSoak = ArrowSoakMode.SetSharedTimelineState;
-        Overrides.ArrowCarry = AnoMech.Core.Native.CarryMode.Native;
+        Overrides.ArrowCarry = AnoMech.Core.SimObjects.CarryMode.Native;
         Overrides.DpsGetsDifferent = null;
         Overrides.GazeInverted = null;
         Overrides.FireIsStack = null;

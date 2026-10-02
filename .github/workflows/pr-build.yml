@@ -1,8 +1,13 @@
-name: Sample PR Builder for AnoMech
+name: Build and test
 
 on:
+  push:
   pull_request:
-    branches: [ master ]
+
+# A newer commit on the same branch/PR supersedes the running build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
 
@@ -30,13 +35,5 @@ jobs:
       run: dotnet build --configuration Release
 
     - name: Run tests
-      run: dotnet test --configuration Release --no-build
-
-    - name: Store artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: AnoMech
-        path: .\AnoMech\bin\x64\Release\AnoMech\*
-        if-no-files-found: error
-        retention-days: 1
+      run: dotnet test --configuration Release --no-build --logger GitHubActions
 

@@ -9,12 +9,10 @@ namespace AnoMech.Core.UserActions.Jobs;
 // SerpentOffering, the venom statuses, and the melee GCD combo stay in the JobActions data table.
 internal sealed unsafe class ViperStateHandler : IUserActionHandler
 {
-    private const uint Vpr = 41;
-
     public void OnAction(ActionType actionType, uint actionId)
     {
         if (actionType != ActionType.Action) return;
-        if (Plugin.PlayerState.ClassJob.RowId != Vpr) return;
+        if (PlayerJob.Current != JobId.Viper) return;
         var jgm = JobGaugeManager.Instance();
         if (jgm == null) return;
 

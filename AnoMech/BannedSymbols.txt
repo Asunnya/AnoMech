@@ -1,0 +1,4 @@
+M:System.Random.#ctor;Draw from the run's Rng (world.Rng or a Fork) so a run replays from its seed
+M:System.Random.#ctor(System.Int32);Draw from the run's Rng (world.Rng or a Fork) so a run replays from its seed
+P:System.Random.Shared;Draw from the run's Rng (world.Rng or a Fork) so a run replays from its seed
+M:System.Linq.Enumerable.Shuffle``1(System.Collections.Generic.IEnumerable{``0});Unseeded (Random.Shared): use Rng.Shuffle

@@ -43,23 +43,23 @@ public sealed class UmadP2ForsakenZP6SouthAdjustAiHelper
         Init();
 
         ai.Move(1f, InitialLineup);
-        ai.Move(10.16f, TowerPositions(0), jitter: .0f, sprint: true);
-        ai.Move(25.17f, TowerPositions(1), jitter: .0f, sprint: true);
-        ai.Move(33f, AllThingsEndsBait(0, 2), sprint: true);
-        ai.Move(39.21f, TowerPositions(2), jitter: .0f, sprint: true);
-        ai.Move(47.22f, TowerPositions(3), jitter: .0f, sprint: true);
-        ai.Move(54f, AllThingsEndsBait(1, 4), sprint: true);
-        ai.Move(59.26f, TowerPositions(4), jitter: .0f, sprint: true);
-        ai.Move(65.27f, TowerPositions(5), jitter: .0f, sprint: true);
-        ai.Move(75f, AllThingsEndsBait(2, 6), sprint: true);
-        ai.Move(81.31f, TowerPositions(6), jitter: .0f, sprint: true);
-        ai.Move(90.32f, TowerPositions(7), jitter: .0f, sprint: true);
+        ai.Move(10.16f, TowerPositions(0), jitter: .0f, arrivalTime: 22.16f);
+        ai.Move(25.17f, TowerPositions(1), jitter: .0f, arrivalTime: 32.16f);
+        ai.Move(33f, AllThingsEndsBait(0, 2), arrivalTime: 37f);
+        ai.Move(39.21f, TowerPositions(2), jitter: .0f, arrivalTime: 43.21f);
+        ai.Move(47.22f, TowerPositions(3), jitter: .0f, arrivalTime: 53.22f);
+        ai.Move(54f, AllThingsEndsBait(1, 4), arrivalTime: 57f);
+        ai.Move(59.26f, TowerPositions(4), jitter: .0f, arrivalTime: 63.86f);
+        ai.Move(65.27f, TowerPositions(5), jitter: .0f, arrivalTime: 73.27f);
+        ai.Move(75f, AllThingsEndsBait(2, 6), arrivalTime: 78f);
+        ai.Move(81.31f, TowerPositions(6), jitter: .0f, arrivalTime: 85.8f);
+        ai.Move(90.32f, TowerPositions(7), jitter: .0f, arrivalTime: 94.32f);
         // Occurrence 3 has no upcoming tower to bisect against and nothing moves the party after
         // it, so it gets the real two-step: gather between the last towers, then relocate once the
         // castbar starts. The boss's facing locks at its Face() call, so moving during the cast is
         // what makes Future's End safe; Past's End's second move is a same-spot no-op.
-        ai.Move(95.83f, BetweenLastTowers(), sprint: true);
-        ai.Move(101.16f, AllThingsEndsBait(3, 7), sprint: true);
+        ai.Move(95.83f, BetweenLastTowers(), arrivalTime: 98f);
+        ai.Move(101.16f, AllThingsEndsBait(3, 7), arrivalTime: 105f);
     }
 
     // Future's End sits opposite the upcoming towers, Past's End between them, both on the

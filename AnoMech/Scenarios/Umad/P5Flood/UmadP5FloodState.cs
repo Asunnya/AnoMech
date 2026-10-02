@@ -37,10 +37,11 @@ public sealed class UmadP5FloodState
     // The scenario's own unscaled clock; bots schedule on it, not the EventTimeScale-scaled AiManager.
     public EventScheduler Timeline { get; }
 
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
-    public UmadP5FloodState(UmadP5FloodStateOverrides overrides, EventScheduler timeline)
+    public UmadP5FloodState(Rng rng, UmadP5FloodStateOverrides overrides, EventScheduler timeline)
     {
+        this.rng = rng;
         Timeline = timeline;
         NeSwReversed = Resolve(overrides.LineNeSw);
         NwSeReversed = Resolve(overrides.LineNwSe);

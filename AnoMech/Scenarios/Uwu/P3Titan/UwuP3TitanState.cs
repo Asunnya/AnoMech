@@ -4,6 +4,8 @@ using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game.Party;
 
+using AnoMech.Scenarios;
+
 namespace AnoMech.Scenarios.Uwu.P3Titan;
 
 // First-jump positions are authored with Titan east and rotated by FromJumpFrame.
@@ -42,21 +44,20 @@ public sealed class UwuP3TitanState
     public AwakenedLandslideCast? AwakenedLandslide { get; set; }
     public HashSet<PartyRole> Jailed { get; } = [];
 
-    public UwuP3TitanState(UwuP3TitanStateOverrides? overrides = null, PartyRole? player = null)
+    public UwuP3TitanState(Rng rng, UwuP3TitanStateOverrides? overrides = null, PartyRole? player = null)
     {
-        var rng = new Random();
         FirstJumpBearing = 90f * rng.Next(4);
-        SecondJumpBearing = (FirstJumpBearing + 90f * rng.Next(1, 4)) % 360f;
+        SecondJumpBearing = (FirstJumpBearing + 90f * (1 + rng.Next(3))) % 360f;
         SafeSide = rng.Next(2) == 0 ? 1 : -1;
         var everyone = Enum.GetValues<PartyRole>();
         var gaolable = everyone.Where(r => r != PartyRole.MainTank).ToArray();
-        var gaolTargets = gaolable.OrderBy(_ => rng.Next()).Take(3).ToList();
+        var gaolTargets = rng.Shuffle(gaolable).Take(3).ToList();
         if (overrides?.PlayerAlwaysInFirstGaols == true && player is { } me && me != PartyRole.MainTank && !gaolTargets.Contains(me))
             gaolTargets[rng.Next(3)] = me;
         GaolTargets = gaolTargets.OrderBy(r => (int)r).ToList();
         JailedHealer = rng.Next(2) == 0 ? PartyRole.RegenHealer : PartyRole.ShieldHealer;
         WeightTargets = new[] { 4, 4, 2, 2, 2, 2, 2 }
-            .Select(count => (IReadOnlyList<PartyRole>)everyone.OrderBy(_ => rng.Next()).Take(count).ToList())
+            .Select(count => rng.Shuffle(everyone).Take(count).ToList())
             .ToList();
         LateBombStart = rng.Next(4);
         var notJailed = everyone.Where(r => !GaolTargets.Contains(r)).ToArray();

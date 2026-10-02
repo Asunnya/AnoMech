@@ -58,7 +58,7 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         world.Events.Add(34.4f, () => PullTether(playerIndex: 0));
         // Null (a Share plan) means no invuln -- mitigation handles it instead.
         if (ThunderIIIPlanning.InvulnRole(state.ThunderSet1) is { } set1InvulnRole)
-            ai.GiveInvuln(38f, set1InvulnRole);
+            ai.UseInvuln(38f, set1InvulnRole);
         // Follow self-sustains, so no AiMove.
         world.Events.Add(40.5f, ResolveFirstThunder);
         ai.Move(43.19f, SwapFirstThunderTanks);
@@ -86,7 +86,7 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         ai.Move(80f, StackCentre);
         // Only an InvulnsBoth plan grants a scripted invuln; a Share relies on mitigation.
         if (ThunderIIIPlanning.InvulnRole(state.ThunderSet2) is { } set2InvulnRole)
-            ai.GiveInvuln(79f, set2InvulnRole);
+            ai.UseInvuln(79f, set2InvulnRole);
         world.Events.Add(82f, ResolveSecondThunder);
         ai.Move(84.5f, SwapSecondThunderTanks);
         // Same as Set 1; the swap lands at 84.9f.

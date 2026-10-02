@@ -72,7 +72,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         party = world.Party;
         utils = new UwuUtils(world);
         damage = new DamageSolver(party);
-        state = new UwuP1GarudaState();
+        state = new UwuP1GarudaState(world.Rng);
         satinPlumes.Clear();
         satinPlumeHp.Clear();
         satinPlumeBotDrain.Clear();
@@ -301,8 +301,7 @@ public sealed class UwuP1GarudaScenario : IScenario
             if (SpawnEnemy(BNpcBaseId.SatinPlume, BNpcNameId.SatinPlume, new Placement(at, 0f), true, true, EnemyListMode.Always) is not { } plume) continue;
             satinPlumes.Add(plume);
             satinPlumeHp[plume] = 1f;
-            if (plume.BattleCharaPtr != null) plume.BattleCharaPtr->MaxHealth = SatinPlumeMaxHp;
-            ShowSatinPlumeHp(plume, 1f);
+            plume.SetHealth(SatinPlumeMaxHp, 1f);
         }
         if (withSpiny)
             spiny = SpawnEnemy(BNpcBaseId.SpinyPlume, BNpcNameId.SpinyPlume, new Placement(UwuP1GarudaState.SpinyPlumeSpawn, 0f), true, true, EnemyListMode.Always);
@@ -343,11 +342,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         plume.Despawn();
     }
 
-    private static unsafe void ShowSatinPlumeHp(SimEnemy plume, float hp)
-    {
-        if (plume.BattleCharaPtr != null)
-            plume.BattleCharaPtr->Health = (uint)MathF.Ceiling(SatinPlumeMaxHp * MathF.Max(0f, hp));
-    }
+    private static void ShowSatinPlumeHp(SimEnemy plume, float hp) => plume.SetHealth(SatinPlumeMaxHp, hp);
 
     private void FixateSpinyOnOffTank()
     {

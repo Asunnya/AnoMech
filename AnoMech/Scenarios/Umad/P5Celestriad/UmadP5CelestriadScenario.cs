@@ -59,7 +59,7 @@ public sealed class UmadP5CelestriadScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new UmadP5CelestriadState(party, settingsWindow.Overrides);
+        state = new UmadP5CelestriadState(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
         damage = new DamageSolver(party);
         damage.SetStatuses(DamageType.Lightning, StatusId.LightningResistanceDownII);

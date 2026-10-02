@@ -1,7 +1,5 @@
 using System;
 using System.Numerics;
-using AnoMech.Core.Native;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -25,7 +23,7 @@ namespace AnoMech.Core.SimObjects;
 //
 // Distance / endpoint-death break logic lives in the owning scenario — SimTether
 // only renders the visual and ticks expiry.
-public sealed unsafe class SimTether : ISimObject
+public sealed class SimTether : ISimObject
 {
     private const byte Slot = 0;
 
@@ -172,7 +170,7 @@ public sealed unsafe class SimTether : ISimObject
     private void CreateVfx()
     {
         if (currentSource != null && currentTarget != null)
-            VfxFunctions.SetTether((Character*)currentSource.BattleCharaPtr, Slot, TetherId, currentTarget.GameObjectId, 1);
+            currentSource.Proxy?.SetTether(Slot, TetherId, currentTarget.GameObjectId, 1);
     }
 
     // Sentinel-checked clear: only wipe a slot we still own. A chained tether
@@ -180,11 +178,8 @@ public sealed unsafe class SimTether : ISimObject
     // overwritten Vfx.Tethers[slot].Id; we leave that alone.
     private void ClearTetherVfxIfOwned()
     {
-        if (currentSource != null)
-        {
-            var ca = (Character*)currentSource.BattleCharaPtr;
-            if (VfxFunctions.GetTetherId(ca, Slot) == TetherId) VfxFunctions.ClearTether(ca, Slot);
-        }
+        if (currentSource?.Proxy is { } source && source.GetTetherId(Slot) == TetherId)
+            source.ClearTether(Slot);
     }
 
     public SimTether SetConditionalStatus(ushort statusId, Predicate<SimTether> predicate)
