@@ -324,7 +324,7 @@ public sealed class Plugin : IDalamudPlugin
             Log.Warning(refusal);
             return;
         }
-        Game.RunScenario(MainWindow.SelectedScenario!, MainWindow.SelectedRoleOverride, solo ? null : MainWindow.SelectedStrat, MainWindow.SelectedWaymark);
+        Game.RunScenario(new RunScenarioParams(MainWindow.SelectedScenario!, MainWindow.SelectedRoleOverride, solo ? null : MainWindow.SelectedStrat, MainWindow.SelectedWaymark, MainWindow.SelectedSeed));
     }
 
     internal void ResetScenario()

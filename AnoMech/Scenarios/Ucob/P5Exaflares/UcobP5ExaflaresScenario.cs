@@ -23,9 +23,9 @@ namespace AnoMech.Scenarios.Ucob.P5Exaflares;
 // and holds the kill one application delay later, so the KO lands on the visible bloom rather
 // than on the invisible snapshot instant. Lingering flame is decorative: only the snapshot kills.
 //
-// The timeline runs on a scenario-local Stopwatch (`timeline`), not the engine's ms-truncated
-// UpdateDelta, so the arrow cast bars and the rolling hits stay locked together and ignore the
-// Speed buttons.
+// The timeline runs on a scenario-local scheduler (`timeline`) ticked with the unscaled frame
+// delta, so the arrow cast bars (real time) and the rolling hits stay locked together and ignore
+// the Speed buttons.
 public sealed class UcobP5ExaflaresScenario : IMultiplayerReplayable
 {
     public string Name => "Exaflares";
@@ -46,9 +46,6 @@ public sealed class UcobP5ExaflaresScenario : IMultiplayerReplayable
     private const float DespawnAfterLastHit = 4f;
 
     private readonly EventScheduler timeline = new();
-    private readonly Stopwatch wallClock = new();
-    private double lastWall;
-    private const double FrameGapCapSeconds = 0.25; // skip pause / alt-tab / hitch frames
 
     private UcobP5ExaflaresState state = null!;
 
@@ -67,10 +64,8 @@ public sealed class UcobP5ExaflaresScenario : IMultiplayerReplayable
 
         // Re-arm the scenario clock for this run (the scenario object is reused).
         timeline.Clear();
-        wallClock.Restart();
-        lastWall = 0;
 
-        state = new UcobP5ExaflaresState(settingsWindow.Overrides, timeline);
+        state = new UcobP5ExaflaresState(world.Rng, settingsWindow.Overrides, timeline);
         LastState = state;
 
         // Bots schedule on the scenario `timeline` (after Clear, so their adds are absolute).
@@ -86,13 +81,7 @@ public sealed class UcobP5ExaflaresScenario : IMultiplayerReplayable
 
     public void Tick(float delta, float elapsed)
     {
-        // Advance the timeline by real wall time, capping pause/hitch gaps so a freeze can't
-        // fast-forward it. This is what keeps the scenario drift-free.
-        var now = wallClock.Elapsed.TotalSeconds;
-        var wallDelta = now - lastWall;
-        lastWall = now;
-        if (wallDelta > 0 && wallDelta <= FrameGapCapSeconds)
-            timeline.Tick((float)wallDelta);
+        timeline.Tick(delta);
     }
 
     private void SpawnBahamut()
@@ -188,11 +177,10 @@ public sealed class UcobP5ExaflaresScenario : IMultiplayerReplayable
     public void TickReplay(object shadowStateObj, float deltaSeconds)
     {
         if (shadowStateObj is not UcobP5ExaflaresState shadowState) return;
-        if (deltaSeconds > FrameGapCapSeconds) return;
         shadowState.Timeline.Tick(deltaSeconds);
     }
 
-    public float? ReplayClockSeconds => (float)(timeline.Elapsed + (wallClock.Elapsed.TotalSeconds - lastWall));
+    public float? ReplayClockSeconds => timeline.Elapsed + Plugin.GameInstance.SecondsSinceTick;
 
     public void AdvanceReplayClockTo(object shadowStateObj, float seconds)
     {

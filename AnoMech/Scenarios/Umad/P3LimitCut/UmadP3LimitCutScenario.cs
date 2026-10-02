@@ -52,7 +52,7 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = world.Party;
-        state = new UmadP3LimitCutState(party, settingsWindow.Overrides);
+        state = new UmadP3LimitCutState(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
         damage = new DamageSolver(party);
         damage.SetStatuses(DamageType.Lightning, UmadConstants.StatusId.LightningResistanceDownII);

@@ -121,9 +121,12 @@ public sealed class Game : IDisposable
 
     // Events only advances once per frame, by that frame's whole delta; this is its value between
     // frames, which a peer's clock is lined up against.
-    public float EventClockNow => Paused || lastEventTick == 0
-        ? Events.Elapsed
-        : Events.Elapsed + (float)Stopwatch.GetElapsedTime(lastEventTick).TotalSeconds * EventTimeScale;
+    public float EventClockNow => Events.Elapsed + SecondsSinceTick * EventTimeScale;
+    // Real time since the last unpaused Tick, for multiplayer clocks read between frames. Never
+    // feeds the sim: that advances only through Tick's delta.
+    public float SecondsSinceTick => Paused || lastEventTick == 0
+        ? 0f
+        : (float)Stopwatch.GetElapsedTime(lastEventTick).TotalSeconds;
     // The phase of the last run in the loaded zone, host and peer alike (activeScenario is
     // host-only and cleared by a Reset).
     private IPhase? lastPhase;
@@ -192,14 +195,11 @@ public sealed class Game : IDisposable
     // selectedAi: index into the scenario's AiStrats of the strat to run, or null for
     // solo (no doppels, no AI). Defaults to 0 = run the first strat with a full party.
     // selectedWaymark: index into the scenario's WaymarkPresets; ignored when it has none.
-    public void RunScenario(IScenario scenario, PartyRole? roleOverride = null, int? selectedAi = 0, int selectedWaymark = 0)
-        => RunScenario(new RunScenarioParams(scenario, roleOverride, selectedAi, selectedWaymark));
-
     // What a solo Start is waiting to settle before it runs.
     public string? StartWaitingOn { get; private set; }
     private RunScenarioParams? waitingStart;
 
-    private void RunScenario(RunScenarioParams p)
+    public void RunScenario(RunScenarioParams p)
     {
         if (ZoneSession.StartBlockedReason(out var settling) != null && settling != null)
         {
@@ -211,7 +211,7 @@ public sealed class Game : IDisposable
         waitingStart = null;
         StartWaitingOn = null;
         lastRun = p;
-        Plugin.Framework.Run(() => { RunScenarioInternal(p.Scenario, p.RoleOverride, p.SelectedAi, p.SelectedWaymark, null, null, isPeer: false); });
+        Plugin.Framework.Run(() => { RunScenarioInternal(p, null, null, isPeer: false); });
     }
 
     private void RetryWaitingStart()
@@ -238,7 +238,7 @@ public sealed class Game : IDisposable
         // Auto-restart is a solo affordance: a host silently rerunning would desync the session,
         // and a stale lastRun would rerun the wrong scenario entirely.
         lastRun = null;
-        RunResolved(() => RunScenarioInternal(scenario, roleOverride, selectedAi, selectedWaymark, networkRoles, networkSeats, isPeer: false), resolved);
+        RunResolved(() => RunScenarioInternal(new RunScenarioParams(scenario, roleOverride, selectedAi, selectedWaymark), networkRoles, networkSeats, isPeer: false), resolved);
     }
 
     // Multiplayer peer: same zone/party/waymarks, but never zone/phase/scenario.Run; every
@@ -246,7 +246,7 @@ public sealed class Game : IDisposable
     public void RunScenarioAsPeer(IScenario scenario, PartyRole roleOverride, int selectedWaymark, IReadOnlySet<PartyRole> networkRoles, IReadOnlyDictionary<PartyRole, NetworkSeat> networkSeats, Action<string?> resolved)
     {
         lastRun = null;
-        RunResolved(() => RunScenarioInternal(scenario, roleOverride, null, selectedWaymark, networkRoles, networkSeats, isPeer: true), resolved);
+        RunResolved(() => RunScenarioInternal(new RunScenarioParams(scenario, roleOverride, null, selectedWaymark), networkRoles, networkSeats, isPeer: true), resolved);
     }
 
     // `resolved` runs in the same deferred callback as the start, with why it was refused, or
@@ -283,8 +283,9 @@ public sealed class Game : IDisposable
     }
 
     // Null once the run is up, else why it was refused.
-    private string? RunScenarioInternal(IScenario scenario, PartyRole? roleOverride, int? selectedAi, int selectedWaymark, IReadOnlySet<PartyRole>? networkRoles, IReadOnlyDictionary<PartyRole, NetworkSeat>? networkSeats, bool isPeer)
+    private string? RunScenarioInternal(RunScenarioParams p, IReadOnlySet<PartyRole>? networkRoles, IReadOnlyDictionary<PartyRole, NetworkSeat>? networkSeats, bool isPeer)
     {
+        var (scenario, roleOverride, selectedAi, selectedWaymark, requestedSeed) = p;
         var solo = selectedAi is null;
         var phase = scenario.Phase;
         var zone = phase.Zone;
@@ -348,6 +349,10 @@ public sealed class Game : IDisposable
         World.ScenarioOrigin = zone.Origin;
         World.Map.ArmColliderDrops(zone.ColliderRemovalPoints.Select(World.Coordinates.ToGlobal));
         World.PlaceWaymarks(ResolveWaymarks(zone, selectedWaymark));
+        // Before CreateParty: the spawn ring draws from the run's party-spawn stream.
+        var seed = requestedSeed ?? Random.Shared.Next();
+        World.Reseed(seed);
+        Plugin.Log.Info($"Game: {scenario.Name} seed {seed}");
         World.CreateParty(player.ClassJob.RowId, roleOverride, solo, networkRoles, networkSeats);
         // Client-asset setup a peer needs too (see IZone.RunClientSetup).
         zone.RunClientSetup(World);
@@ -646,5 +651,6 @@ public sealed class Game : IDisposable
 }
 
 // A single RunScenario call's arguments, bundled so Game can replay the exact same run (see
-// AutoRestart) without tracking each argument as its own field.
-public sealed record RunScenarioParams(IScenario Scenario, PartyRole? RoleOverride, int? SelectedAi, int SelectedWaymark);
+// AutoRestart) without tracking each argument as its own field. A null Seed draws a fresh one on
+// every start, AutoRestart included; a set one replays the same rolls each time.
+public sealed record RunScenarioParams(IScenario Scenario, PartyRole? RoleOverride, int? SelectedAi, int SelectedWaymark, int? Seed = null);

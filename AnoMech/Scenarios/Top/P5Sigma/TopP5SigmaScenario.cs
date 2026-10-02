@@ -41,7 +41,7 @@ public sealed class TopP5SigmaScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new TopP5SigmaState(party, settingsWindow.Overrides);
+        state = new TopP5SigmaState(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<TopP5SigmaState>)AiStrats[idx]).Run(state, world);

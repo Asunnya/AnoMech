@@ -40,7 +40,7 @@ public sealed class TopP6WaveCannon2Scenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new TopP6WaveCannon2State(party, settingsWindow.Overrides);
+        state = new TopP6WaveCannon2State(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
         var solo = selectedAi is null;
         if (selectedAi is { } idx && idx < AiStrats.Count)

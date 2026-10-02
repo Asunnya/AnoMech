@@ -26,7 +26,6 @@ public sealed class AiManager
     private const float MoveDeadlineSafetyMargin = 0.25f;
 
     private readonly SimWorld world;
-    private readonly Random rng = new();
 
     public AiManager(SimWorld world)
     {
@@ -127,6 +126,7 @@ public sealed class AiManager
 
     private Vector3 Jitter(Vector3 target, float radius)
     {
+        var rng = world.Stream("ai-jitter");
         var theta = rng.NextDouble() * 2.0 * Math.PI;
         var r = radius * MathF.Sqrt((float)rng.NextDouble());
         return new Vector3(

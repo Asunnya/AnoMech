@@ -14,7 +14,7 @@ public sealed record MonitorSide(int Mul, uint ActionId)
 
 public sealed class TopP5OmegaState
 {
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
     
     public RoleList HelloWorldTargets { get; }
     public RoleList DoubleDynamicTargets { get; }
@@ -31,8 +31,9 @@ public sealed class TopP5OmegaState
 
     public MonitorSide MonitorSide { get; }
 
-    public TopP5OmegaState(SimParty party, TopP5OmegaStateOverrides overrides)
+    public TopP5OmegaState(Rng rng, SimParty party, TopP5OmegaStateOverrides overrides)
     {
+        this.rng = rng;
         var firstAttackDirection = rng.NextIntercardinal();
         var secondAttackDirection = firstAttackDirection.Rotate(rng.NextSign() * 2);
         AttackDirections = [firstAttackDirection, firstAttackDirection.Flip(), secondAttackDirection, secondAttackDirection.Flip()];
@@ -42,12 +43,12 @@ public sealed class TopP5OmegaState
             Size = 4,
             Slots = helloSlots,
             Membership = helloMembership,
-        }.Build(party);
+        }.Build(rng, party);
         DoubleDynamicTargets = new RoleListBuilder
         {
             Size = 4,
             Membership = overrides.ResolveExtraDynamis(party.PlayerRole),
-        }.Build(party);
+        }.Build(rng, party);
         MonitorTargets = new RoleList(party, ResolveMonitorTargets());
         BettleSpawnDirection = overrides.BettleSpawnDirection ?? rng.NextCardinal();
         MonitorSide = overrides.MonitorSide ?? rng.NextObj(MonitorSide.Left, MonitorSide.Right);

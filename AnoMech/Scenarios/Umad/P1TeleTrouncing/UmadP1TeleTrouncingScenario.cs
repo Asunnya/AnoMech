@@ -149,7 +149,7 @@ public sealed class UmadP1TeleTrouncingScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = world.Party;
-        state = new UmadP1TeleTrouncingState(settingsWindow.Overrides);
+        state = new UmadP1TeleTrouncingState(world.Rng, settingsWindow.Overrides);
         LastState = state;
         damage = new DamageSolver(party);
         hazeHoldApplied = true;   // what MapController.TryLoad just applied from the phase

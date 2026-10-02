@@ -53,7 +53,7 @@ public unsafe class UltimatePredationScenario : IMultiplayerReplayable
         this.world = world;
         party = world.Party;
 
-        state = new(settingsWindow.Overrides);
+        state = new(world.Rng, settingsWindow.Overrides);
         LastState = state;
         // Unconditional, before the optional bot-run below -- a debug-bot peer needs these
         // resolved even when the host runs no bots itself (real players, selectedAi null).
@@ -337,7 +337,7 @@ public unsafe class UltimatePredationScenario : IMultiplayerReplayable
 
         world.Events.Add(55.09f, () =>
         {
-            var bait = party.GetRandom();
+            var bait = party.GetRandom(world.Rng);
             ultima?.Face(bait);
 
             ultima?.NativeCast(
@@ -783,7 +783,7 @@ public unsafe class UltimatePredationScenario : IMultiplayerReplayable
 
         world.Events.Add(54.45f, () =>
         {
-            var bait = party.GetRandom();
+            var bait = party.GetRandom(world.Rng);
             titan?.Face(bait);
 
             titan?.NativeCast(

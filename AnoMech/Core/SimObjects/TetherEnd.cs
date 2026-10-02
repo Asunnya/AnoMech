@@ -1,5 +1,6 @@
 using System;
 using AnoMech.Core.Game;
+using AnoMech.Scenarios;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -38,7 +39,7 @@ public interface ITetherEnd
 
 // What dynamic ends need to look up: the party (proximity queries) and the
 // channeling id (to skip members already holding a parallel tether of the same id).
-public readonly record struct TetherContext(CharacterFind<SimCharacter> Party, ushort TetherId);
+public readonly record struct TetherContext(CharacterFind<SimCharacter> Party, ushort TetherId, Rng Rng);
 
 // Internal — scenarios express a fixed end by passing the SimCharacter directly
 // (see the SimWorld.Tether overloads); this is just the ITetherEnd wrapper.
@@ -84,7 +85,7 @@ public sealed class PassableEnd : DynamicEnd
 
     public override SimCharacter? Resolve(SimCharacter? self, SimCharacter? other, TetherContext ctx)
     {
-        var holder = self ?? initial ?? ctx.Party.RandomMember();
+        var holder = self ?? initial ?? ctx.Party.RandomMember(ctx.Rng);
         if (holder is null || !holder.IsAlive()) return holder;
         if (other is null || !other.IsAlive()) return holder;   // anchor gone → don't migrate
 

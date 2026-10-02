@@ -72,7 +72,7 @@ public sealed class UmadP2ForsakenScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new UmadP2ForsakenState(party, settingsWindow.Overrides);
+        state = new UmadP2ForsakenState(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
         if (selectedAi is { } idx && idx >= 0 && idx < AiStrats.Count)
             ((IScenarioAi<UmadP2ForsakenState>)AiStrats[idx]).Run(state, world);
@@ -233,7 +233,7 @@ public sealed class UmadP2ForsakenScenario : IMultiplayerReplayable
     
     private void ReapplyLockons(SimCharacter[] characters, int index)
     {
-       var list = characters.Shuffle().ToList();
+       var list = world.Rng.Shuffle(characters).ToList();
        uint[] lockons = index switch
        {
            6 => [LockonId.ForsakenStack, LockonId.ForsakenStack, LockonId.ForsakenCone, LockonId.ForsakenStack],

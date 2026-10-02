@@ -42,8 +42,6 @@ internal static unsafe class PartyCreator
     private const float RadiusJitter = 0.6f;
     private const float AngleJitter = 0.4f;
 
-    private static readonly Random Rng = new();
-
     // networkRoles: slots held by other real participants, spawned as SimNetworkPuppet (position
     // from the network, not AiManager); takes priority over `solo`. networkSeats: their lobby
     // name and job for the nameplate and party list, each falling back to the role preset's.
@@ -53,6 +51,7 @@ internal static unsafe class PartyCreator
             ? PartyPresets.ForRole(skip)
             : PartyPresets.ForPlayerJob(playerJob);
         var itemSheet = Plugin.DataManager.GetExcelSheet<Item>();
+        var spawnRng = world.Stream("party-spawn");
 
         for (int i = 0; i < presets.Count; i++)
         {
@@ -86,8 +85,8 @@ internal static unsafe class PartyCreator
             if (solo) continue;
 
             var angle = (i / (float)presets.Count) * MathF.Tau
-                        + ((float)Rng.NextDouble() - 0.5f) * AngleJitter;
-            var distance = RingRadius + ((float)Rng.NextDouble() - 0.5f) * RadiusJitter;
+                        + ((float)spawnRng.NextDouble() - 0.5f) * AngleJitter;
+            var distance = RingRadius + ((float)spawnRng.NextDouble() - 0.5f) * RadiusJitter;
             // Local ring around the scenario origin. Y stays at 0 (local floor);
             // Coordinates.ToGlobal lifts it to origin.Y at spawn.
             var localPos = new Vector3(MathF.Sin(angle) * distance, 0f, MathF.Cos(angle) * distance);

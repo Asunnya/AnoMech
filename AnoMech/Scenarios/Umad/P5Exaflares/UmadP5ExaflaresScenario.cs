@@ -21,8 +21,8 @@ namespace AnoMech.Scenarios.Umad.P5Exaflares;
 // eruption snapshots position as it goes off and holds the kill one application delay later.
 // Lingering fire is safe - only the snapshot instant kills.
 //
-// The timeline runs on a scenario-local Stopwatch (`timeline`), not the engine's ms-truncated
-// UpdateDelta, so events fire drift-free and ignore the Speed buttons.
+// The timeline runs on a scenario-local scheduler (`timeline`) ticked with the unscaled frame
+// delta, so it ignores the Speed buttons.
 public sealed class UmadP5ExaflaresScenario : IMultiplayerReplayable
 {
     public string Name => "Exaflares";
@@ -51,11 +51,7 @@ public sealed class UmadP5ExaflaresScenario : IMultiplayerReplayable
     // by two spreads (its own + an overlap) appears twice, and two coverings are lethal.
     private readonly List<SimCharacter> spreadHits = new();
 
-    // Scenario-local clock, advanced by real Stopwatch time so events fire drift-free at 1x.
     private readonly EventScheduler timeline = new();
-    private readonly Stopwatch wallClock = new();
-    private double lastWall;
-    private const double FrameGapCapSeconds = 0.25; // skip pause / alt-tab / hitch frames
 
     // Exaflare timing. AoE radii come from the Action sheet's EffectRange (circles), not set here.
     private const float ExaflareFirstHitDelay = 4.582f; // first rolling hit, after the line launch
@@ -87,15 +83,13 @@ public sealed class UmadP5ExaflaresScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new UmadP5ExaflaresState(settingsWindow.Overrides, timeline);
+        state = new UmadP5ExaflaresState(world.Rng, settingsWindow.Overrides, timeline);
         LastState = state;
         damage = new DamageSolver(party); // ApplyDamage deals % of max HP; godmode drop/heal handled in Game.Kill
         spreadHelpers.Clear();
 
         // Re-arm the scenario clock for this run (the scenario object is reused).
         timeline.Clear();
-        wallClock.Restart();
-        lastWall = 0;
 
         // Bots schedule on the scenario `timeline` (after Clear, so their adds are absolute).
         if (selectedAi is { } idx && idx < AiStrats.Count)
@@ -131,16 +125,8 @@ public sealed class UmadP5ExaflaresScenario : IMultiplayerReplayable
 
     public void Tick(float delta, float elapsed)
     {
-        // Advance the timeline by real wall time, capping pause/hitch gaps so a freeze can't
-        // fast-forward it. This is what keeps the scenario drift-free.
-        var now = wallClock.Elapsed.TotalSeconds;
-        var wallDelta = now - lastWall;
-        lastWall = now;
-        if (wallDelta > 0 && wallDelta <= FrameGapCapSeconds)
-        {
-            timeline.Tick((float)wallDelta);
-            state?.SpreadTick?.Invoke((float)wallDelta); // bot spread relaxation, also 1x (no-op in solo)
-        }
+        timeline.Tick(delta);
+        state?.SpreadTick?.Invoke(delta); // bot spread relaxation, also 1x (no-op in solo)
     }
 
     private void SpawnKefka()
@@ -287,12 +273,11 @@ public sealed class UmadP5ExaflaresScenario : IMultiplayerReplayable
     public void TickReplay(object shadowStateObj, float deltaSeconds)
     {
         if (shadowStateObj is not UmadP5ExaflaresState shadowState) return;
-        if (deltaSeconds > FrameGapCapSeconds) return;
         shadowState.Timeline.Tick(deltaSeconds);
         shadowState.SpreadTick?.Invoke(deltaSeconds);
     }
 
-    public float? ReplayClockSeconds => (float)(timeline.Elapsed + (wallClock.Elapsed.TotalSeconds - lastWall));
+    public float? ReplayClockSeconds => timeline.Elapsed + Plugin.GameInstance.SecondsSinceTick;
 
     public void AdvanceReplayClockTo(object shadowStateObj, float seconds)
     {

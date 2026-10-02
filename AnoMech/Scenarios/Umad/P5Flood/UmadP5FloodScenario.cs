@@ -54,11 +54,8 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
     // Each tick's lane anchors and rotation, for PlaceWaveCarriers.
     private readonly (Vector3 A, Vector3 B, float Rotation)[] tickLanes = new (Vector3, Vector3, float)[TickCount];
 
-    // Advanced by real Stopwatch time so events fire drift-free at 1x (ignores EventTimeScale).
+    // Ticked with the unscaled frame delta, so it ignores EventTimeScale.
     private readonly EventScheduler timeline = new();
-    private readonly Stopwatch wallClock = new();
-    private double lastWall;
-    private const float FrameGapCapSeconds = 0.25f;
 
     // Relative to the FloodCast cast start.
     private const float FloodCastStart = 0.3f;
@@ -141,15 +138,13 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new UmadP5FloodState(settingsWindow.Overrides, timeline);
+        state = new UmadP5FloodState(world.Rng, settingsWindow.Overrides, timeline);
         LastState = state;
         damage = new DamageSolver(party);
         chaoticFloodCaster = null;
         for (var i = 0; i < TickCount; i++) tickHelpers[i] = null;
 
         timeline.Clear();
-        wallClock.Restart();
-        lastWall = 0;
         DiagnosticLog.Info($"[UmadP5Flood] Wave carrier mode: {settingsWindow.Overrides.CarrierMode}.");
 
         if (selectedAi is { } idx && idx < AiStrats.Count)
@@ -213,11 +208,7 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
 
     public void Tick(float delta, float elapsed)
     {
-        var now = wallClock.Elapsed.TotalSeconds;
-        var wallDelta = now - lastWall;
-        lastWall = now;
-        if (wallDelta > 0 && wallDelta <= FrameGapCapSeconds)
-            timeline.Tick((float)wallDelta);
+        timeline.Tick(delta);
         TickAnchorWatch();
     }
 
@@ -239,11 +230,10 @@ public sealed class UmadP5FloodScenario : IMultiplayerReplayable
     public void TickReplay(object shadowStateObj, float deltaSeconds)
     {
         if (shadowStateObj is not UmadP5FloodState shadowState) return;
-        if (deltaSeconds > FrameGapCapSeconds) return;
         shadowState.Timeline.Tick(deltaSeconds);
     }
 
-    public float? ReplayClockSeconds => (float)(timeline.Elapsed + (wallClock.Elapsed.TotalSeconds - lastWall));
+    public float? ReplayClockSeconds => timeline.Elapsed + Plugin.GameInstance.SecondsSinceTick;
 
     public void AdvanceReplayClockTo(object shadowStateObj, float seconds)
     {

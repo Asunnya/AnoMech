@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
@@ -62,6 +63,14 @@ public unsafe class MainWindow : Window, IDisposable
     internal int SelectedWaymark => _selectedWaymark;
     private int _selectedWaymark;
     private readonly Dictionary<IZone, int> _waymarkMemory = new();
+
+    // Seed for the next Start: empty rolls a fresh one each time, a number replays it every time.
+#if DEBUG
+    internal int? SelectedSeed => int.TryParse(_seedText.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seed) ? seed : null;
+    private string _seedText = "";
+#else
+    internal int? SelectedSeed => null;
+#endif
 
     // The region/group label currently selected in the strat picker, for scenarios that
     // declare StratGroups. Null until a grouped scenario is drawn (then it snaps to the
@@ -496,6 +505,28 @@ public unsafe class MainWindow : Window, IDisposable
         ReconcileStrat();
     }
 
+#if DEBUG
+    private void DrawSeedControl()
+    {
+        ImGui.SetNextItemWidth(120f * ImGuiHelpers.GlobalScale);
+        ImGui.InputTextWithHint("Seed##run-seed", "random", ref _seedText, 16, ImGuiInputTextFlags.CharsDecimal);
+        if (_seedText.Length > 0)
+        {
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Clear##run-seed")) _seedText = "";
+        }
+
+        // The world keeps its last run's Rng until the next start reseeds it.
+        var lastText = plugin.Game.World.Rng.Seed.ToString(CultureInfo.InvariantCulture);
+        ImGui.TextUnformatted($"Last seed: {lastText}");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Reuse##last-seed")) _seedText = lastText;
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Copy##last-seed")) ImGui.SetClipboardText(lastText);
+        ImGui.Separator();
+    }
+#endif
+
     // _selectedStrat stays an absolute index into AiStrats (what RunScenario consumes): for a
     // grouped scenario, a strat of the selected region (its first when the pick isn't in it, -1
     // when it has none); otherwise in range.
@@ -569,6 +600,7 @@ public unsafe class MainWindow : Window, IDisposable
         if (ImGui.TreeNodeEx("Debug###debug-v3",
                 ImGuiTreeNodeFlags.FramePadding))
         {
+            DrawSeedControl();
             ImGui.BeginDisabled(inSession);
             ImGui.BeginGroup();
             debugMenu.DrawSpeedControl();

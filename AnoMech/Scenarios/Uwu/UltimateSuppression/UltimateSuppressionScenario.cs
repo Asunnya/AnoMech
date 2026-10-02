@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using AnoMech.Core.Game;
@@ -47,8 +46,9 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
     private SimEnemy?[] dummies = new SimEnemy?[13];
 
     private bool razorPlumesDamage = false;
-    private Stopwatch razorPlumesRotate = new();
-    private Stopwatch razorPlumesBack = new();
+    // Seconds into each plume movement; null while it isn't running.
+    private float? razorPlumesRotate;
+    private float? razorPlumesBack;
     private Dictionary<SimEnemy, Placement> razorPlumes = new();
 
     // The arena reveal is fixed-time and independent of this run's randomization, so it belongs
@@ -69,12 +69,12 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
         this.world = world;
         party = world.Party;
 
-        state = new(party, settingsWindow.Overrides);
+        state = new(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
 
         razorPlumesDamage = false;
-        razorPlumesRotate.Reset();
-        razorPlumesBack.Reset();
+        razorPlumesRotate = null;
+        razorPlumesBack = null;
         DespawnRazorPlumes();
 
         if (selectedAi is { } idx && idx < AiStrats.Count)
@@ -90,9 +90,10 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
 
     public void Tick(float delta, float elapsed)
     {
-        if (razorPlumesRotate.IsRunning)
+        if (razorPlumesRotate is { } rotateElapsed)
         {
-            var fraction = float.Min((float)razorPlumesRotate.Elapsed.TotalSeconds / Duration.RazorPlumeRotation, 1);
+            razorPlumesRotate = rotateElapsed + delta;
+            var fraction = float.Min(razorPlumesRotate.Value / Duration.RazorPlumeRotation, 1);
             var angle = fraction * Geometry.RazorPlumeRotation;
 
             foreach (var (razorPlume, placement) in razorPlumes)
@@ -101,9 +102,10 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
                 razorPlume!.SetPosition(rotatedPlacement);
             }
         }
-        else if (razorPlumesBack.IsRunning)
+        else if (razorPlumesBack is { } backElapsed)
         {
-            var fraction = float.Min((float)razorPlumesBack.Elapsed.TotalSeconds / Duration.RazorPlumeBack, 1);
+            razorPlumesBack = backElapsed + delta;
+            var fraction = float.Min(razorPlumesBack.Value / Duration.RazorPlumeBack, 1);
             var distance = fraction * Geometry.RazorPlumeBackDistance;
 
             foreach (var (razorPlume, placement) in razorPlumes)
@@ -429,23 +431,23 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
 
         world.Events.Add(20.82f, () =>
         {
-            garuda?.Face(party.GetRandom());
-            razorPlumesRotate.Start();
+            garuda?.Face(party.GetRandom(world.Rng));
+            razorPlumesRotate = 0f;
         });
 
         world.Events.Add(20.82f + Duration.RazorPlumeRotation, () =>
         {
-            razorPlumesRotate.Stop();
+            razorPlumesRotate = null;
 
             foreach (var key in razorPlumes.Keys)
             {
                 razorPlumes[key] = key.Placement();
             }
 
-            razorPlumesBack.Start();
+            razorPlumesBack = 0f;
         });
 
-        world.Events.Add(20.82f + Duration.RazorPlumeRotation + Duration.RazorPlumeBack, razorPlumesBack.Stop);
+        world.Events.Add(20.82f + Duration.RazorPlumeRotation + Duration.RazorPlumeBack, () => razorPlumesBack = null);
 
         // ActionId.MistralSong is Animation Only (TODO: does this actually do damage outside the cone?)
         utils.Cast(getGaruda,
@@ -730,7 +732,7 @@ public unsafe class UltimateSuppressionScenario : IMultiplayerReplayable
 
         world.Events.Add(32.84f, () =>
         {
-            var bait = party.GetRandom();
+            var bait = party.GetRandom(world.Rng);
             titan?.Face(bait);
         });
 

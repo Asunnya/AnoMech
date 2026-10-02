@@ -12,7 +12,6 @@ namespace AnoMech.Scenarios;
 // the others (see PerRoleSetting).
 public class RoleListBuilder
 {
-    private static readonly Random Rng = new();
     private static readonly Dictionary<PartyRole, bool> NoMembership = new();
     private static readonly Dictionary<PartyRole, int[]> NoSlots = new();
 
@@ -25,11 +24,11 @@ public class RoleListBuilder
     // it, the other falls back to any free index.
     public IReadOnlyDictionary<PartyRole, int[]>? Slots { get; init; }
 
-    public RoleList Build(SimParty party)
+    public RoleList Build(Rng rng, SimParty party)
     {
         var membership = Membership ?? NoMembership;
         var slots = Slots ?? NoSlots;
-        var pool = Enum.GetValues<PartyRole>().Shuffle().ToList();
+        var pool = rng.Shuffle(Enum.GetValues<PartyRole>()).ToList();
 
         // Seat order, so dropping the overflow is predictable rather than luck of the shuffle.
         var required = pool.Where(r => slots.ContainsKey(r) || membership.GetValueOrDefault(r))
@@ -62,7 +61,7 @@ public class RoleListBuilder
         {
             var free = slots[role].Where(i => i >= 0 && i < Size && placed[i] == null).ToArray();
             if (free.Length == 0) continue;   // taken by an earlier seat; falls through to the fill
-            placed[free[Rng.Next(free.Length)]] = role;
+            placed[free[rng.Next(free.Length)]] = role;
             placedSet.Add(role);
         }
 
@@ -76,8 +75,6 @@ public class RoleListBuilder
 
 public class RoleList
 {
-    private static readonly Random Rng = new Random();
-
     private readonly List<PartyRole> list;
     private readonly SimParty party;
 
@@ -92,18 +89,13 @@ public class RoleList
         this.list = new List<PartyRole>(list);
     }
 
-    public static RoleList Random(SimParty party)
-    {
-        return Random(party, 8);
-    }
-
-    public static RoleList Random(SimParty party, int count)
+    public static RoleList Random(Rng rng, SimParty party, int count = 8)
     {
         HashSet<int> set = [];
         List<PartyRole> list = [];
         while (list.Count < count)
         {
-            var next = Rng.Next(8);
+            var next = rng.Next(8);
             if (set.Add(next))
                 list.Add((PartyRole)next);
         }
@@ -112,48 +104,23 @@ public class RoleList
     }
     
     // first 4 slots - random supports, last 4 slots - random dps
-    public static RoleList RandomRoleStable(SimParty party)
+    public static RoleList RandomRoleStable(Rng rng, SimParty party)
     {
-        var supports = Enumerable.Range(0, 4)
-                                             .Select(i => (PartyRole)i)
-                                             .Shuffle();
-        var dps = Enumerable.Range(4, 4)
-                                 .Select(i => (PartyRole)i)
-                                 .Shuffle();
+        var supports = rng.Shuffle(Enumerable.Range(0, 4).Select(i => (PartyRole)i));
+        var dps = rng.Shuffle(Enumerable.Range(4, 4).Select(i => (PartyRole)i));
         var all = supports.Concat(dps).ToList();
         return new RoleList(party, all);
     }
 
-    public static RoleList AllExcept(SimParty party, params PartyRole[] roles)
+    public static RoleList AllExcept(Rng rng, SimParty party, params PartyRole[] roles)
     {
         var set = new HashSet<PartyRole>(roles);
-        var list = Enum.GetValues<PartyRole>()
-                       .Where(role => !set.Contains(role))
-                       .Shuffle()
-                       .ToList();
+        var list = rng.Shuffle(Enum.GetValues<PartyRole>().Where(role => !set.Contains(role))).ToList();
         return new RoleList(party, list);
     }
 
-    public RoleList Random(int count, params PartyRole[] except)
-    {
-        var exceptSet = new HashSet<PartyRole>(except);
-        var pool = list.Where(r => !exceptSet.Contains(r)).ToList();
-        var picked = new List<PartyRole>(count);
-        while (picked.Count < count && pool.Count > 0)
-        {
-            var idx = Rng.Next(pool.Count);
-            picked.Add(pool[idx]);
-            pool.RemoveAt(idx);
-        }
-
-        return new RoleList(party, picked);
-    }
-
-    // Same pick-without-replacement as the parameterless overload, but from a caller-supplied
-    // Rng instead of this class's own unseeded static one. The static overload draws
-    // independently on every client replaying an Ai.Run, so each can pick differently -- use
-    // the State's own seeded Rng and resolve once in the State constructor, then broadcast
-    // the result.
+    // Resolve in the State constructor (not live inside an Ai.Run) and broadcast the result:
+    // a peer replaying the Ai has no access to the host's rolls.
     public RoleList Random(Rng rng, int count, params PartyRole[] except)
     {
         var exceptSet = new HashSet<PartyRole>(except);

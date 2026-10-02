@@ -7,6 +7,7 @@ using AnoMech.Core.Game;
 using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
+using AnoMech.Scenarios;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 
@@ -41,6 +42,25 @@ public sealed class SimWorld : ISimObject, IDisposable
     public EventScheduler Events { get; }
     public Vector3 ScenarioOrigin { get; set; }
 
+    // The run's mechanic randomness; engine noise draws from a named Stream instead, so it
+    // can't shift these rolls. Replaced per run by Game (see Reseed).
+    public Rng Rng { get; private set; } = Rng.Detached;
+    private readonly Dictionary<string, Rng> streams = new();
+
+    public void Reseed(int seed)
+    {
+        Rng = new Rng(seed);
+        streams.Clear();
+    }
+
+    // This run's independent stream for one consumer, created on first use.
+    public Rng Stream(string name)
+    {
+        if (!streams.TryGetValue(name, out var stream))
+            streams[name] = stream = Rng.Fork(name);
+        return stream;
+    }
+
     // Converts between scenario-local coordinates (the SimXxx public API) and
     // world/global coordinates (the engine's GameObject->Position). Shared by
     // every SimCharacter (injected as a protected field) and used by spawners
@@ -71,7 +91,7 @@ public sealed class SimWorld : ISimObject, IDisposable
 
     private SimTether CreateTether(ITetherEnd from, ITetherEnd to, ushort tetherId, float duration, ushort debuffStatusId)
     {
-        var tether = new SimTether(from, to, new TetherContext(Party.Find, tetherId), debuffStatusId, duration);
+        var tether = new SimTether(from, to, new TetherContext(Party.Find, tetherId, Rng), debuffStatusId, duration);
         children.Add(tether);
         return tether;
     }

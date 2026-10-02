@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
+using AnoMech.Scenarios;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -18,8 +19,6 @@ namespace AnoMech.Core.SimObjects;
 // SimParty.Empty sentinel doesn't accidentally register one at static init.
 public sealed class SimParty : ISimObject
 {
-    private static Random rnd = new();
-
     public static readonly SimParty Empty = new();
 
     private readonly SimCharacter?[] slots = new SimCharacter?[8];
@@ -184,8 +183,8 @@ public sealed class SimParty : ISimObject
         }
     }
 
-    public SimCharacter? GetRandom()
+    public SimCharacter? GetRandom(Rng rng)
     {
-        return Get(rnd.Next(8));
+        return Get(rng.Next(8));
     }
 }

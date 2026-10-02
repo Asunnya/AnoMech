@@ -43,7 +43,7 @@ public sealed class TopP5OmegaScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new TopP5OmegaState(world.Party, settingsWindow.Overrides);
+        state = new TopP5OmegaState(world.Rng, world.Party, settingsWindow.Overrides);
         LastState = state;
         var solo = selectedAi is null;
         if (selectedAi is { } idx && idx < AiStrats.Count)
@@ -113,8 +113,8 @@ public sealed class TopP5OmegaScenario : IMultiplayerReplayable
             else
                 freeAgents.Add(role);
         }
-        freeAgents = freeAgents.Shuffle().ToList();
-        tethers = tethers.Shuffle().ToList();
+        freeAgents = world.Rng.Shuffle(freeAgents).ToList();
+        tethers = world.Rng.Shuffle(tethers).ToList();
         // Live soak count can land short of (or over) 2 by t=46s -- borrow from the other
         // pool instead of assuming an exact 2/4 split.
         while (tethers.Count < 2) tethers.Add(Pop(freeAgents));
@@ -290,7 +290,7 @@ public sealed class TopP5OmegaScenario : IMultiplayerReplayable
         world.Events.Add(27.67f, () => omega_4000A40A_1 = world.SpawnEnemy(new EnemySpawnConfig(BNpcBaseId: BNpcBaseId.OmegaHelper, NameId: BNpcNameId.OmegaFinal, Level: 1, Targetable: false, EnemyList: EnemyListMode.Never, IsVisible: false, Placement: new Placement(new Vector3(0.000f, -0.000f, 0.000f), 3.140f))));
         world.Events.Add(41.74f, () =>
         {
-            var targets = party.Find.OnSideN(new Placement(new(0, 0, 0), MathF.PI), state.MonitorSide.Mul, 2);
+            var targets = party.Find.OnSideN(world.Rng, new Placement(new(0, 0, 0), MathF.PI), state.MonitorSide.Mul, 2);
             if (targets.Count > 0)
                 omega_4000A409_1?.Cast(ActionId.OversampledWaveCannonAoe, castSeconds: 0f, targetId: targets[0].GameObjectId);
             if (targets.Count > 1)

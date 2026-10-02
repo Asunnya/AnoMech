@@ -60,10 +60,10 @@ public sealed class UcobP5ExaflaresState
     // EventTimeScale-driven AiManager, so they stay locked to the fire.
     public EventScheduler Timeline { get; }
 
-    private readonly Rng rng = new();
+    private readonly Rng rng;
 
-    public UcobP5ExaflaresState(UcobP5ExaflaresStateOverrides overrides, EventScheduler timeline)
-        : this(null, null, overrides, timeline) { }
+    public UcobP5ExaflaresState(Rng rng, UcobP5ExaflaresStateOverrides overrides, EventScheduler timeline)
+        : this(rng, null, null, overrides, timeline) { }
 
     // `timeline` must be a fresh scheduler the caller ticks itself: a peer never runs the
     // scenario's own Tick, which is what drives the real one.
@@ -71,11 +71,12 @@ public sealed class UcobP5ExaflaresState
     {
         if (laneOrder.Count != LaneOffsets.Count) return null;
         if (!float.IsFinite(directionRadians) || laneOrder.Any(o => !LaneOffsets.Contains(o))) return null;
-        return new UcobP5ExaflaresState(new Direction(directionRadians), laneOrder, null, timeline);
+        return new UcobP5ExaflaresState(Rng.Detached, new Direction(directionRadians), laneOrder, null, timeline);
     }
 
-    private UcobP5ExaflaresState(Direction? direction, IReadOnlyList<float>? laneOrder, UcobP5ExaflaresStateOverrides? overrides, EventScheduler timeline)
+    private UcobP5ExaflaresState(Rng rng, Direction? direction, IReadOnlyList<float>? laneOrder, UcobP5ExaflaresStateOverrides? overrides, EventScheduler timeline)
     {
+        this.rng = rng;
         Timeline = timeline;
         Direction = direction ?? overrides!.Direction ?? rng.NextDirection();
 

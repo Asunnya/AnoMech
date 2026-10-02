@@ -129,7 +129,7 @@ public unsafe class UwuUtils(SimWorld world)
         var positions = new List<Vector3>();
 
         world.Events.Add(snapshotOffset, () => positions.AddRange(
-            RoleList.Random(world.Party, getDummies.Length).List
+            RoleList.Random(world.Rng, world.Party, getDummies.Length).List
             .Select(x => world.Party.Get(x)!.Position)));
 
         var castInfo = new UwuUtilsRecords

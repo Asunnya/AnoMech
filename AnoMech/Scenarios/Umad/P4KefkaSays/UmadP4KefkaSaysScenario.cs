@@ -52,7 +52,7 @@ public sealed class UmadP4KefkaSaysScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new UmadP4KefkaSaysState(party, settingsWindow.Overrides);
+        state = new UmadP4KefkaSaysState(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<UmadP4KefkaSaysState>)AiStrats[idx]).Run(state, world);
