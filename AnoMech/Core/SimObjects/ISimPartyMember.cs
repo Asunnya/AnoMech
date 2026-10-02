@@ -55,7 +55,7 @@ public interface ISimPartyMember : ISimObject, IPositioned
     // SimNetworkPuppet hands it to the owning peer.
     void CarryTo(Vector3 destination, CarryMode mode = CarryMode.Native);
 
-    // Casts this member's job LB3 from the shared gauge. A no-op returning false for humans
+    // Casts this member's job limit break at the level the shared gauge allows. A no-op returning false for humans
     // (the local player and network puppets press their own); only bots cast.
     bool UseLimitBreak() => false;
 

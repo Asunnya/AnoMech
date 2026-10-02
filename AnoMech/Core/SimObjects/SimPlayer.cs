@@ -80,7 +80,7 @@ public sealed unsafe class SimPlayer(Coordinates coordinates) : SimCharacter(coo
     }
 
     // The client's own prediction runs the whole cast; this only counts it as activity for
-    // stillness mechanics and keeps a second press from queueing behind it.
+    // stillness mechanics.
     public bool IsLimitBreaking
     {
         get

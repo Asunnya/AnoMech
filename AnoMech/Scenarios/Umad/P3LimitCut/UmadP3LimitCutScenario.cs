@@ -159,7 +159,7 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     public void RunInstanceEvents(SimWorld instanceWorld)
     {
         ActionTimelinePreload.Preload(CloneTimelines, "UmadP3LimitCut");
-        instanceWorld.SetLimitBreakGauge(3f);
+        instanceWorld.Party.LimitBreak.Set(3f);
         var u = Constants.Timing.UmbraCastAt;
         foreach (var (offset, arg) in Constants.Timing.DirectorBeats)
             instanceWorld.Events.Add(u + offset, () => instanceWorld.Map.DirectorUpdate(Constants.Timing.DirectorCategory, arg, 0x2U, Constants.Timing.DirectorArg3, Constants.Timing.DirectorKefkaId, broadcast: false));

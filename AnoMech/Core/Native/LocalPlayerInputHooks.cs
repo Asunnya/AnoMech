@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using AnoMech.Core.Game.Party;
-using AnoMech.Core.SimObjects;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
@@ -241,7 +239,6 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
             RestoreGaugeIllusion();
             return;
         }
-        UpdateLimitBreakIllusion();
         // Only Holy Sheltron (Paladin/Oath) needs this today.
         if (Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId != PaladinClassJobId) return;
         var gauge = (PaladinGauge*)Plugin.JobGauges.Address;
@@ -250,44 +247,9 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         gauge->OathGauge = 100;
     }
 
-    // Same for the limit break gauge, but only once a scenario asks for it (SimWorld.SetLimitBreakGauge):
-    // solo in the inn the real gauge is empty. Client-side only; a press is intercepted or
-    // swallowed, so no LB packet ever leaves. Spent by UserActions' LimitBreakHandler.
-    private (byte BarCount, ushort CurrentUnits, ushort BarUnits)? savedLimitBreak;
-    private const ushort LimitBreakUnitsPerBar = 10000;
-    private const byte LimitBreakBars = 3;
-    // Null until the scenario sets it; the gauge is then left alone and every LB press dropped.
-    private ushort? limitBreakUnits;
-
-    public void SetLimitBreakGauge(float bars)
-        => limitBreakUnits = (ushort)(Math.Clamp(bars, 0f, LimitBreakBars) * LimitBreakUnitsPerBar);
-
-    private void UpdateLimitBreakIllusion()
-    {
-        if (limitBreakUnits is not { } units) return;
-        var lb = LimitBreakController.Instance();
-        if (lb == null) return;
-        savedLimitBreak ??= (lb->BarCount, lb->CurrentUnits, lb->BarUnits);
-        lb->BarCount = LimitBreakBars;
-        lb->BarUnits = LimitBreakUnitsPerBar;
-        lb->CurrentUnits = units;
-    }
-
     // Also called from Game.ResetInternal so the restore is immediate on Reset/Leave.
     public void RestoreGaugeIllusion()
     {
-        if (savedLimitBreak is { } lbSaved)
-        {
-            var lb = LimitBreakController.Instance();
-            if (lb != null)
-            {
-                lb->BarCount = lbSaved.BarCount;
-                lb->CurrentUnits = lbSaved.CurrentUnits;
-                lb->BarUnits = lbSaved.BarUnits;
-            }
-            savedLimitBreak = null;
-        }
-        limitBreakUnits = null;
         if (savedOathGauge is not { } saved) return;
         if (Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId == PaladinClassJobId)
         {
@@ -297,69 +259,10 @@ public sealed unsafe class LocalPlayerInputHooks : IDisposable
         savedOathGauge = null;
     }
 
-    // Null outside a scenario too: there the gauge is the player's own and none of this applies.
-    private int? LimitBreakLevel(ActionType actionType, uint actionId)
-    {
-        if (actionType != ActionType.Action) return null;
-        if (Plugin.GameInstance is not { } game || !game.World.Map.IsInInstance) return null;
-        if (Plugin.ObjectTable.LocalPlayer is not { } local) return null;
-        var lb = LimitBreakController.Instance();
-        if (lb == null) return null;
-        var character = (Character*)local.Address;
-        for (byte i = 0; i < 3; i++)
-            if (lb->GetActionId(character, i) == actionId) return i;
-        return null;
-    }
-
-    // Only LB3, and only from a full gauge. Everything else is the client's own: with the gauge faked
-    // it runs the real UseAction, and the request packet that goes with it is eaten by the firewall.
-    private bool RefuseLimitBreak(int level, uint actionId)
-    {
-        var name = Core.ActionLookup.Name(actionId);
-        var job = Plugin.ObjectTable.LocalPlayer?.ClassJob.RowId;
-        if (level < 2)
-        {
-            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, LB{level + 1}, job={job}) pressed -- only LB3 is simulated, press dropped.");
-            return true;
-        }
-        // UserActions is what applies the effect and spends the gauge.
-        if (!Plugin.UserActions.Enabled)
-        {
-            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed but user actions are disabled -- press dropped.");
-            return true;
-        }
-        if (limitBreakUnits is not { } units)
-        {
-            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed but this scenario grants no limit break -- press dropped.");
-            return true;
-        }
-        if (units < LimitBreakUnitsPerBar * LimitBreakBars)
-        {
-            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed but the gauge isn't full ({units}/{LimitBreakUnitsPerBar * LimitBreakBars}) -- press dropped.");
-            return true;
-        }
-        // The gauge stays full until a cast lands, so a press queued behind it would fire a second one.
-        if (Plugin.GameInstance?.World.Party.Player?.IsLimitBreaking == true)
-        {
-            Core.DiagnosticLog.Info($"[LimitBreak] {name} ({actionId}, job={job}) pressed while the last one is still casting -- press dropped.");
-            return true;
-        }
-        return false;
-    }
-
-    public bool LimitBreakReady => limitBreakUnits >= LimitBreakUnitsPerBar * LimitBreakBars;
-
-    public void SpendLimitBreak()
-    {
-        if (limitBreakUnits != null) limitBreakUnits = 0;
-    }
-
     private bool UseActionDetour(ActionManager* self, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)
     {
         RecordRecentAction(actionId, actionType);
         if (DisableAllActions && !IsStopAutosAction(actionType, actionId)) return false;
-        var limitBreakLevel = LimitBreakLevel(actionType, actionId);
-        if (limitBreakLevel is { } level && RefuseLimitBreak(level, actionId)) return false;
         var result = useActionHook.Original(self, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
         // Ignore the auto-attack-cancel general action that UpdateDetour issues while stunned.
         if (result && !IsStopAutosAction(actionType, actionId))

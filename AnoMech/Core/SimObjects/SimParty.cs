@@ -28,6 +28,8 @@ public sealed class SimParty : ISimObject
 
     public CharacterFind<SimCharacter> Find { get; }
 
+    public LimitBreakGauge LimitBreak { get; } = new();
+
     public SimCharacter? Get(int roleId)
         => roleId >= 0 && roleId < slots.Length ? slots[roleId] : null;
 
@@ -152,10 +154,12 @@ public sealed class SimParty : ISimObject
                 slots[i] = null;
             }
         }
+        LimitBreak.Tick();
     }
 
     public void Despawn()
     {
+        LimitBreak.Restore();
         for (int i = 0; i < slots.Length; i++)
         {
             slots[i]?.Despawn();

@@ -610,10 +610,6 @@ internal static unsafe class JobActions
         [24309] = [Gauge(SgeAddersgall, 1)],              // Rhizomata → +1 Addersgall (passive fill in TimedGauges)
     };
 
-    // Every action with a row, harvested into the multiplayer asset allowlist (SimAssets) so a
-    // peer will play a bot's use of one.
-    public static readonly IReadOnlyCollection<uint> JobActionIds = Actions.Keys;
-
     // status → predicates that clear it. OR-semantics: any match removes the status. The
     // dispatcher runs this BEFORE the action's effects, so a line action re-grants after
     // its own weaponskill clear.

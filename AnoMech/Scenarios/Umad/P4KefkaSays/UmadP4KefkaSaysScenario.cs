@@ -87,7 +87,7 @@ public sealed class UmadP4KefkaSaysScenario : IMultiplayerReplayable
     public void RunInstanceEvents(SimWorld instanceWorld)
     {
         ActionTimelinePreload.Preload(NeoExdeathTimelines, "UmadP4KefkaSays");
-        instanceWorld.SetLimitBreakGauge(3f);
+        instanceWorld.Party.LimitBreak.Set(3f);
     }
 
     private void Run_InstanceEvents()
