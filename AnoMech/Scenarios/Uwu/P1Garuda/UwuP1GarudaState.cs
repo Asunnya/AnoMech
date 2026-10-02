@@ -17,7 +17,6 @@ public sealed class UwuP1GarudaState
     public static readonly Vector3 ChiradaTetherSpot = new(15f, 0f, 0f);
 
     public const float BubbleRadius = 6f;
-    public const float BubbleCleanseSeconds = 1.4f;
 
     private static readonly Vector3[] SatinPlumeSpots =
     [
