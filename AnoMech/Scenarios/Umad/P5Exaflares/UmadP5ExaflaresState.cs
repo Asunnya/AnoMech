@@ -17,10 +17,11 @@ public sealed class UmadP5ExaflaresState
     public EventScheduler Timeline { get; }
     public Action<float>? SpreadTick { get; set; }
 
-    private readonly Rng rng = new();
+    private readonly Rng rng = Rng.Detached;
 
-    public UmadP5ExaflaresState(UmadP5ExaflaresStateOverrides overrides, EventScheduler timeline)
+    public UmadP5ExaflaresState(Rng rng, UmadP5ExaflaresStateOverrides overrides, EventScheduler timeline)
     {
+        this.rng = rng;
         Timeline = timeline;
         LeftOrder = Resolve(overrides.LeftOrder);
         RightOrder = Resolve(overrides.RightOrder);

@@ -7,6 +7,7 @@ using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -71,7 +72,7 @@ public sealed class M9sFlailsScenario : IScenario
         Plugin.PlayerInputHooks.ActionExecuted -= OnPlayerAction;
         Plugin.PlayerInputHooks.ActionExecuted += OnPlayerAction;
 
-        state = new M9sFlailsState(settingsWindow.Overrides);
+        state = new M9sFlailsState(world.Rng, settingsWindow.Overrides);
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<M9sFlailsState>)AiStrats[idx]).Run(state, world);
 
@@ -178,14 +179,7 @@ public sealed class M9sFlailsScenario : IScenario
         return (uint)System.Numerics.BitOperations.Log2(state);
     }
 
-    private static unsafe void PlayBigSawTimeline(uint index)
-    {
-        foreach (var p in LayoutQuery.FindAllBySgbPath(BigSawSgb))
-        {
-            var sg = (FFXIVClientStructs.FFXIV.Client.LayoutEngine.Group.SharedGroupLayoutInstance*)p;
-            if (sg->IsTimelineIndexValid(index)) sg->PlayTimeline(index, 0);
-        }
-    }
+    private static void PlayBigSawTimeline(uint index) => Natives.Layout.PlaySharedGroupTimeline(BigSawSgb, index);
 
     // Flails and doornails have no mesh either: what players see is a map-effect object per cell.
     private void FlailCellEffect(int round, uint flags)
@@ -334,22 +328,15 @@ public sealed class M9sFlailsScenario : IScenario
         flails[round].Clear();
     }
 
-    private unsafe void SpawnDoornail(int round)
+    private void SpawnDoornail(int round)
     {
         doornail = Spawn(BNpcBaseId.DeadlyDoornail, BNpcNameId.DeadlyDoornail, new Placement(state.Rounds[round].Doornail, 0f), true, EnemyListMode.Always);
         doornailRound = round;
         doornailHp = 1f;
-        var chara = doornail == null ? null : doornail.BattleCharaPtr;
-        if (chara != null) chara->MaxHealth = DoornailMaxHp;
         ShowDoornailHp();
     }
 
-    private unsafe void ShowDoornailHp()
-    {
-        var chara = doornail == null ? null : doornail.BattleCharaPtr;
-        if (chara != null)
-            chara->Health = (uint)MathF.Ceiling(DoornailMaxHp * MathF.Max(0f, doornailHp));
-    }
+    private void ShowDoornailHp() => doornail?.SetHealth(DoornailMaxHp, doornailHp);
 
     private void OnPlayerAction(ActionType actionType, uint actionId, ulong targetId)
     {
@@ -427,10 +414,10 @@ public sealed class M9sFlailsScenario : IScenario
         puddleOmens[round] = world.SpawnOmen(VfxPath.ElectroPuddle, new Placement(at, 0f), CircleScale(M9sFlailsState.ElectrocutionRadius), 60f);
     }
 
-    private unsafe void AnimatePuddle(int round, ushort oldState, ushort newState)
+    private void AnimatePuddle(int round, ushort oldState, ushort newState)
     {
         if (puddles[round] is not { IsAlive: true } puddle) return;
-        ((GameObject*)puddle.Address)->UpdateSharedTimelineState(oldState, newState);
+        puddle.UpdateSharedTimelineState(oldState, newState);
     }
 
     private void DespawnPuddle(int round)

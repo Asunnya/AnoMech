@@ -10,9 +10,8 @@ public sealed class M9sVampStompState
     public PartyRole BrutalRainTarget { get; }
     public M9sSatisfied Satisfied { get; } = new(0);
 
-    public M9sVampStompState(M9sVampStompStateOverrides overrides)
+    public M9sVampStompState(Rng rng, M9sVampStompStateOverrides overrides)
     {
-        var rng = new Rng();
         Bats = new M9sBatPattern(overrides.Spin, rng);
         BrutalRainTarget = overrides.BrutalRainTarget ?? rng.NextObj(PartyRole.RegenHealer, PartyRole.ShieldHealer);
     }

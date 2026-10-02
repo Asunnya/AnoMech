@@ -57,7 +57,7 @@ public sealed class M9sHellInACellScenario : IScenario
         cells.Clear();
         foreach (var set in towers) set.Clear();
 
-        state = new M9sHellInACellState(settingsWindow.Overrides);
+        state = new M9sHellInACellState(world.Rng, settingsWindow.Overrides);
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<M9sHellInACellState>)AiStrats[idx]).Run(state, world);
 
@@ -264,7 +264,7 @@ public sealed class M9sHellInACellScenario : IScenario
 
         if (state.UltrasonicOrder[set][step] == UltrasonicKind.Amp)
         {
-            var target = free[Random.Shared.Next(free.Count)];
+            var target = free[world.Rng.Next(free.Count)];
             ConeAt(target, ActionId.UltrasonicAmp, WideConeHalfAngle, [], [], stackMin: 3);
             return;
         }
@@ -275,7 +275,7 @@ public sealed class M9sHellInACellScenario : IScenario
             ConeAt(healer, ActionId.UltrasonicSpreadSmall, NarrowConeHalfAngle, [DamageType.Magic], [(StatusId.MagicVulnerabilityUp, 1.96f)]);
         var dps = free.Where(m => !IsTank(m) && !IsHealer(m)).ToList();
         if (dps.Count > 0)
-            ConeAt(dps[Random.Shared.Next(dps.Count)], ActionId.UltrasonicSpreadSmall, NarrowConeHalfAngle, [DamageType.Magic], [(StatusId.MagicVulnerabilityUp, 1.96f)]);
+            ConeAt(dps[world.Rng.Next(dps.Count)], ActionId.UltrasonicSpreadSmall, NarrowConeHalfAngle, [DamageType.Magic], [(StatusId.MagicVulnerabilityUp, 1.96f)]);
     }
 
     private void ConeAt(SimCharacter target, uint actionId, float halfAngle, DamageType[] types, (ushort, float)[] statuses, int stackMin = 0)

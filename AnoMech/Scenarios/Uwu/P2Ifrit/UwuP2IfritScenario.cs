@@ -60,7 +60,7 @@ public sealed class UwuP2IfritScenario : IScenario
         party = world.Party;
         utils = new UwuUtils(world);
         damage = new DamageSolver(party);
-        state = new UwuP2IfritState(party, settingsWindow.Overrides);
+        state = new UwuP2IfritState(world.Rng, party, settingsWindow.Overrides);
         helpers.Clear();
         radiantPlumeCasters.Clear();
         nails.Clear();
@@ -377,13 +377,7 @@ public sealed class UwuP2IfritScenario : IScenario
                 SetNailHp(nail, (killAt - now) / (killAt - NailDrainFrom));
     }
 
-    private static unsafe void SetNailHp(SimEnemy? nail, float fraction)
-    {
-        if (nail == null || nail.BattleCharaPtr == null) return;
-        var chara = nail.BattleCharaPtr;
-        chara->MaxHealth = NailMaxHp;
-        chara->Health = (uint)MathF.Ceiling(NailMaxHp * Math.Clamp(fraction, 0f, 1f));
-    }
+    private static void SetNailHp(SimEnemy? nail, float fraction) => nail?.SetHealth(NailMaxHp, fraction);
 
     private void KillNail(float bearing)
     {

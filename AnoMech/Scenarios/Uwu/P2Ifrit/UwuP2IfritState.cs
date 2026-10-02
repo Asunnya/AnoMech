@@ -5,6 +5,8 @@ using System.Numerics;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 
+using AnoMech.Scenarios;
+
 namespace AnoMech.Scenarios.Uwu.P2Ifrit;
 
 // AI positions are authored with C1 south and rotated by FromReference.
@@ -41,9 +43,8 @@ public sealed class UwuP2IfritState
     public IReadOnlyList<Lane> AwakenedCrossLanes { get; }
     public IReadOnlyList<Lane> FinalLanes { get; }
 
-    public UwuP2IfritState(SimParty party, UwuP2IfritStateOverrides overrides)
+    public UwuP2IfritState(Rng rng, SimParty party, UwuP2IfritStateOverrides overrides)
     {
-        var rng = new Random();
         OpenerBearing = 90f * rng.Next(4);
         var northSouthPlume = rng.Next(2) == 0 ? 0f : 180f;
         var eastWestPlume = rng.Next(2) == 0 ? 90f : 270f;

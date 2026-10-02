@@ -32,7 +32,6 @@ public sealed class TopP5DeltaScenario : IMultiplayerReplayable
     private TopP5DeltaState state = null!;
     private SimWorld world = null!;
     private SimParty party = null!;
-    private readonly Random rng = new();
 
     // Exposed so MultiplayerManager can broadcast the AI-relevant subset after a host Start --
     // see UmadP3BlackHoleScenario.LastState. BeyondDefenseTarget resolves later (t=35.3s);
@@ -58,7 +57,7 @@ public sealed class TopP5DeltaScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = worldParam.Party;
-        state = new TopP5DeltaState(settingsWindow.Overrides, party.PlayerRole);
+        state = new TopP5DeltaState(world.Rng, settingsWindow.Overrides, party.PlayerRole);
         LastState = state;
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<TopP5DeltaState>)AiStrats[idx]).Run(state, world);
@@ -371,10 +370,10 @@ public sealed class TopP5DeltaScenario : IMultiplayerReplayable
             // Someone within range has to eat it, so a refusal only counts while anyone else can.
             var allowed = closest2.Where(m => !refused.Contains(m)).ToList();
             if (allowed.Count == 0) allowed = closest2.ToList();
-            target = allowed.Count > 0 ? allowed[Random.Shared.Next(allowed.Count)] : null;
+            target = allowed.Count > 0 ? allowed[world.Rng.Next(allowed.Count)] : null;
         }
         else
-            target = party.Find.RandomClosestN(omega.Position, 2);
+            target = party.Find.RandomClosestN(world.Rng, omega.Position, 2);
         if (target is null) return;
         state.BeyondDefenseTarget = ((ISimPartyMember)target).Role;
         Plugin.Log.Info($"Beyond defense target {((ISimPartyMember)target).Role}");
@@ -489,7 +488,7 @@ public sealed class TopP5DeltaScenario : IMultiplayerReplayable
 
     private IReadOnlyList<SimCharacter> FireMonitorOnSide(Placement src, Side side, SimCharacter? exclude = null)
     {
-        var targets = party.Find.OnSideN(src, side.Mul, count: 2, exclude: exclude);
+        var targets = party.Find.OnSideN(world.Rng, src, side.Mul, count: 2, exclude: exclude);
         foreach (var member in targets)
         {
             var pos = member.Position;

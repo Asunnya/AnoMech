@@ -8,7 +8,7 @@ namespace AnoMech.Scenarios.Uwu.UltimateSuppression;
 
 public class UltimateSuppressionState
 {
-    public readonly Rng Rng = new();
+    public readonly Rng Rng = Rng.Detached;
 
     public Placement LightPillarPlacement { get; set; } = new();
 
@@ -44,18 +44,19 @@ public class UltimateSuppressionState
 
     private UltimateSuppressionState() { }
 
-    public UltimateSuppressionState(SimParty party, UltimateSuppressionStateOverrides overrides)
+    public UltimateSuppressionState(Rng rng, SimParty party, UltimateSuppressionStateOverrides overrides)
     {
+        Rng = rng;
         RoleList roles;
         var doOverride = !party.PlayerRole.IsTank() && overrides.Assignment != UltimateSuppressionAssignment.Auto;
 
         if (doOverride)
         {
-            roles = RoleList.AllExcept(party, [PartyRole.MainTank, PartyRole.OffTank, party.PlayerRole]);
+            roles = RoleList.AllExcept(Rng, party, [PartyRole.MainTank, PartyRole.OffTank, party.PlayerRole]);
         }
         else
         {
-            roles = RoleList.AllExcept(party, [PartyRole.MainTank, PartyRole.OffTank]);
+            roles = RoleList.AllExcept(Rng, party, [PartyRole.MainTank, PartyRole.OffTank]);
         }
 
         var index = 0;

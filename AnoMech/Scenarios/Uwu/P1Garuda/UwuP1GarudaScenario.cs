@@ -34,7 +34,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     private const float EyeOfTheStormOuter = 25f;
     private const float MesohighRadius = 3f;
     private const float PassableHalfWidth = 1f;
-    private const int MaxThermalLow = 2;
+    private const int MaxThermalLow = 3;
     private const uint BubbleEObjId = 0x1E8F68;
     private const int ChargesToWake = 4;
     private const uint SatinPlumeMaxHp = 35827;
@@ -54,6 +54,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     private SimEnemy? spiny;
     private SimEventObject? bubble;
     private bool bubbleActive;
+    private Vector3 bubbleCenter;
     private int aetherialCharges;
     private readonly List<SimEnemy> satinPlumes = [];
     private readonly Dictionary<SimEnemy, float> satinPlumeHp = [];
@@ -61,7 +62,6 @@ public sealed class UwuP1GarudaScenario : IScenario
     private float lastTimelineTick;
     private readonly List<SimEnemy> helpers = [];
     private readonly SimEnemy?[] featherDummies = new SimEnemy?[5];
-    private readonly Dictionary<SimCharacter, float> bubbleDwell = [];
 
     private Func<SimEnemy?>[] FeatherRainDummies =>
         [() => featherDummies[0], () => featherDummies[1], () => featherDummies[2], () => featherDummies[3], () => featherDummies[4]];
@@ -72,7 +72,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         party = world.Party;
         utils = new UwuUtils(world);
         damage = new DamageSolver(party);
-        state = new UwuP1GarudaState();
+        state = new UwuP1GarudaState(world.Rng);
         satinPlumes.Clear();
         satinPlumeHp.Clear();
         satinPlumeBotDrain.Clear();
@@ -81,7 +81,6 @@ public sealed class UwuP1GarudaScenario : IScenario
         greatWhirlwindCasters.Clear();
         greatWhirlwindSpots.Clear();
         eyeOfTheStorm = null;
-        bubbleDwell.Clear();
         bubbleActive = false;
         aetherialCharges = 0;
 
@@ -216,7 +215,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     }
 
     // Her walks are scripted; she only turns to the MT.
-    // The plumes drain on the timeline's clock; standing in the bubble counts real time.
+    // The plumes drain on the timeline's clock.
     public void Tick(float delta, float elapsed)
     {
         if (garuda is { Targetable: true, IsMoving: false, IsCasting: false } boss && Get(PartyRole.MainTank) is { } tank && tank.IsAlive())
@@ -224,7 +223,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         var timeline = world.Events.Elapsed;
         DrainSatinPlumes(timeline - lastTimelineTick);
         lastTimelineTick = timeline;
-        CleanseInBubble(delta);
+        CleanseInBubble();
     }
 
     private void SpawnGaruda()
@@ -302,8 +301,7 @@ public sealed class UwuP1GarudaScenario : IScenario
             if (SpawnEnemy(BNpcBaseId.SatinPlume, BNpcNameId.SatinPlume, new Placement(at, 0f), true, true, EnemyListMode.Always) is not { } plume) continue;
             satinPlumes.Add(plume);
             satinPlumeHp[plume] = 1f;
-            if (plume.BattleCharaPtr != null) plume.BattleCharaPtr->MaxHealth = SatinPlumeMaxHp;
-            ShowSatinPlumeHp(plume, 1f);
+            plume.SetHealth(SatinPlumeMaxHp, 1f);
         }
         if (withSpiny)
             spiny = SpawnEnemy(BNpcBaseId.SpinyPlume, BNpcNameId.SpinyPlume, new Placement(UwuP1GarudaState.SpinyPlumeSpawn, 0f), true, true, EnemyListMode.Always);
@@ -344,11 +342,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         plume.Despawn();
     }
 
-    private static unsafe void ShowSatinPlumeHp(SimEnemy plume, float hp)
-    {
-        if (plume.BattleCharaPtr != null)
-            plume.BattleCharaPtr->Health = (uint)MathF.Ceiling(SatinPlumeMaxHp * MathF.Max(0f, hp));
-    }
+    private static void ShowSatinPlumeHp(SimEnemy plume, float hp) => plume.SetHealth(SatinPlumeMaxHp, hp);
 
     private void FixateSpinyOnOffTank()
     {
@@ -367,6 +361,7 @@ public sealed class UwuP1GarudaScenario : IScenario
     private void ResolveGigastorm()
     {
         if (spiny == null) return;
+        bubbleCenter = spiny.Position;
         PlayEffect(spiny, ActionId.Gigastorm, 2.1f);
         damage.Resolve(spiny, ActionId.Gigastorm, [DamageType.Lethal], [], extraRange: spiny.HitboxRadius);
         spiny.Despawn();
@@ -377,7 +372,7 @@ public sealed class UwuP1GarudaScenario : IScenario
         bubble = world.SpawnEventObject(new EventObjectSpawnConfig
         {
             EObjId = BubbleEObjId,
-            Placement = new Placement(UwuP1GarudaState.GigastormSpot, 0f),
+            Placement = new Placement(bubbleCenter, 0f),
             TimelineState = 1,
             SpawnVisible = false,
         });
@@ -412,13 +407,22 @@ public sealed class UwuP1GarudaScenario : IScenario
         member.AddStatus(StatusId.ThermalLow);
     }
 
-    // Only a two-stack cleanse charges Garuda.
+    // One stack is a light hit, two charge Garuda, three wipe the party.
     private void CleanseThermalLow(SimCharacter member)
     {
         if (member.FindStatus(StatusId.ThermalLow) is not { } thermalLow) return;
-        var awakening = thermalLow.Stacks >= MaxThermalLow;
+        var stacks = thermalLow.Stacks;
         member.RemoveStatus(StatusId.ThermalLow);
         var caster = SpawnHelper(member.Position);
+        if (stacks >= MaxThermalLow)
+        {
+            PlayEffect(caster, ActionId.SuperCycloneOverload, 1.1f);
+            for (var slot = 0; slot < 8; slot++)
+                if (party.Get(slot) is { } hit && hit.IsAlive())
+                    damage.ApplyDamage(hit, 1f, ActionId.SuperCycloneOverload, "cleansed three Thermal Low", lethal: true);
+            return;
+        }
+        var awakening = stacks == MaxThermalLow - 1;
         PlayEffect(caster, awakening ? ActionId.SuperCycloneAwaken : ActionId.SuperCyclone, 1.1f);
         foreach (var hit in party.Find.InsideCircle(member.Position, 50f).ToList())
             damage.ApplyDamage(hit, SuperCycloneDamage, ActionId.SuperCyclone, "Super Cyclone", false);
@@ -428,24 +432,11 @@ public sealed class UwuP1GarudaScenario : IScenario
         if (aetherialCharges == ChargesToWake) utils.Awaken(garuda, false);
     }
 
-    private void CleanseInBubble(float delta)
+    private void CleanseInBubble()
     {
         if (!bubbleActive) return;
-        var inside = party.Find.InsideCircle(UwuP1GarudaState.GigastormSpot, UwuP1GarudaState.BubbleRadius)
-            .Where(m => m.HasStatus(StatusId.ThermalLow)).ToHashSet();
-        foreach (var member in bubbleDwell.Keys.Where(m => !inside.Contains(m)).ToList())
-            bubbleDwell.Remove(member);
-        foreach (var member in inside)
-        {
-            var dwell = bubbleDwell.GetValueOrDefault(member) + delta;
-            if (dwell < UwuP1GarudaState.BubbleCleanseSeconds)
-            {
-                bubbleDwell[member] = dwell;
-                continue;
-            }
-            bubbleDwell.Remove(member);
+        foreach (var member in party.Find.InsideCircle(bubbleCenter, UwuP1GarudaState.BubbleRadius).Where(m => m.HasStatus(StatusId.ThermalLow)).ToList())
             CleanseThermalLow(member);
-        }
     }
 
     private void Raidwide(SimEnemy? caster, uint actionId, float fraction, float animationLock)

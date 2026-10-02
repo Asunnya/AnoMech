@@ -79,7 +79,7 @@ public sealed class UwuP3TitanScenario : IScenario
         party = world.Party;
         utils = new UwuUtils(world);
         damage = new DamageSolver(party);
-        state = new UwuP3TitanState(settingsWindow.Overrides, party.Player != null ? party.PlayerRole : null);
+        state = new UwuP3TitanState(world.Rng, settingsWindow.Overrides, party.Player != null ? party.PlayerRole : null);
         titan = null;
         floor = null;
         titanFacesTank = false;
@@ -325,10 +325,10 @@ public sealed class UwuP3TitanScenario : IScenario
         titan.MoveTo(to, 3f);
     }
 
-    private unsafe void AnimateFloor(ushort oldState, ushort newState)
+    private void AnimateFloor(ushort oldState, ushort newState)
     {
         if (floor is not { IsAlive: true }) return;
-        ((GameObject*)floor.Address)->UpdateSharedTimelineState(oldState, newState);
+        floor.UpdateSharedTimelineState(oldState, newState);
     }
 
     // Damage falls off with distance from where Titan lands.
@@ -551,13 +551,7 @@ public sealed class UwuP3TitanScenario : IScenario
 
     private void SetHealerGaolHp(float fraction) => SetHp(healerGaol, HealerGaolMaxHp, fraction);
 
-    private static unsafe void SetHp(SimEnemy? enemy, uint maxHp, float fraction)
-    {
-        var chara = enemy?.BattleCharaPtr;
-        if (chara == null) return;
-        chara->MaxHealth = maxHp;
-        chara->Health = (uint)MathF.Ceiling(maxHp * Math.Clamp(fraction, 0f, 1f));
-    }
+    private static void SetHp(SimEnemy? enemy, uint maxHp, float fraction) => enemy?.SetHealth(maxHp, fraction);
 
     // A gaol the chain didn't reach explodes and takes the whole party with it.
     private void GraniteImpact(uint actionId)

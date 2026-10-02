@@ -6,7 +6,6 @@ using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
 using AnoMech.Core.SimObjects;
 using AnoMech.Multiplayer;
 using AnoMech.Scenarios.Umad.P3BlackHole;
@@ -14,6 +13,7 @@ using AnoMech.Scenarios.Umad.P3BlackHole;
 namespace AnoMech.Scenarios.Umad.P3LimitCut;
 
 using Constants = UmadP3LimitCutConstants;
+using AnoMech.Core.Native.Interfaces;
 
 // Dancing Mad P3 "Limit Cut" (BossMod's P3UltimaBlaster). Scenario time 0 is 8.0s before Chaos
 // starts casting Umbra Smash, the earliest start inside this mechanic (the previous resolve is
@@ -26,7 +26,6 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     public float BgmSecondsAtStart => Constants.BgmSecondsAtStart;
     public bool SupportsSolo => true;
     public bool SupportsMultiplayer => true;
-    public uint? TankMaxHealth => UmadConstants.Tunables.RealTankMaxHealth;
     public IReadOnlyList<IScenarioAi> AiStrats => [new UmadP3LimitCutAi()];
     public void DrawSettings() => settingsWindow.Draw();
     public bool HasPerPlayerSettings => true;
@@ -53,7 +52,7 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     {
         world = worldParam;
         party = world.Party;
-        state = new UmadP3LimitCutState(party, settingsWindow.Overrides);
+        state = new UmadP3LimitCutState(world.Rng, party, settingsWindow.Overrides);
         LastState = state;
         damage = new DamageSolver(party);
         damage.SetStatuses(DamageType.Lightning, UmadConstants.StatusId.LightningResistanceDownII);
@@ -159,8 +158,8 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     // materialise timelines, so the preload belongs here too, and so does a tank's LB3 gauge.
     public void RunInstanceEvents(SimWorld instanceWorld)
     {
-        ActionTimelinePreload.Preload(CloneTimelines, "UmadP3LimitCut");
-        instanceWorld.SetLimitBreakGauge(3f);
+        Natives.TimelinePreload.Preload(CloneTimelines, "UmadP3LimitCut");
+        instanceWorld.Party.LimitBreak.Set(3f);
         var u = Constants.Timing.UmbraCastAt;
         foreach (var (offset, arg) in Constants.Timing.DirectorBeats)
             instanceWorld.Events.Add(u + offset, () => instanceWorld.Map.DirectorUpdate(Constants.Timing.DirectorCategory, arg, 0x2U, Constants.Timing.DirectorArg3, Constants.Timing.DirectorKefkaId, broadcast: false));
@@ -304,8 +303,9 @@ public sealed class UmadP3LimitCutScenario : IMultiplayerReplayable
     // Skipped by default when the human is a tank, so the press is theirs to make.
     private void BotTankLimitBreak()
     {
-        if (settingsWindow.Overrides.BotTankLimitBreak ?? !party.PlayerRole.IsTank())
-            party.BotTankLimitBreak();
+        if (!(settingsWindow.Overrides.BotTankLimitBreak ?? !party.PlayerRole.IsTank())) return;
+        if (party.UseLimitBreak(PartyRole.MainTank) || party.UseLimitBreak(PartyRole.OffTank)) return;
+        DiagnosticLog.Warn("[UmadP3LimitCut] No bot tank used LB3.");
     }
 
     private void ChaosLands()

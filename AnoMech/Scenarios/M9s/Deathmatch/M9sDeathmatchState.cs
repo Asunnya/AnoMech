@@ -47,9 +47,8 @@ public sealed class M9sDeathmatchState
     public M9sSatisfied Satisfied { get; } = new(8);
     public PartyRole BrutalRainTarget { get; }
 
-    public M9sDeathmatchState(M9sDeathmatchStateOverrides overrides)
+    public M9sDeathmatchState(Rng rng, M9sDeathmatchStateOverrides overrides)
     {
-        var rng = new Rng();
         NorthSouth = overrides.NorthSouth ?? rng.NextObj(true, true, true, true, false);
         Cycles =
         [

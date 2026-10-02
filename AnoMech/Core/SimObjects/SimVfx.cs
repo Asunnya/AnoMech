@@ -1,6 +1,4 @@
-using AnoMech.Core.Native;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
-using FFXIVClientStructs.FFXIV.Client.Graphics.Vfx;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -16,14 +14,14 @@ namespace AnoMech.Core.SimObjects;
 //
 // duration <= 0 means the VFX lives until RemoveVfx / ClearAttachedVfx /
 // Despawn; duration > 0 adds a visible-time auto-expire on its own counter.
-public sealed unsafe class SimVfx : ISimObject
+public sealed class SimVfx : ISimObject
 {
     private float duration;
     private float elapsed;
 
     public string Path { get; }
-    public VfxData* Handle { get; private set; }
-    public bool IsActive => Handle != null;
+    private IActorVfxProxy? handle;
+    public bool IsActive => handle != null;
 
     // A marker's own lockon id is what replicates, not this derived path.
     public bool FromLockon { get; }
@@ -33,8 +31,7 @@ public sealed unsafe class SimVfx : ISimObject
         Path = path;
         FromLockon = fromLockon;
         this.duration = duration;
-        var chara = (Character*)target.BattleCharaPtr;
-        Handle = VfxFunctions.SpawnActorVfx(path, chara, chara);
+        handle = target.Proxy?.AttachVfx(path);
     }
 
     // Restart the auto-expire countdown when the same path is re-added. A
@@ -57,7 +54,7 @@ public sealed unsafe class SimVfx : ISimObject
     public void Despawn()
     {
         if (!IsActive) return;
-        VfxFunctions.RemoveActorVfx(Handle);
-        Handle = null;
+        handle!.Remove();
+        handle = null;
     }
 }

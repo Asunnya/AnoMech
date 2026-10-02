@@ -2,7 +2,6 @@ using System;
 using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
-using AnoMech.Core.Native;
 
 namespace AnoMech.Core.SimObjects;
 
@@ -54,6 +53,11 @@ public interface ISimPartyMember : ISimObject, IPositioned
 
     // SimNetworkPuppet hands it to the owning peer.
     void CarryTo(Vector3 destination, CarryMode mode = CarryMode.Native);
+
+    // Casts this member's tank invuln, whose status Game.Kill honours by swallowing the death.
+    // A no-op returning false for humans (the local player and network puppets press their own);
+    // only bots cast.
+    bool UseInvuln() => false;
 }
 
 // Bridges the party-member death model onto SimCharacter-typed call sites. Party
@@ -77,7 +81,7 @@ public static class SimCharacterDeathExtensions
     {
         // Returns true only when the member actually went down (see Game.Kill):
         // false on a non-party character, an already-dead member, or one that
-        // survived via GiveInvuln/godmode. Gate extra on-death logic on this.
+        // survived via UseInvuln/godmode. Gate extra on-death logic on this.
         public bool Die(string cause)
         {
             if (c is ISimPartyMember pm) return Plugin.GameInstance.Kill(pm, cause);

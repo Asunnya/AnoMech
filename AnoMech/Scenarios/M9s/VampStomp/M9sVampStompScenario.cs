@@ -43,7 +43,7 @@ public sealed class M9sVampStompScenario : IScenario
         damage.SetStatuses(DamageType.Magic, StatusId.MagicVulnerabilityUp);
         helpers.Clear();
 
-        state = new M9sVampStompState(settingsWindow.Overrides);
+        state = new M9sVampStompState(world.Rng, settingsWindow.Overrides);
         stomp = new M9sBatStomp(world, damage, state.Satisfied, state.Bats, SpawnHelper);
         hardcore = new M9sHardcore(party, damage, state.Satisfied, SpawnHelper);
         if (selectedAi is { } idx && idx < AiStrats.Count)

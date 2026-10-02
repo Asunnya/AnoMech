@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.SimObjects;
+using AnoMech.Scenarios;
 
 namespace AnoMech.Core.Game;
 
@@ -196,10 +198,10 @@ public sealed class CharacterFind<T> where T : IPositioned
 
     // Picks one member at random from the `count` closest on the XZ plane.
     // Returns null when the pool is empty.
-    public T? RandomClosestN(Vector3 from, int count)
+    public T? RandomClosestN(Rng rng, Vector3 from, int count)
     {
         var pool = ClosestN(from, count);
-        return pool.Count == 0 ? default : pool[Random.Shared.Next(pool.Count)];
+        return pool.Count == 0 ? default : pool[rng.Next(pool.Count)];
     }
 
     public IReadOnlyList<T> FarestN(Vector3 from, int count)
@@ -213,10 +215,10 @@ public sealed class CharacterFind<T> where T : IPositioned
     }
 
     // One member chosen uniformly at random from the live set. Null when empty.
-    public T? RandomMember()
+    public T? RandomMember(Rng rng)
     {
         var pool = source() as IReadOnlyList<T> ?? source().ToList();
-        return pool.Count == 0 ? default : pool[Random.Shared.Next(pool.Count)];
+        return pool.Count == 0 ? default : pool[rng.Next(pool.Count)];
     }
 
     // size is extra dimension, that's not present in game data.
@@ -227,8 +229,7 @@ public sealed class CharacterFind<T> where T : IPositioned
     // extraRange: the caster's hitbox, which the game adds to caster-centred shapes.
     public IReadOnlyList<T> InsideActionAoe(uint actionId, Placement target, float omenRotate = 0f, float? size = null, float extraRange = 0f)
     {
-        var actionSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
-        if (!actionSheet.TryGetRow(actionId, out var action))
+        if (Natives.Data.Action(actionId) is not { } action)
         {
             Plugin.Log.Warning($"InsideActionAoe: action {actionId} not found");
             return Array.Empty<T>();
@@ -284,7 +285,7 @@ public sealed class CharacterFind<T> where T : IPositioned
     // sign applied to the dot product to choose the preferred side (Side.Mul).
     // Shuffles each group independently, fills from the preferred side first,
     // then from the opposite side. Optionally skips one specific member.
-    public IReadOnlyList<T> OnSideN(Placement src, int sideMul, int count = 2, T? exclude = default)
+    public IReadOnlyList<T> OnSideN(Rng rng, Placement src, int sideMul, int count = 2, T? exclude = default)
     {
         var rightX = -MathF.Cos(src.Rotation);
         var rightZ = MathF.Sin(src.Rotation);
@@ -297,22 +298,13 @@ public sealed class CharacterFind<T> where T : IPositioned
             var dot = (m.Position.X - src.Position.X) * rightX + (m.Position.Z - src.Position.Z) * rightZ;
             (dot * sideMul < 0 ? onSide : others).Add(m);
         }
-        Shuffle(onSide);
-        Shuffle(others);
+        var onSideShuffled = rng.Shuffle(onSide);
+        var othersShuffled = rng.Shuffle(others);
 
         var picked = new List<T>(count);
-        foreach (var m in onSide) { picked.Add(m); if (picked.Count == count) return picked; }
-        foreach (var m in others) { picked.Add(m); if (picked.Count == count) return picked; }
+        foreach (var m in onSideShuffled) { picked.Add(m); if (picked.Count == count) return picked; }
+        foreach (var m in othersShuffled) { picked.Add(m); if (picked.Count == count) return picked; }
         return picked;
-    }
-
-    private static void Shuffle<TItem>(List<TItem> list)
-    {
-        for (int i = list.Count - 1; i > 0; i--)
-        {
-            var j = Random.Shared.Next(i + 1);
-            (list[i], list[j]) = (list[j], list[i]);
-        }
     }
 }
 

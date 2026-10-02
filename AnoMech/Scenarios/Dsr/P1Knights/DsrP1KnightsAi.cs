@@ -47,7 +47,7 @@ public sealed class DsrP1KnightsAi : IScenarioAi<DsrP1KnightsState>
         ai.Move(48.6f, () => AiMove.Create(TanksNorthPartySouth()).NaturalOrder());
         ai.Move(50.9f, () => AiMove.Create(GroupOppositeAdelphel()).NaturalOrder());
         ai.Move(59.2f, () => AiMove.Create(GroupInSafeQuadrantMainTankPastThem()).NaturalOrder());
-        ai.GiveInvuln(63.8f, PartyRole.MainTank, 6f);
+        ai.UseInvuln(63.8f, PartyRole.MainTank);
         ai.Move(66.0f, () => AiMove.Create(TanksNorthPartySouth()).NaturalOrder());
 
         ai.Move(77.2f, () => AiMove.Create(ChainStartsAroundGrinnaux()).NaturalOrder(), jitter: 0f);

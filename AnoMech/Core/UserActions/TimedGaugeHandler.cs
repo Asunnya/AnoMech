@@ -10,9 +10,9 @@ namespace AnoMech.Core.UserActions;
 // Both are server-driven in the real game (the ActorGauge packet the sim firewalls), so we
 // run them client-side. `writeTimer` (optional) is the gauge's own countdown field
 // (WhiteMage.LilyTimer, Sage.AddersgallTimer) — the visible fill ring; kept in sync as ms.
-internal sealed unsafe class TimedGauge(uint job, ResourceGauge gauge, float seconds, bool decay, int amount = 1, GaugeWriter? writeTimer = null)
+internal sealed unsafe class TimedGauge(JobId job, ResourceGauge gauge, float seconds, bool decay, int amount = 1, GaugeWriter? writeTimer = null)
 {
-    public uint Job => job;
+    public JobId Job => job;
     public ResourceGauge Gauge => gauge;
     public float Seconds => seconds;
     public bool Decay => decay;
@@ -27,7 +27,7 @@ internal sealed unsafe class TimedGaugeHandler : IUserActionHandler
 
     public void OnTick(float deltaSeconds)
     {
-        var job = Plugin.PlayerState.ClassJob.RowId;
+        var job = PlayerJob.Current;
         var jgm = JobGaugeManager.Instance();
         if (jgm == null) return;
 

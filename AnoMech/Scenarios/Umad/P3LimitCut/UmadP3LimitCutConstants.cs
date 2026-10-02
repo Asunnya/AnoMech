@@ -111,13 +111,10 @@ public static class UmadP3LimitCutConstants
     // Shown hits are fractions of max HP (a non-tank's 216k in the logs, ~30% party mitigation baked in).
     public static class Damage
     {
-        // ~27k on a non-tank, ~6k under the LB3.
         public const float CloneAppear = 0.13f;
-        // A second cyclone lands on the first's Wind Resistance Down II; the tank LB3's 80% is
-        // exactly enough to live through it.
+        // A second cyclone lands on the first's Wind Resistance Down II; the tank LB3's 80% is enough to live through it.
         public const float CycloneVulnMitigation = 0.80f;
-        // A tank alone in one needs the LB3 and a major cooldown of its own.
-        public const float CycloneSoloTankMitigation = 0.85f;
+        public const float CycloneSoloTankMitigation = 0.80f;
         // The charge falls off with distance from 20x max HP at the clone; an unmitigated
         // non-tank dies inside ~35y.
         public const float ChargeLethalRange = 35f;

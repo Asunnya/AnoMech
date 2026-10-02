@@ -51,7 +51,7 @@ public sealed class M9sFinalScenario : IScenario
         pulses.Clear();
         bossKilled = false;
 
-        state = new M9sFinalState(settingsWindow.Overrides);
+        state = new M9sFinalState(world.Rng, settingsWindow.Overrides);
         stomp = new M9sBatStomp(world, damage, state.Satisfied, state.Bats, SpawnHelper);
         hardcore = new M9sHardcore(world.Party, damage, state.Satisfied, SpawnHelper);
         scratch = new M9sSanguineScratch(damage, state.Satisfied, SpawnHelper);

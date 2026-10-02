@@ -6,7 +6,7 @@
 //   Re-run the extractor against a newer replay to refresh; do not edit by hand.
 // </auto-generated>
 using System;
-using AnoMech.Core.Native;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Scenarios.Umad;
 
@@ -642,10 +642,10 @@ public static class UmadReplayData
     public static void Seed()
     {
         foreach (var (key, value) in RsvText)
-            RsvFunctions.Add(key, value);
+            Natives.Rsv.Add(key, value);
         foreach (var (key, valueBase64) in RsvRaw)
-            RsvFunctions.AddRaw(key, Convert.FromBase64String(valueBase64));
+            Natives.Rsv.AddRaw(key, Convert.FromBase64String(valueBase64));
         foreach (var record in RsfRecords)
-            RsfFunctions.Add(Convert.FromBase64String(record));
+            Natives.Rsf.Add(Convert.FromBase64String(record));
     }
 }

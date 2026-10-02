@@ -103,7 +103,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         world = worldParam;
         party = world.Party;
         damage = new DamageSolver(party);
-        state = new DsrP1KnightsState();
+        state = new DsrP1KnightsState(world.Rng);
         helpers.Clear();
         portals.Clear();
         burningChains.Clear();
@@ -291,7 +291,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         PlayEffect(adelphel, ActionId.HolyShieldBash, 2.1f, RotationTowards(adelphel.Position, holder.Position), holder.GameObjectId);
         holder.AddStatus(StatusId.DownForTheCount, 5.96f);
         if (holder is ISimPartyMember { Role: PartyRole.MainTank or PartyRole.OffTank } tank && party.IsBotDriven(holder))
-            party.GiveInvuln(tank.Role, 8f);
+            tank.UseInvuln();
         state.ShieldBashTether.Despawn();
     }
 
@@ -380,7 +380,7 @@ public sealed class DsrP1KnightsScenario : IScenario
         var stackers = AliveMembers().Where(m => m is ISimPartyMember member && !prey.Contains(member.Role)).ToList();
         if (stackers.Count > 0)
         {
-            var bait = stackers[Random.Shared.Next(stackers.Count)];
+            var bait = stackers[world.Rng.Next(stackers.Count)];
             var coneRotation = RotationTowards(origin, bait.Position);
             PlayEffect(NextSlashCaster(ref caster, coneRotation), ActionId.HyperdimensionalSlashCone, 1.1f, coneRotation, bait.GameObjectId);
             var shared = party.Find.InsideCone(new Placement(origin, coneRotation), SlashConeHalfAngle, SlashConeLength);

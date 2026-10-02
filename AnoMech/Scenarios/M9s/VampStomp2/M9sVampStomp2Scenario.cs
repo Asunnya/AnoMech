@@ -46,7 +46,7 @@ public sealed class M9sVampStomp2Scenario : IScenario
         helpers.Clear();
         pulses.Clear();
 
-        state = new M9sVampStomp2State(settingsWindow.Overrides);
+        state = new M9sVampStomp2State(world.Rng, settingsWindow.Overrides);
         stomp = new M9sBatStomp(world, damage, state.Satisfied, state.Bats, SpawnHelper);
         hardcore = new M9sHardcore(world.Party, damage, state.Satisfied, SpawnHelper);
         if (selectedAi is { } idx && idx < AiStrats.Count)

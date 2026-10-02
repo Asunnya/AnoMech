@@ -4,6 +4,7 @@ using AnoMech.Core;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
+using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Scenarios.Top.P5Sigma;
 

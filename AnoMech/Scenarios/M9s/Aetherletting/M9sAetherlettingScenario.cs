@@ -45,7 +45,7 @@ public sealed class M9sAetherlettingScenario : IScenario
         helpers.Clear();
         pulses.Clear();
 
-        state = new M9sAetherlettingState(settingsWindow.Overrides);
+        state = new M9sAetherlettingState(world.Rng, settingsWindow.Overrides);
         if (selectedAi is { } idx && idx < AiStrats.Count)
             ((IScenarioAi<M9sAetherlettingState>)AiStrats[idx]).Run(state, world);
 
