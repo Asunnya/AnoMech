@@ -5,6 +5,7 @@ public interface IGameData
 {
     ActionRow? Action(uint actionId);
     KnockbackRow? Knockback(uint knockbackId);
+    ClassJobRow? ClassJob(uint classJobId);
 
     // Null for a missing row or an empty name.
     string? StatusName(ushort statusId);

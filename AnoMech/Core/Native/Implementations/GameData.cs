@@ -1,6 +1,7 @@
 using AnoMech.Core.Native.Interfaces;
 using LuminaAction = Lumina.Excel.Sheets.Action;
 using LuminaBNpcName = Lumina.Excel.Sheets.BNpcName;
+using LuminaClassJob = Lumina.Excel.Sheets.ClassJob;
 using LuminaKnockback = Lumina.Excel.Sheets.Knockback;
 using LuminaStatus = Lumina.Excel.Sheets.Status;
 
@@ -19,12 +20,20 @@ internal sealed class GameData : IGameData
             row.EffectRange,
             row.XAxisModifier,
             row.Omen.ValueNullable is { RowId: not 0 } omen ? omen.Path.ToString() : null,
-            row.OmenAlt.ValueNullable is { RowId: not 0 } omenAlt ? omenAlt.Path.ToString() : null);
+            row.OmenAlt.ValueNullable is { RowId: not 0 } omenAlt ? omenAlt.Path.ToString() : null,
+            row.ActionCategory.RowId,
+            row.CanTargetSelf,
+            row.CanTargetParty);
     }
 
     public KnockbackRow? Knockback(uint knockbackId)
         => Plugin.DataManager.GetExcelSheet<LuminaKnockback>().TryGetRow(knockbackId, out var row)
             ? new KnockbackRow(knockbackId, row.Distance, row.Speed)
+            : null;
+
+    public ClassJobRow? ClassJob(uint classJobId)
+        => Plugin.DataManager.GetExcelSheet<LuminaClassJob>().TryGetRow(classJobId, out var row)
+            ? new ClassJobRow(classJobId, row.LimitBreak1.RowId, row.LimitBreak2.RowId, row.LimitBreak3.RowId)
             : null;
 
     public string? StatusName(ushort statusId)

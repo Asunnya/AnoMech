@@ -26,9 +26,4 @@
     <Reference Include="Serilog" HintPath="$(DalamudLibPath)Serilog.dll" Private="true" />
     <Reference Include="Microsoft.Extensions.ObjectPool" HintPath="$(DalamudLibPath)Microsoft.Extensions.ObjectPool.dll" Private="true" />
   </ItemGroup>
-
-  <!-- Syntax-only parsing of the plugin's sources for NativeBoundaryTests. -->
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-  </ItemGroup>
 </Project>

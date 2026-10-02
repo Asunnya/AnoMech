@@ -94,7 +94,6 @@ public sealed class Plugin : IDalamudPlugin
             Game = new Game();
             GameInstance = Game;
             MultiplayerInstance = Multiplayer;
-            UserActions = new UserActions(PlayerInputHooks);
             if (Config.EnableUserActions) UserActions.Enable();
             ConfigWindow = new ConfigWindow(this);
             MainWindow = new MainWindow(this);
@@ -175,6 +174,7 @@ public sealed class Plugin : IDalamudPlugin
         Natives.EventObjects = new EventObjects();
         Natives.HiddenObjects = new HiddenObjects();
         Natives.PlayerInput = PlayerInputHooks;
+        Natives.UserActions = UserActions = new UserActions(PlayerInputHooks);
         Natives.Vfx = new VfxFunctions();
         Natives.TimelinePreload = new ActionTimelinePreload();
         Natives.RawActionEffect = new RawActionEffect();

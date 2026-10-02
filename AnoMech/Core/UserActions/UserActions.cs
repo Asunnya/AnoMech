@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AnoMech.Core.Native.Implementations;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.UserActions.Jobs;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
@@ -11,7 +12,7 @@ namespace AnoMech.Core.UserActions;
 // client-side, filling in the server responses the sim firewall blocks. Sprint is
 // resolved unconditionally; the feature handlers only while Enabled. Nothing in the
 // engine depends on it.
-public sealed unsafe class UserActions : IDisposable
+public sealed unsafe class UserActions : IUserActions, IDisposable
 {
     private readonly LocalPlayerInputHooks hooks;
     private readonly IUserActionHandler sprint = new SprintHandler();

@@ -336,7 +336,7 @@ public sealed class Game : IDisposable
         // Snapshot the player's pristine job gauge once per session, before any action mutates
         // it, so Leave can restore it. Only on a true zone entry — a restart must keep the
         // original snapshot, not re-capture the already-simulated gauge.
-        if (freshLoad) Plugin.UserActions.OnSessionStart();
+        if (freshLoad) Natives.UserActions.OnSessionStart();
 
         World.HideObject(ExitObjectBaseId);
         lastPhase = phase;
@@ -378,7 +378,7 @@ public sealed class Game : IDisposable
             TeleportPlayerToSpawnIfOutsideArena();
         if (previousScenario != scenario)
             MechanicStreak = 0;
-        Plugin.UserActions.OnScenarioStart();
+        Natives.UserActions.OnScenarioStart();
         if (!isPeer)
         {
             activeScenario = scenario;
@@ -588,7 +588,7 @@ public sealed class Game : IDisposable
         {
             CancelWaitingStart();
             ResetInternal();
-            Plugin.UserActions.OnSessionEnd();   // restore the job gauge captured at session start
+            Natives.UserActions.OnSessionEnd();   // restore the job gauge captured at session start
             Natives.Bgm.Reset();
             World.Map.Unload();
         });
@@ -623,7 +623,7 @@ public sealed class Game : IDisposable
     {
         activeScenario = null;
         Events.Clear();
-        Plugin.UserActions.OnSessionEnd();   // restore the gauge if the plugin unloads mid-session (no-op otherwise)
+        Natives.UserActions.OnSessionEnd();   // restore the gauge if the plugin unloads mid-session (no-op otherwise)
         World.Dispose();
     }
 }

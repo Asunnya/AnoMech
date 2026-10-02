@@ -10,4 +10,7 @@ public sealed record ActionRow(
     byte EffectRange,
     byte XAxisModifier,
     string? OmenPath,
-    string? OmenAltPath);
+    string? OmenAltPath,
+    uint ActionCategory,
+    bool CanTargetSelf,
+    bool CanTargetParty);

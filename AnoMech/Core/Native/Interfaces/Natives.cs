@@ -10,6 +10,7 @@ public static class Natives
     public static IEventObjects EventObjects { get; internal set; } = null!;
     public static IHiddenObjects HiddenObjects { get; internal set; } = null!;
     public static ILocalPlayerInput PlayerInput { get; internal set; } = null!;
+    public static IUserActions UserActions { get; internal set; } = null!;
 
     public static IVfxFunctions Vfx { get; internal set; } = null!;
     public static IActionTimelinePreload TimelinePreload { get; internal set; } = null!;

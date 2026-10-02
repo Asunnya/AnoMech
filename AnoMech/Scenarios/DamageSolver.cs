@@ -4,6 +4,7 @@ using System.Linq;
 using AnoMech.Core;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
+using AnoMech.Core.Native.Interfaces;
 using AnoMech.Core.SimObjects;
 using AnoMech.Core.UserActions;
 
@@ -184,7 +185,7 @@ public class DamageSolver
         => Mitigation.Effective(target.ActiveStatusSnapshot.Select(s => s.StatusId), kind);
 
     private bool ChecksMitigation(SimCharacter target)
-        => Plugin.Config.EnableTankMitigation && Plugin.UserActions.Enabled
+        => Plugin.Config.EnableTankMitigation && Natives.UserActions.Enabled
            && target is ISimPartyMember && !party.IsBotDriven(target);
 
     private List<ushort> VulnUps(DamageType damageType)
