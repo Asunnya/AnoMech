@@ -297,7 +297,12 @@ public abstract class SimCharacter(Coordinates coordinates) : ISimObject, IPosit
 
     public SimStatus? FindStatus(ushort statusId, GameObjectId sourceObject = default)
     {
-        return statusList.Find(status => status.IsActive && status.StatusId == statusId && status.SourceObject == sourceObject);
+        foreach (var status in statusList)
+        {
+            if (status.IsActive && status.StatusId == statusId && status.SourceObject == sourceObject)
+                return status;
+        }
+        return null;
     }
 
     public bool HasStatus(ushort statusId) => FindStatus(statusId) != null;
