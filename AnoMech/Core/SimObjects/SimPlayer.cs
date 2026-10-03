@@ -59,6 +59,20 @@ public sealed class SimPlayer(Coordinates coordinates) : SimCharacter(coordinate
 
     private protected override PlayerMovement Movement => field ??= new PlayerMovement(this);
 
+    // Only a debug bot presses it for you; a human tank presses their own.
+    public bool UseInvuln()
+    {
+        if (!DebugBotControl.Enabled || Dead) return false;
+        if (Mitigation.InvulnActionId(Proxy.ClassJob) is not { } actionId) return false;
+        JobActions.ApplyEffects(this, actionId, (ulong)GameObjectId, Random.Shared);
+        return true;
+    }
+
+    public void UseSprint(float duration)
+    {
+        if (DebugBotControl.Enabled && !Dead) SprintHandler.Apply(this, duration);
+    }
+
     public void Knockback(Vector3 source, float distance, float speed) => Movement.Knockback(source, distance, speed);
 
     public void PushInDirection(float heading, float distance, float speed) => Movement.PushInDirection(heading, distance, speed);

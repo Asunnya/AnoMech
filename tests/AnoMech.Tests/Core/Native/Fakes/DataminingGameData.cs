@@ -6,7 +6,7 @@ namespace AnoMech.Tests;
 
 // Real sheet rows from the ffxiv-datamining CSVs that AnoMech.Tests.csproj downloads at build.
 // Mirrors GameData's mapping column for column; sheets are parsed once per test run.
-internal sealed class DataminingGameData : IGameData
+internal sealed class DataminingGameData(FakeRsvFunctions rsv) : IGameData
 {
     private static readonly Lazy<Sheet> Actions = Load("Action");
     private static readonly Lazy<Sheet> BNpcBases = Load("BNpcBase");
@@ -23,7 +23,7 @@ internal sealed class DataminingGameData : IGameData
         if (Actions.Value.Row(actionId) is not { } row) return null;
         return new ActionRow(
             actionId,
-            row.Text("Name"),
+            rsv.Resolve(row.Text("Name")),
             row.UInt("Cast100ms") / 10f,
             row.Byte("CastType"),
             row.Byte("EffectRange"),
@@ -60,14 +60,16 @@ internal sealed class DataminingGameData : IGameData
             ? new ModelSkeletonRow(skeletonId, row.Float("Radius"))
             : null;
 
-    public string? StatusName(ushort statusId) => NonEmpty(Statuses.Value.Row(statusId)?.Text("Name"));
+    public string? StatusName(ushort statusId) => NonEmpty(Resolve(Statuses.Value.Row(statusId)?.Text("Name")));
 
-    public string? BNpcName(uint nameId) => NonEmpty(BNpcNames.Value.Row(nameId)?.Text("Singular"));
+    public string? BNpcName(uint nameId) => NonEmpty(Resolve(BNpcNames.Value.Row(nameId)?.Text("Singular")));
 
     public bool FileExists(string path) => true;
 
     private static string? OmenPath(uint omenId)
         => omenId != 0 && Omens.Value.Row(omenId) is { } omen ? omen.Text("Path") : null;
+
+    private string? Resolve(string? text) => text == null ? null : rsv.Resolve(text);
 
     private static string? NonEmpty(string? text) => string.IsNullOrEmpty(text) ? null : text;
 

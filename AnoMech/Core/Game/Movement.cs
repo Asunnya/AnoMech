@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using AnoMech.Core.Game.Geometry;
 using AnoMech.Core.SimObjects;
 
 namespace AnoMech.Core.Game;
@@ -29,6 +30,8 @@ internal class Movement(SimCharacter parent)
     private float easeDelay;
     private bool easeOut;
 
+    protected virtual ObstacleField Obstacles => parent.Obstacles;
+
     private SimCharacter? followTarget;
     private bool followForced;
     private float followCooldown;
@@ -41,7 +44,6 @@ internal class Movement(SimCharacter parent)
     private bool internalReissue;
 
     public bool IsMoving => destination != null;
-    // Unused -- reserved for a possible future Move/Intercept race guard.
     public bool IsIntercepting => interceptTether != null;
     // Narrower than IsMoving: true only while a PushInDirectionEased is mid-flight.
     public bool IsEasedMoving => easeDuration != null;
@@ -111,7 +113,7 @@ internal class Movement(SimCharacter parent)
         // Slide the parked point along the tether line to the nearest spot clear of
         // obstacles, so the bot lands on the grab corridor instead of being parked
         // perpendicular off it when a black hole sits on the line.
-        var target = parent.Obstacles.NearestClearOnSegment(src, src + seg, t, tMin, tMax);
+        var target = Obstacles.NearestClearOnSegment(src, src + seg, t, tMin, tMax);
         if (logDetail)
             DiagnosticLog.Info(
                 $"[Movement] RetargetIntercept: from ({parent.Position.X:F1},{parent.Position.Z:F1}) toward "
@@ -249,7 +251,7 @@ internal class Movement(SimCharacter parent)
         // nearest boundary point so the bot stops at the edge instead of orbiting an
         // unreachable center. Skipped for forced movement (knockback).
         var dest2 = new Vector2(dest.X, dest.Z);
-        if (avoid) dest2 = parent.Obstacles.ClampOutside(dest2);
+        if (avoid) dest2 = Obstacles.ClampOutside(dest2);
 
         var dx = dest2.X - cur.X;
         var dz = dest2.Y - cur.Z;
@@ -269,7 +271,7 @@ internal class Movement(SimCharacter parent)
             var desired = new Vector2(dx / dist, dz / dist);
             // Steer around obstacles; a no-op (returns `desired`) when the field is
             // empty, nothing blocks, or this is forced movement.
-            var heading = avoid ? parent.Obstacles.Steer(new Vector2(cur.X, cur.Z), desired, dist) : desired;
+            var heading = avoid ? Obstacles.Steer(new Vector2(cur.X, cur.Z), desired, dist) : desired;
             var next = new Vector3(cur.X + heading.X * step, cur.Y, cur.Z + heading.Y * step);
             parent.SetPosition(new Placement(next, faceTravel ? MathF.Atan2(heading.X, heading.Y) : parent.Rotation));
         }
@@ -375,6 +377,9 @@ internal sealed class PlayerMovement(SimCharacter parent) : Movement(parent)
     // a strat walking its bots must never take the wheel from someone practising. Knockbacks,
     // arrow pushes and a forced follow (Confusion) still apply -- the real fight moves you too.
     protected override bool CanFollow(bool forced) => forced || DebugBotControl.Enabled;
+
+    // A human walks a forced follow (Confusion) straight; only a bot steers around geometry.
+    protected override ObstacleField Obstacles => DebugBotControl.Enabled ? base.Obstacles : ObstacleField.Empty;
 }
 
 // Position comes from received poses (SimNetworkPuppet.ApplyNetworkPose); a scheduled bot

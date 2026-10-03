@@ -23,6 +23,7 @@ public sealed class TopP5OmegaState
     // The four outside HelloWorldTargets[0..1] and MonitorTargets, in first Hello World jump
     // order; resolved here for the same reason.
     public RoleList HelloWorld1JumpOrder { get; }
+    public RoleList BlasterTetherTargets { get; }
 
     public IReadOnlyList<Direction> AttackDirections { get; }
     public IReadOnlyList<OmegaAttack> OmegaAttacks { get; } 
@@ -68,6 +69,7 @@ public sealed class TopP5OmegaState
         OmegaAttacks = [firstFAttack, firstMAttack, secondFAttack, secondMAttack];
         HelloWorld1JumpOrder = new RoleList(party, Enum.GetValues<PartyRole>())
             .Random(rng, 4, MonitorTargets[0], MonitorTargets[1], HelloWorldTargets[0], HelloWorldTargets[1]);
+        BlasterTetherTargets = RoleList.Random(rng, party, 2);
     }
 
     private OmegaAttack RandomFAttack() => rng.NextObj(OmegaAttack.Legs, OmegaAttack.Staff);
@@ -106,6 +108,7 @@ public sealed class TopP5OmegaState
         DoubleDynamicTargets = new RoleList(party, doubleDynamicTargets);
         MonitorTargets = new RoleList(party, monitorTargets);
         HelloWorld1JumpOrder = new RoleList(party, helloWorld1JumpOrder);
+        BlasterTetherTargets = RoleList.Empty();
         AttackDirections = attackDirectionsRadians.Select(r => new Direction(r)).ToList();
         OmegaAttacks = omegaAttacks;
         BettleSpawnDirection = new Direction(bettleSpawnDirectionRadians);

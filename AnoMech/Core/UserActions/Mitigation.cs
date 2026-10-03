@@ -23,6 +23,17 @@ public readonly record struct Mitigation(
 
     public static bool IsInvuln(ushort statusId) => ByStatusId.TryGetValue(statusId, out var m) && m.Damage >= Invulnerable;
 
+    // Null for a non-tank job.
+    public static uint? InvulnActionId(byte classJob) => InvulnActionIdByJob.TryGetValue(classJob, out var id) ? id : null;
+
+    private static readonly Dictionary<byte, uint> InvulnActionIdByJob = new()
+    {
+        [19] = 30,    // Paladin: Hallowed Ground
+        [21] = 43,    // Warrior: Holmgang
+        [32] = 3638,  // Dark Knight: Living Dead
+        [37] = 16152, // Gunbreaker: Superbolide
+    };
+
     public static readonly IReadOnlyDictionary<ushort, Mitigation> ByStatusId = new Dictionary<ushort, Mitigation>
     {
         // Tank role

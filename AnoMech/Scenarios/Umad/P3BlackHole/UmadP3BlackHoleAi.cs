@@ -35,6 +35,8 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         state = stateParam;
         world = worldParam;
         assignedHole.Clear();
+        implosionChaos = null;
+        implosionSpots = null;
         var ai = new AiManager(world);
 
         // Kept here so a peer's debug-bot replay gets it from the same Run.
@@ -59,13 +61,14 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         // Null (a Share plan) means no invuln -- mitigation handles it instead.
         if (ThunderIIIPlanning.InvulnRole(state.ThunderSet1) is { } set1InvulnRole)
             ai.UseInvuln(38f, set1InvulnRole);
-        // Follow self-sustains, so no AiMove.
-        world.Events.Add(40.5f, ResolveFirstThunder);
+        // Follow self-sustains, so no AiMove. Right after the 39.33 Nothingness: MT's pull spot can
+        // be ~19y from Exdeath, too far to run before the 42.63 hit.
+        world.Events.Add(39.4f, ResolveFirstThunder);
         ai.Move(43.19f, SwapFirstThunderTanks);
         // Standing invariant for the Set 1 danger window; the swap lands at 43.5f.
         {
             var (set1First, set1Second) = ThunderIIIPlanning.Roles(state.ThunderSet1);
-            ScheduleThunderClearance(39.5f, 43.5f, 46.2f, set1First, set1Second);
+            ScheduleThunderClearance(39.5f, 43.19f, 43.5f, 46.2f, set1First, set1Second);
         }
         ai.Move(46.5f, DodgeEdict);
         // Sprint: DodgeEdict's spot can be ~20y from the slap target, more than RunSpeed covers
@@ -92,7 +95,7 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         // Same as Set 1; the swap lands at 84.9f.
         {
             var (set2First, set2Second) = ThunderIIIPlanning.Roles(state.ThunderSet2);
-            ScheduleThunderClearance(80.5f, 84.9f, 87.5f, set2First, set2Second);
+            ScheduleThunderClearance(80.5f, 84.5f, 84.9f, 87.5f, set2First, set2Second);
         }
         ai.Move(88f, StackCentre);
         world.Events.Add(92.3f, () => GrabTether(tetherIndex: 0, playerIndex: 5));
@@ -116,15 +119,19 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         // sprints instead of arriving late.
         ai.Move(117f, () => DodgeImplosion(shockwaveIndex: 0, slapIndex: 2, slapKefkaIndex: 3), jitter: 0f, arrivalTime: 119.09f);
         ai.Move(119.2f, () => DodgeImplosion(shockwaveIndex: 1, slapIndex: 2, slapKefkaIndex: 3), jitter: 0f, arrivalTime: 121.11f);
-        ai.Move(121.3f, () => DodgeSlap(slapIndex: 2, kefkaIndex: 3), arrivalTime: 123.25f);
+        ai.Move(121.3f, () => DodgeSlap(slapIndex: 2, kefkaIndex: 3), sprint: true);
         ai.Move(124f, StackCentre);
         world.Events.Add(125.9f, () => GrabTether(tetherIndex: 0, playerIndex: 6));
         world.Events.Add(125.9f, () => GrabTether(tetherIndex: 1, playerIndex: 2));
         world.Events.Add(127.9f, () => PullTether(playerIndex: 6));
         world.Events.Add(127.9f, () => PullTether(playerIndex: 2));
-        world.Events.Add(132f, () => GrabTether(tetherIndex: 0, playerIndex: 2));
-        ai.Move(134f, () => DodgeLookUponSplitHolder(tetherPlayerIndex: 2, lookKefkaIndex: 4), sprint: true);
+        world.Events.Add(130.8f, () => GrabTether(tetherIndex: 0, playerIndex: 2));
+        world.Events.Add(130.8f, () => ReturnToMiddle(playerIndex: 6));
+        ScheduleTetherRegrab(131.2f, 134f, tetherIndex: 0, playerIndex: 2);
+        ai.Move(134f, () => DodgeLookUponSplitHolder(tetherPlayerIndex: 2, lookKefkaIndex: 4, leaveWithoutTether: false), sprint: true);
         ai.Move(134f, () => DodgeLookUponSplitOthers(tetherPlayerIndex: 2, lookKefkaIndex: 4), sprint: true);
+        ai.Move(134.5f, () => DodgeLookUponSplitHolder(tetherPlayerIndex: 2, lookKefkaIndex: 4, leaveWithoutTether: false), sprint: true);
+        ai.Move(135f, () => DodgeLookUponSplitHolder(tetherPlayerIndex: 2, lookKefkaIndex: 4, leaveWithoutTether: true), sprint: true);
         ai.Move(139f, PrepositionForStomp);
         ai.Move(147f, StompBlizzardCorners);
         ai.Move(149.8f, StompStackAndTowers);
@@ -149,6 +156,19 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
     // co-members share the target's spot as an intentional shared soak.
     private IAiMove DodgeSlap(int slapIndex, int kefkaIndex)
     {
+        var move = SlapSpots(slapIndex, kefkaIndex);
+        for (int i = 0; i < 8; i++)
+        {
+            var member = world.Party.Get(i);
+            if (member is null || !member.IsAlive()) continue;
+            AnoMech.Core.DiagnosticLog.Info(
+                $"[UmadP3BlackHoleAi] DodgeSlap({slapIndex},{kefkaIndex}): role{i} from ({member.Position.X:F1},{member.Position.Z:F1}) -> target {move[i]}.");
+        }
+        return move;
+    }
+
+    private IAiMove SlapSpots(int slapIndex, int kefkaIndex)
+    {
         var direction = state.SlapAttacks[slapIndex] == ActionId.SlapHappy_Right
                             ? state.KefkaPosition[kefkaIndex].Flip()
                             : state.KefkaPosition[kefkaIndex];
@@ -161,13 +181,6 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
                                         new(7f, -7f), new(7f, -7f), new(7f, -7f), new(7f, -7f))
                                     .NaturalOrder()
                                     .ApplyPositions(direction.Apply);
-        for (int i = 0; i < 8; i++)
-        {
-            var member = world.Party.Get(i);
-            if (member is null || !member.IsAlive()) continue;
-            AnoMech.Core.DiagnosticLog.Info(
-                $"[UmadP3BlackHoleAi] DodgeSlap({slapIndex},{kefkaIndex}): role{i} from ({member.Position.X:F1},{member.Position.Z:F1}) -> target {move[i]}.");
-        }
         return move;
     }
 
@@ -183,8 +196,9 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
     {
         if (state.ScenarioObjects.Exdeath is not { } exdeath) return;
         var (first, _) = ThunderIIIPlanning.Roles(state.ThunderSet1);
-        if (world.Party.Get((int)first) is { } firstMember && firstMember.IsAlive())
-            firstMember.Follow(exdeath);
+        if (world.Party.Get((int)first) is not { } firstMember || !firstMember.IsAlive()) return;
+        (firstMember as ISimPartyMember)?.UseSprint(3.5f);
+        firstMember.Follow(exdeath, speed: AiManager.SprintSpeed);
     }
 
     private void ResolveSecondThunder()
@@ -262,16 +276,16 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         }
     }
 
-    // Split at swapTime: seat-reassertion would fight SwapThunderTanks mid-crossing. After the
-    // swap, second is settled at the boss and first is a normal bystander.
+    // Paused from swapStart to swapLand: seat-reassertion would cancel SwapThunderTanks
+    // mid-crossing. After the swap, second is settled at the boss and first is a normal bystander.
     private const float ThunderClearanceInterval = 0.4f;
 
-    private void ScheduleThunderClearance(float fromTime, float swapTime, float toTime, PartyRole first, PartyRole? second)
+    private void ScheduleThunderClearance(float fromTime, float swapStart, float swapLand, float toTime, PartyRole first, PartyRole? second)
     {
-        for (var t = fromTime; t < swapTime; t += ThunderClearanceInterval)
+        for (var t = fromTime; t < swapStart; t += ThunderClearanceInterval)
             world.Events.Add(t, () => EnforceThunderClearanceOnce(first, second));
         var postSwapExcluded = second ?? first;
-        for (var t = swapTime; t <= toTime; t += ThunderClearanceInterval)
+        for (var t = swapLand; t <= toTime; t += ThunderClearanceInterval)
             world.Events.Add(t, () => EnforceThunderClearanceOnce(postSwapExcluded, null));
     }
 
@@ -315,20 +329,24 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         var fwd = new Vector2(MathF.Sin(boss.Rotation), MathF.Cos(boss.Rotation));
         var denom = Vector2.Dot(axis, fwd);
 
-        // A corridor edge offset by sign*lookSafe (always clear of Look-Upon), slid
-        // along the line to sit `behind` the boss. Falls back to the edge midpoint when
-        // the boss faces across the line (sliding can't change how far behind it sits).
+        float Fwd(Vector2 p) => Vector2.Dot(p - bossPos, fwd);   // < 0 = behind the boss
+
+        // A corridor edge offset by sign*lookSafe (always clear of Look-Upon), slid along
+        // the line only as far as needed to sit at least `behind` the boss. The slide is
+        // capped at the arena wall: with the boss facing nearly across the line it would
+        // otherwise run tens of yards out.
         Vector2 Seat(float sign)
         {
             var edge = lookRight * (sign * lookSafe);
-            if (MathF.Abs(denom) < 0.1f) return edge;
-            var t = (-behind - Vector2.Dot(edge - bossPos, fwd)) / denom;
+            var f = Fwd(edge);
+            if (f <= -behind || MathF.Abs(denom) < 0.1f) return edge;
+            var maxSlide = MathF.Sqrt((ArenaRadius - 1f) * (ArenaRadius - 1f) - lookSafe * lookSafe);
+            var t = Math.Clamp((-behind - f) / denom, -maxSlide, maxSlide);
             return edge + axis * t;
         }
 
         var a = Seat(1f);
         var b = Seat(-1f);
-        float Fwd(Vector2 p) => Vector2.Dot(p - bossPos, fwd);   // < 0 = behind the boss
         bool aOk = Fwd(a) < -1f, bOk = Fwd(b) < -1f;
         if (aOk == bOk) return AiMove.All(a.LengthSquared() <= b.LengthSquared() ? a : b);
         return AiMove.All(aOk ? a : b);
@@ -336,67 +354,97 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
 
     // Implosion fires two +-45deg Shockwave cones from Chaos, the axis rotating 90deg between
     // the two shockwaves, so the only bearings safe from both are the four diagonals at 45deg
-    // to the cone axis. Of those, take the diagonal whose arena-border end is deepest into the
-    // slap-safe half (farthest from the slap-dangerous edge). Resolve where that diagonal crosses
-    // the line parallel to the slap divide that sits 10y into the safe half; if the diagonal
-    // never reaches that line inside the arena, hug the border (1y in) instead. Then nudge each
-    // shockwave a few degrees off the diagonal toward the perpendicular of its own cone so neither
-    // dodge stands on the (hit-counting) cone edge. Read Chaos live, like the edict.
+    // to the cone axis. Each role takes the point on any diagonal, clear of the slap circles,
+    // nearest its own DodgeSlap spot: the slap-dodge follows with under 2s to get there. Each
+    // shockwave then leans a few degrees off the diagonal toward the perpendicular of its own
+    // cone so neither dodge stands on the (hit-counting) cone edge.
     private const float ArenaRadius = 20f;             // ~outer Black Hole ring (z=-17), tune in-game
-    private const float ImplosionSlapSafeMargin = 10f; // park this far past the slap divide, into the safe half
-    private const float ImplosionBorderInset = 1f;     // fallback: this far inside the arena border
+    private const float ImplosionBorderInset = 1f;
+    private const float ImplosionMinChaosDistance = 4f; // closer in, the lean clears the cone edge by too little
     private const float ImplosionConeLean = 0.18f;     // ~10deg off the cone edge
+    private const float SlapRadius = 13f;
+    private const float SlapClearance = 1.5f;
+
+    // Chaos resumes chasing the MT once the cast ends, but the shockwave helpers keep the
+    // placement they copied, so both dodges read Chaos once.
+    private (Vector2 Centre, float Rotation)? implosionChaos;
+    private (int Diagonal, float Distance)[]? implosionSpots;
 
     private IAiMove DodgeImplosion(int shockwaveIndex, int slapIndex, int slapKefkaIndex)
     {
         var boss = state.ScenarioObjects.Chaos;
         if (boss is null) return StackCentre();
 
-        var c = new Vector2(boss.Position.X, boss.Position.Z);
-        var offset = state.ImplosionAttack == ActionId.LongitudinalImplosion ? 0f : MathF.PI / 2f;
-        var baseAxis = boss.Rotation + offset;
+        if (shockwaveIndex == 0 || implosionChaos is null)
+            implosionChaos = (new Vector2(boss.Position.X, boss.Position.Z), boss.Rotation);
+        var (c, rotation) = implosionChaos.Value;
+        var baseAxis = rotation + (state.ImplosionAttack == ActionId.LongitudinalImplosion ? 0f : MathF.PI / 2f);
 
-        // Slap divide runs through arena center perpendicular to safeDir; dot(P, safeDir) is the
-        // signed distance into the slap-safe half. Danger edge is the arena rim on the unsafe side.
-        var safeDir = SlapSafeDir(slapIndex, slapKefkaIndex);
-        var dangerEdge = -safeDir * ArenaRadius;
+        if (shockwaveIndex == 0 || implosionSpots is null)
+            implosionSpots = PickImplosionSpots(c, baseAxis, slapIndex, slapKefkaIndex);
 
-        // Of the four 45deg diagonals, keep the one whose outward arena-border point is farthest
-        // from that danger edge - deepest into the slap-safe half, robust to Chaos off-center.
-        var bestDir = Vector2.Zero;
-        var bestBorderDist = 0f;
-        var bestDist = float.MinValue;
-        for (var k = 0; k < 4; k++)
-        {
-            var theta = baseAxis + MathF.PI / 4f + k * (MathF.PI / 2f);
-            var dir = new Vector2(MathF.Sin(theta), MathF.Cos(theta));
-            var borderDist = RayToArenaBorder(c, dir);
-            var dist = Vector2.DistanceSquared(c + dir * borderDist, dangerEdge);
-            if (dist > bestDist) { bestDist = dist; bestDir = dir; bestBorderDist = borderDist; }
-        }
-
-        // Where the diagonal crosses the safe-side parallel line (dot(P, safeDir) == margin):
-        // c + t*bestDir lies on it at t = (margin - dot(c, safeDir)) / dot(bestDir, safeDir).
-        // If that crossing is ahead of Chaos and inside the arena, dodge around it; otherwise
-        // the diagonal leaves the arena before reaching the line, so hug the border instead.
-        var denom = Vector2.Dot(bestDir, safeDir);
-        var length = bestBorderDist - ImplosionBorderInset;
-        if (denom > 1e-4f)
-        {
-            var t = (ImplosionSlapSafeMargin - Vector2.Dot(c, safeDir)) / denom;
-            if (t > 0f && t <= bestBorderDist) length = t;
-        }
-
-        // Lean off the diagonal toward the perpendicular of THIS shockwave's cone axis, so we
-        // sit just inside the 90deg safe band instead of on its edge.
         var coneAxisAngle = baseAxis + shockwaveIndex * (MathF.PI / 2f);
+        var coords = new Vector2?[8];
+        for (var i = 0; i < 8; i++)
+        {
+            var (diagonal, distance) = implosionSpots[i];
+            coords[i] = ImplosionSpot(c, baseAxis, coneAxisAngle, diagonal, distance);
+        }
+        return AiMove.Create(coords).NaturalOrder();
+    }
+
+    private (int Diagonal, float Distance)[] PickImplosionSpots(Vector2 c, float baseAxis, int slapIndex, int slapKefkaIndex)
+    {
+        var slapSpots = SlapSpots(slapIndex, slapKefkaIndex);
+        var slapCentres = SlapCentres(slapIndex, slapKefkaIndex);
+        var spots = new (int, float)[8];
+        for (var i = 0; i < 8; i++)
+        {
+            var goal = slapSpots[i] ?? Vector2.Zero;
+            var bestCost = float.MaxValue;
+            for (var k = 0; k < 4; k++)
+            {
+                var maxDistance = RayToArenaBorder(c, Diagonal(baseAxis, k)) - ImplosionBorderInset;
+                for (var t = ImplosionMinChaosDistance; t <= maxDistance; t += 0.25f)
+                {
+                    var first = ImplosionSpot(c, baseAxis, baseAxis, k, t);
+                    var second = ImplosionSpot(c, baseAxis, baseAxis + MathF.PI / 2f, k, t);
+                    var clearance = MathF.Min(SlapClearanceAt(first, slapCentres), SlapClearanceAt(second, slapCentres));
+                    var cost = Vector2.Distance(second, goal) + MathF.Max(0f, -clearance) * 100f;
+                    if (cost < bestCost) { bestCost = cost; spots[i] = (k, t); }
+                }
+            }
+        }
+        return spots;
+    }
+
+    private static Vector2 Diagonal(float baseAxis, int k)
+    {
+        var theta = baseAxis + MathF.PI / 4f + k * (MathF.PI / 2f);
+        return new Vector2(MathF.Sin(theta), MathF.Cos(theta));
+    }
+
+    private static Vector2 ImplosionSpot(Vector2 c, float baseAxis, float coneAxisAngle, int diagonal, float distance)
+    {
+        var dir = Diagonal(baseAxis, diagonal);
         var coneAxis = new Vector2(MathF.Sin(coneAxisAngle), MathF.Cos(coneAxisAngle));
         var perp = RotateVec(coneAxis, MathF.PI / 2f);
-        if (Vector2.Dot(perp, bestDir) < 0f) perp = -perp;
-        var lean = MathF.Sign(bestDir.X * perp.Y - bestDir.Y * perp.X) * ImplosionConeLean;
-
-        return AiMove.All(c + RotateVec(bestDir, lean) * length);
+        if (Vector2.Dot(perp, dir) < 0f) perp = -perp;
+        var lean = MathF.Sign(dir.X * perp.Y - dir.Y * perp.X) * ImplosionConeLean;
+        return c + RotateVec(dir, lean) * distance;
     }
+
+    private Vector2[] SlapCentres(int slapIndex, int kefkaIndex)
+    {
+        var mul = state.SlapAttacks[slapIndex] == ActionId.SlapHappy_Left ? -1f : 1f;
+        return Enumerable.Range(0, 3)
+                         .Select(row => state.KefkaPosition[kefkaIndex].Apply(new Vector3(10f * mul, 0f, -10f + row * 10f)))
+                         .Select(p => new Vector2(p.X, p.Z))
+                         .ToArray();
+    }
+
+    private static float SlapClearanceAt(Vector2 p, Vector2[] slapCentres) =>
+        slapCentres.Min(centre => Vector2.Distance(p, centre)) - SlapRadius - SlapClearance;
 
     // Distance from `from` (inside the arena) along unit `dir` to the arena-circle border.
     private static float RayToArenaBorder(Vector2 from, Vector2 dir)
@@ -411,16 +459,6 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         var cos = MathF.Cos(radians);
         var sin = MathF.Sin(radians);
         return new Vector2(v.X * cos - v.Y * sin, v.X * sin + v.Y * cos);
-    }
-
-    // Unit vector toward the safe side of a Slap Happy (the side away from the r=13
-    // circles, which sit at +-10 along the KefkaPosition axis on the `mul` side).
-    private Vector2 SlapSafeDir(int slapIndex, int kefkaIndex)
-    {
-        var phi = state.KefkaPosition[kefkaIndex].RadiansFromNorth;
-        var slapX = new Vector2(MathF.Cos(phi), MathF.Sin(phi));
-        var mul = state.SlapAttacks[slapIndex] == ActionId.SlapHappy_Left ? -1f : 1f;
-        return slapX * -mul;
     }
 
     // Park the MT 45 degrees clockwise from Kefka's facing (Kefka sits centre, oriented
@@ -467,12 +505,14 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
 
     // Both trips sprint against a 3.67s deadline. tetherPlayerIndex is a slot into state.Roles,
     // not a PartyRole ordinal.
-    private IAiMove DodgeLookUponSplitHolder(int tetherPlayerIndex, int lookKefkaIndex)
+    private IAiMove DodgeLookUponSplitHolder(int tetherPlayerIndex, int lookKefkaIndex, bool leaveWithoutTether)
     {
         var holderSeat = TetherSeat(tetherPlayerIndex);
+        var coords = new Vector2?[8];
+        if (!leaveWithoutTether && TetherHeldBy(state.Roles.Get(holderSeat)) is null)
+            return AiMove.Create(coords).NaturalOrder();
         var holderSpot = LookUponHolderSpot(holderSeat, lookKefkaIndex);
         var holderRole = state.Roles[holderSeat];
-        var coords = new Vector2?[8];
         coords[(int)holderRole] = new Vector2(holderSpot.X, holderSpot.Z);
         return AiMove.Create(coords).NaturalOrder();
     }
@@ -543,6 +583,22 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         player?.MoveTo(new Vector3(spot.X, 0f, spot.Y));
     }
 
+    // A teammate walking through the beam takes the tether, and Intercept ends once the grab lands.
+    private const float TetherRegrabInterval = 0.4f;
+
+    private void ScheduleTetherRegrab(float fromTime, float toTime, int tetherIndex, int playerIndex)
+    {
+        for (var t = fromTime; t < toTime; t += TetherRegrabInterval)
+            world.Events.Add(t, () => RegrabTetherIfLost(tetherIndex, playerIndex));
+    }
+
+    private void RegrabTetherIfLost(int tetherIndex, int playerIndex)
+    {
+        var player = state.Roles.Get(TetherSeat(playerIndex));
+        if (player is null || player.IsIntercepting || TetherHeldBy(player) is not null) return;
+        GrabTether(tetherIndex, playerIndex);
+    }
+
     private SimTether? TetherHeldBy(SimCharacter? player) =>
         player is null
             ? null
@@ -584,10 +640,12 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
 
     // First BlizzardIII spreads drop on the prepositioned spots; step out to the four
     // intercardinal corners two-per-corner (supports north, DPS south, west pair vs east).
+    // The x=±10 seats are 7.5y from the nearer tower spot: Blizzard's r=6 puddle plus two
+    // seats' jitter ruled out the 6.5y a symmetric corner gave.
     private IAiMove StompBlizzardCorners() =>
         AiMove.Create(
-                  new(-8f, -10f), new(8f, -10f), new(-10f, -8f), new(10f, -8f),
-                  new(-8f, 10f), new(8f, 10f), new(-10f, 8f), new(10f, 8f))
+                  new(-8f, -10f), new(8f, -10f), new(-10f, -9f), new(10f, -9f),
+                  new(-8f, 10f), new(8f, 10f), new(-10f, 9f), new(10f, 9f))
               .NaturalOrder()
               .ApplyPositions(state.KefkaPosition[4].Apply);
 

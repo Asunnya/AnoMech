@@ -24,7 +24,7 @@ public abstract class SimCharacter(Coordinates coordinates) : ISimObject, IPosit
 
     // Obstacles this character's Movement steers around. Defaults to the shared
     // empty field (no avoidance — straight lines); PartyCreator points party
-    // doppels at world.Obstacles so only bots avoid geometry.
+    // doppels and the player at world.Obstacles so only bots avoid geometry.
     internal ObstacleField Obstacles { get; set; } = ObstacleField.Empty;
 
     public virtual bool IsActive => Proxy is { Exists: true };
