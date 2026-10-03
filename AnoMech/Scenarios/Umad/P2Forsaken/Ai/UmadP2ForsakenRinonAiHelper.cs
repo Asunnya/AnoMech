@@ -212,20 +212,6 @@ public sealed class UmadP2ForsakenRinonAiHelper
         new(-3.5f, -1.9f)  // in stack
     ];
 
-    public static readonly Vector2?[] OldEven =
-    [
-        // active group
-        new(3.2f, -3.2f),  // cone1
-        new(8, -8),        // chariot1
-        new(-3.2f, -3.2f), // cone2
-        new(-8, -8),       // chariot2
-        // passive group
-        new(8.8f, -2.4f),  // cone bait1
-        new(3.8f, 4.2f),   // clone bait1
-        new(-3.8f, 4.2f),  // clone bait2
-        new(-8.8f, -2.4f)  // cone bait2
-    ];
-
     public static readonly Vector2?[] DiamonMarkersEven =
     [
         // active group

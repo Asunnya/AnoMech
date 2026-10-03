@@ -56,8 +56,11 @@ public interface ISimPartyMember : ISimObject, IPositioned
 
     // Casts this member's tank invuln, whose status Game.Kill honours by swallowing the death.
     // A no-op returning false for humans (the local player and network puppets press their own);
-    // only bots cast.
+    // only bots cast, including a debug bot in the local player's seat.
     bool UseInvuln() => false;
+
+    // Same split as UseInvuln: a no-op for humans, who press their own Sprint.
+    void UseSprint(float duration) { }
 }
 
 // Bridges the party-member death model onto SimCharacter-typed call sites. Party

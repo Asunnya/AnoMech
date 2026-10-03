@@ -23,7 +23,10 @@ public interface IPerRoleSetting
 // starts, and a peer never builds scenario state at all.
 public static class PerRole
 {
-    public static bool SeatsActive => Plugin.MultiplayerInstance is { IsHost: true, SessionCode: not null };
+    public static bool SeatsActive => ForceSeats || Plugin.MultiplayerInstance is { IsHost: true, SessionCode: not null };
+
+    // Lets headless runs set every seat's overrides without hosting a session.
+    internal static bool ForceSeats { get; set; }
 
     public static readonly PartyRole[] All =
     [

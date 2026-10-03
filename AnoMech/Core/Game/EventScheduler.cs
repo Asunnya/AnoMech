@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.CompilerServices;
 
 namespace AnoMech.Core.Game;
 
@@ -39,11 +41,13 @@ public sealed class EventScheduler
     // to report completion themselves.
     public bool IsEmpty => entries.Count == 0;
 
-    public void Add(float offset, Action action)
+    // The caller's file:line rides along to the fire log, so a trace line leads back to the
+    // timeline entry. Wrappers that schedule on their caller's behalf forward their own caller info.
+    public void Add(float offset, Action action, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
     {
         var time = elapsed + MathF.Max(0f, offset);
         var index = entries.FindIndex(e => e.Time > time);
-        var entry = new Entry(time, action);
+        var entry = new Entry(time, action, $"{Path.GetFileName(file)}:{line}");
         if (index < 0) entries.Add(entry);
         else entries.Insert(index, entry);
     }
@@ -64,13 +68,14 @@ public sealed class EventScheduler
             // silently stops progressing, one discarded entry at a time, with
             // nothing but a log line to show for it. Isolating each entry means
             // one broken callback loses only itself.
+            Plugin.Log.Verbose($"[EventScheduler] fired {due.Source} (due {due.Time:F2})");
             try
             {
                 due.Action();
             }
             catch (Exception e)
             {
-                DiagnosticLog.Warn($"[EventScheduler] Scheduled action at t={due.Time:F2} threw and was skipped: {e}");
+                DiagnosticLog.Warn($"[EventScheduler] Scheduled action at t={due.Time:F2} ({due.Source}) threw and was skipped: {e}");
             }
         }
     }
@@ -81,5 +86,5 @@ public sealed class EventScheduler
         elapsed = 0f;
     }
 
-    private readonly record struct Entry(float Time, Action Action);
+    private readonly record struct Entry(float Time, Action Action, string Source);
 }
