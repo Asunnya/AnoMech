@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <TestRunParameters>
+    <!-- Random seeds each ScenarioCatalogTests.SunnyDay case runs. Raise locally for a soak run, or
+         override from the CLI: append TestRunParameters.Parameter(name="SunnySeeds", value="100")
+         after the dotnet test argument separator. -->
+    <Parameter name="SunnySeeds" value="500" />
+  </TestRunParameters>
+</RunSettings>

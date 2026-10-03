@@ -79,6 +79,8 @@ public sealed class UcobP5ExaflaresScenario : IMultiplayerReplayable
         timeline.Add(state.LastHitAt + DespawnAfterLastHit, DespawnAll);
     }
 
+    public bool IsFinished(SimWorld world) => timeline.IsEmpty;
+
     public void Tick(float delta, float elapsed)
     {
         timeline.Tick(delta);

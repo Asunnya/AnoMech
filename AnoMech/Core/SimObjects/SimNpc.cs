@@ -112,14 +112,14 @@ public class SimNpc : SimCharacter
             {
                 chara.EnableDraw();
                 pendingDraw = false;
-                DiagnosticLog.Info($"[SimNpc] EnableDraw fired for goid {chara.GameObjectId} at pos {Position}.");
+                DiagnosticLog.Info($"[SimNpc] EnableDraw fired for goid 0x{chara.GameObjectId.ObjectId:X} at pos {Position}.");
             }
             else
             {
                 pendingDrawFrames++;
                 // Once, well past a normal model load, for an IsReadyToDraw stuck false.
                 if (pendingDrawFrames == 300)
-                    DiagnosticLog.Warn($"[SimNpc] still pendingDraw after {pendingDrawFrames} ticks, goid {chara.GameObjectId} -- IsReadyToDraw() never returned true.");
+                    DiagnosticLog.Warn($"[SimNpc] still pendingDraw after {pendingDrawFrames} ticks, goid 0x{chara.GameObjectId.ObjectId:X} -- IsReadyToDraw() never returned true.");
             }
         }
     }

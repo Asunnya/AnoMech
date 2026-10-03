@@ -281,8 +281,8 @@ public class UltimatePredationAi : IScenarioAi<UltimatePredationState>
     {
         var positions = new Vector2[]
         {
-            new(-4.5f, -17.5f),
-            new(4.5f, -17.5f)
+            new(-3.75f, -17.5f),
+            new(3.75f, -17.5f)
         };
 
         var titanPosition2 = new Vector2(state.ScenarioObjects.Titan!.Position.X, state.ScenarioObjects.Titan.Position.Z);

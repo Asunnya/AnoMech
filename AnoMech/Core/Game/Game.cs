@@ -8,27 +8,6 @@ using AnoMech.Core.Game.Party;
 using AnoMech.Core.Map;
 using AnoMech.Core.SimObjects;
 using AnoMech.Scenarios;
-using AnoMech.Scenarios.Top.P2PartySynergy;
-using AnoMech.Scenarios.Top.P5Delta;
-using AnoMech.Scenarios.Top.P5Omega;
-using AnoMech.Scenarios.Top.P5Sigma;
-using AnoMech.Scenarios.Top.P6WaveCannon2;
-using AnoMech.Scenarios.Umad;
-using AnoMech.Scenarios.Umad.P1TeleTrouncing;
-using AnoMech.Scenarios.Umad.P2Forsaken;
-using AnoMech.Scenarios.Umad.P3BlackHole;
-using AnoMech.Scenarios.Umad.P3LimitCut;
-using AnoMech.Scenarios.Umad.P4KefkaSays;
-using AnoMech.Scenarios.Ucob.P5Exaflares;
-using AnoMech.Scenarios.Umad.P5Celestriad;
-using AnoMech.Scenarios.Umad.P5Exaflares;
-using AnoMech.Scenarios.Uwu.P1Garuda;
-using AnoMech.Scenarios.Uwu.P2Ifrit;
-using AnoMech.Scenarios.Uwu.P3Titan;
-using AnoMech.Scenarios.Umad.P5Flood;
-using AnoMech.Scenarios.Uwu.UltimateAnnihilation;
-using AnoMech.Scenarios.Uwu.UltimatePredation;
-using AnoMech.Scenarios.Uwu.UltimateSuppression;
 using AnoMech.Core.Native.Interfaces;
 
 namespace AnoMech.Core.Game;
@@ -143,30 +122,7 @@ public sealed class Game : IDisposable
     public Game()
     {
         World = new SimWorld(Events);
-        Scenarios = new IScenario[]
-        {
-            new UmadP1TeleTrouncingScenario(),
-            new UmadP2ForsakenScenario(),
-            new UmadP3LimitCutScenario(),
-            new UmadP3BlackHoleScenario(),
-            new UmadP4KefkaSaysScenario(),
-            new UmadP5FloodScenario(),
-            new UmadP5ExaflaresScenario(),
-            new UmadP5CelestriadScenario(),
-            new UmadP5ForsakenNull(),
-            new TopP2PartySynergyScenario(),
-            new TopP5DeltaScenario(),
-            new TopP5SigmaScenario(),
-            new TopP5OmegaScenario(),
-            new TopP6WaveCannon2Scenario(),
-            new UwuP1GarudaScenario(),
-            new UwuP2IfritScenario(),
-            new UwuP3TitanScenario(),
-            new UltimatePredationScenario(),
-            new UltimateAnnihilationScenario(),
-            new UltimateSuppressionScenario(),
-            new UcobP5ExaflaresScenario()
-        };
+        Scenarios = ScenarioCatalog.Create();
 
         // Derive the zone tree from the flat registry (first-appearance order).
         var zoneOrder = new List<IZone>();

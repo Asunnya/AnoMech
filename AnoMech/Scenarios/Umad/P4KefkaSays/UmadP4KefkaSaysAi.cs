@@ -110,7 +110,9 @@ public sealed class UmadP4KefkaSaysAi(UmadP4KefkaSaysAi.GazeLayout gazeLayout) :
                 return;
             }
             DiagnosticLog.Info($"[AccelerationBombDodge] wiggle firing at t={resolveTime - 0.6f:F2} (resolve at {resolveTime:F2}) from ({member.Position.X:F1},{member.Position.Z:F1}).");
-            member.MoveTo(member.Position + new Vector3(0.3f, 0f, 0f), speed: 0.4f);
+            var toDestination = (member.MoveDestination ?? member.Position) - member.Position;
+            var step = toDestination.Length() > 0.05f ? Vector3.Normalize(toDestination) : Vector3.UnitX;
+            member.MoveTo(member.Position + step * 0.3f, speed: 0.4f);
         });
     }
 
