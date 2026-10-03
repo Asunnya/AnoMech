@@ -5,7 +5,7 @@
         "Punchline": "Another FFXIV mechanics simulator: a fork of AnoMech with Savage and more fights.",
         "Description": "Asunnya's fork of AnoMech: spawns fake party members and bosses client-side so you can practice raid mechanics without a full party. Everything from AnoMech, plus Savage raids (M9S) and other fights.",
         "InternalName": "AnoMech",
-        "AssemblyVersion": "0.4.3.8",
+        "AssemblyVersion": "0.4.3.9",
         "RepoUrl": "https://github.com/Asunnya/AsuMech",
         "ApplicableVersion": "any",
         "Tags": [
@@ -22,6 +22,6 @@
         "DownloadLinkUpdate": "https://github.com/Asunnya/AsuMech/releases/latest/download/latest.zip",
         "IsHide": false,
         "IsTestingExclusive": false,
-        "LastUpdate": "1790894185"
+        "LastUpdate": "1791038148"
     }
 ]
