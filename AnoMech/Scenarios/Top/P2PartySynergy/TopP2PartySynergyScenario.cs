@@ -19,7 +19,10 @@ public sealed class TopP2PartySynergyScenario : IMultiplayerReplayable
     public bool SupportsMultiplayer => true;
 
     public void DrawSettings() => settingsWindow.Draw();
+    public bool HasPerPlayerSettings => true;
+    public void DrawPerPlayerSettings() => settingsWindow.DrawPerPlayer();
     public object SettingsOverrides => settingsWindow.Overrides;
+    public IReadOnlyList<string> SettingsConflicts => settingsWindow.Overrides.Validate().Problems;
     private readonly TopP2PartySynergySettingsWindow settingsWindow = new();
 
     public IReadOnlyList<IScenarioAi> AiStrats => [new TopP2PartySynergyAi()];
@@ -218,7 +221,7 @@ public sealed class TopP2PartySynergyScenario : IMultiplayerReplayable
     {
         SimEnemy? optical_Unit_4000A3E7 = null;
         world.Events.Add(0f, () => optical_Unit_4000A3E7 = world.SpawnEnemy(new EnemySpawnConfig(BNpcBaseId: BNpcBaseId.OpticalUnit, NameId: BNpcNameId.OpticalUnit, Level: 90, Targetable: false, EnemyList: EnemyListMode.Never, IsVisible: false, Placement: new Placement(new Vector3(0.150f, 0.000f, -0.600f), -0.000f))));
-        world.Events.Add(7.93f, () => optical_Unit_4000A3E7?.SetPosition(state.NewNorthA.Apply(new Placement(new Vector3(0f, 0f, 45f), 0f))));
+        world.Events.Add(7.93f, () => optical_Unit_4000A3E7?.SetPosition(state.NewNorthA.Apply(new Placement(new Vector3(0f, 0f, 45f), MathF.PI))));
         world.Events.Add(20.76f, () => optical_Unit_4000A3E7?.Cast(ActionId.OpticalLaser, castSeconds: 1.000f, targetId: optical_Unit_4000A3E7?.GameObjectId));
         world.Events.Add(21.76f, () => topUtils.ResolveOpticalLaser(optical_Unit_4000A3E7));
         

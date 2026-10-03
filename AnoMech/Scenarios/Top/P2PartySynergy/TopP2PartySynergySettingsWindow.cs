@@ -1,3 +1,5 @@
+using System;
+using AnoMech.Core.Game.Party;
 using Dalamud.Bindings.ImGui;
 
 namespace AnoMech.Scenarios.Top.P2PartySynergy;
@@ -6,12 +8,19 @@ public sealed class TopP2PartySynergySettingsWindow
 {
     public TopP2PartySynergyStateOverrides Overrides { get; } = new();
 
+    // Which seat the per-player rows are showing. UI state only; never broadcast.
+    private PartyRole editingSeat = PartyRole.MainTank;
+
     public void Draw()
     {
-        if (ImGui.Button("Auto")) ResetAll();
+        var solo = !PerRole.SeatsActive;
+        if (ImGui.Button("Auto"))
+        {
+            ResetAll();
+            if (solo) ResetMine();
+        }
         if (SettingsGrid.Begin("##partysynergy"))
         {
-            SettingsGrid.FightOnlyNote();
 #if DEBUG
             DrawNewNorthA();
             DrawNewNorthB();
@@ -19,8 +28,29 @@ public sealed class TopP2PartySynergySettingsWindow
             DrawGlitch();
             DrawAttackM();
             DrawAttackF();
+            if (solo) DrawPlayerRows();
             SettingsGrid.End();
         }
+    }
+
+    public void DrawPerPlayer()
+    {
+        if (ImGui.Button("Auto")) ResetPerPlayer();
+        if (SettingsGrid.Begin("##partysynergyplayers"))
+        {
+            editingSeat = SettingsGrid.SeatRow("##partysynergyseat", editingSeat);
+            DrawPlayerRows();
+            SettingsGrid.ForcedRecapRow("Symbols set:", Overrides.Symbol);
+            SettingsGrid.ForcedRecapRow("Stacks set:", Overrides.Stack);
+            SettingsGrid.End();
+        }
+        SettingsGrid.ConflictRows(Overrides.Validate());
+    }
+
+    private void DrawPlayerRows()
+    {
+        DrawSymbol();
+        DrawStack();
     }
 
     private void ResetAll()
@@ -32,6 +62,42 @@ public sealed class TopP2PartySynergySettingsWindow
         Overrides.Glitch    = null;
         Overrides.AttackM   = null;
         Overrides.AttackF   = null;
+    }
+
+    private void ResetPerPlayer()
+    {
+        Overrides.Symbol.Clear();
+        Overrides.Stack.Clear();
+    }
+
+    // Solo's own picks only: a host's seat assignments are kept apart.
+    private void ResetMine()
+    {
+        Overrides.Symbol.Mine = null;
+        Overrides.Stack.Mine = null;
+    }
+
+    private void DrawSymbol()
+    {
+        var s = Overrides.Symbol.Effective(editingSeat);
+        SettingsGrid.PlayerRow("symbol:");
+        if (ImGui.RadioButton("Auto##symbol", s == null)) Overrides.Symbol.Set(editingSeat, null);
+        foreach (var symbol in Enum.GetValues<PlaystationSymbol>())
+        {
+            ImGui.SameLine();
+            if (ImGui.RadioButton($"{symbol}##symbol", s == symbol)) Overrides.Symbol.Set(editingSeat, symbol);
+        }
+    }
+
+    private void DrawStack()
+    {
+        var s = Overrides.Stack.Effective(editingSeat);
+        SettingsGrid.PlayerRow("stack:");
+        if (ImGui.RadioButton("Auto##stack", s == null))  Overrides.Stack.Set(editingSeat, null);
+        ImGui.SameLine();
+        if (ImGui.RadioButton("Yes##stack",  s == true))  Overrides.Stack.Set(editingSeat, true);
+        ImGui.SameLine();
+        if (ImGui.RadioButton("No##stack",   s == false)) Overrides.Stack.Set(editingSeat, false);
     }
 
 #if DEBUG

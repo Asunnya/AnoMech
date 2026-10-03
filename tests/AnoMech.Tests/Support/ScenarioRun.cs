@@ -1,3 +1,4 @@
+using System.Numerics;
 using AnoMech.Core.Game;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
@@ -17,7 +18,23 @@ internal sealed record ScenarioRunOptions
 
     // Writes the artifact folder even for a passing run.
     public bool AlwaysWriteArtifacts { get; init; }
+
+    // A run expected to end in deaths only writes artifacts when asked to.
+    public bool WriteArtifactsOnFailure { get; init; } = true;
+
+    // Seats the player here instead of the seed's pick, so per-role overrides (PerRoleSetting.Mine) reach it.
+    public PartyRole? PlayerRole { get; init; }
+
+    // Edits the scenario's SettingsOverrides before the run starts. Runs act as a host, so per-role
+    // settings go in their seats, not in Mine.
+    public Action<object>? Overrides { get; init; }
+
+    public PlayerTakeover? Takeover { get; init; }
 }
+
+// From `At` on the player stops following the AI, as a human who froze there would; knockbacks and
+// forced moves still apply. `TeleportTo` (scenario-local XZ) is where they are put at that moment.
+internal sealed record PlayerTakeover(float At, Vector2? TeleportTo);
 
 // One headless scenario run: every seat (the player's included) on the strat's AI, on a fresh
 // fake game, ticked at a fixed rate until it ends.
@@ -37,7 +54,7 @@ internal sealed record ScenarioRun(
         var fake = FakeGame.Install();
         Game? game = null;
         var log = TraceLog.Create(() => game?.World.Events.Elapsed ?? 0f);
-        var role = (PartyRole)new Rng(seed).Fork("player-seat").Next(8);
+        var role = options.PlayerRole ?? (PartyRole)new Rng(seed).Fork("player-seat").Next(8);
         // A real player's job always fits their seat; job-keyed actions (tank invulns) read it.
         fake.BattleCharas.Player.ClassJob = PartyPresets.Standard[(int)role].ClassJob;
         var deaths = new List<Death>();
@@ -65,6 +82,7 @@ internal sealed record ScenarioRun(
         DalamudServices.Install(nameof(Plugin.Log), log);
         DalamudServices.Install(nameof(Plugin.Config), new Configuration());
         DebugBotControl.Enabled = true;
+        PerRole.ForceSeats = true;
         AoeQuery.Evaluated += OnAoeEvaluated;
         game = new Game();
         DalamudServices.Install(nameof(Plugin.GameInstance), game);
@@ -77,6 +95,9 @@ internal sealed record ScenarioRun(
                 var snapshot = WorldSnapshot.Describe(game.World, RecentAoeChecks(), game.World.Party.Get(r), includeHidden: true);
                 deaths.Add(new Death(r, cause, game.World.Events.Elapsed, snapshot));
             };
+            if (options.Overrides is { } setOverrides)
+                setOverrides(scenario.SettingsOverrides
+                             ?? throw new InvalidOperationException($"{scenarioType.Name} has no settings overrides."));
             game.RunScenario(new RunScenarioParams(scenario, role, strat, 0, seed));
             fake.Frame(FrameSeconds, game.Tick);
             if (!game.IsScenarioActive)
@@ -91,6 +112,8 @@ internal sealed record ScenarioRun(
                 }
                 if (options.StopAt is { } stopAt && game.World.Events.Elapsed >= stopAt)
                     break;
+                if (options.Takeover is { } takeover && DebugBotControl.Enabled && game.World.Events.Elapsed >= takeover.At)
+                    TakeOverPlayer(game.World, takeover, log);
                 fake.Frame(FrameSeconds, game.Tick);
                 elapsed += FrameSeconds;
                 if (options.Probe is { } probeAction)
@@ -110,7 +133,7 @@ internal sealed record ScenarioRun(
         try
         {
             var run = new ScenarioRun(scenarioType, strat, seed, role, endTime, deaths, failure, log.Warnings, null);
-            if (!run.Passed || options.AlwaysWriteArtifacts)
+            if ((!run.Passed && options.WriteArtifactsOnFailure) || options.AlwaysWriteArtifacts)
             {
                 var final = WorldSnapshot.Describe(game.World, RecentAoeChecks());
                 artifacts = ScenarioArtifacts.Write(run, log.Lines, scenario, final);
@@ -120,9 +143,20 @@ internal sealed record ScenarioRun(
         {
             AoeQuery.Evaluated -= OnAoeEvaluated;
             DebugBotControl.Enabled = false;
+            PerRole.ForceSeats = false;
             game.Dispose();
         }
         return new ScenarioRun(scenarioType, strat, seed, role, endTime, deaths, failure, log.Warnings, artifacts);
+    }
+
+    private static void TakeOverPlayer(SimWorld world, PlayerTakeover takeover, TraceLog log)
+    {
+        DebugBotControl.Enabled = false;
+        if (world.Party.Player is not { } player) return;
+        player.StopMoving();
+        if (takeover.TeleportTo is { } to)
+            player.SetPosition(new Vector3(to.X, 0f, to.Y));
+        log.Add("TEST", $"player {world.Party.PlayerRole} taken over{(takeover.TeleportTo is { } p ? $", teleported to ({p.X:F1},{p.Y:F1})" : "")}");
     }
 
     public string ReplayTestCase => $"[TestCase(typeof(global::{ScenarioType.FullName}), {Strat}, {Seed})]";
