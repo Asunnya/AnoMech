@@ -53,6 +53,7 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         // A full second before GrabTether, or StackCentre's deferred MoveTo cancels the Intercept.
         ai.Move(25f, StackCentre);
         world.Events.Add(26.2f, () => GrabTether(tetherIndex: 0, playerIndex: 4));
+        ScheduleTetherRegrab(26.6f, 28.2f, tetherIndex: 0, playerIndex: 4);
         world.Events.Add(28.2f, () => PullTether(playerIndex: 4));
         world.Events.Add(32.4f, () => GrabTether(tetherIndex: 0, playerIndex: 4));
         world.Events.Add(32.4f, () => GrabTether(tetherIndex: 1, playerIndex: 0));
@@ -176,7 +177,7 @@ public sealed class UmadP3BlackHoleAi(UmadP3BlackHoleAi.TetherOrder tetherOrder)
         IAiMove move = state.SlapAttacks[slapIndex] == ActionId.SlapHappy_Left
                    ? AiMove.All(new(9f, 0f)).ApplyPositions(direction.Apply).ApplyPositions(p => p.Multiply(1, 9f/7f))
                    : (IAiMove)AiMove.Create(
-                                        new(7f, 7f), new(9f, 9f),
+                                        new(7f, 7f), new(7f, 7f),
                                         new(9f, 0f), new(9f, 0f),
                                         new(7f, -7f), new(7f, -7f), new(7f, -7f), new(7f, -7f))
                                     .NaturalOrder()

@@ -50,7 +50,10 @@ internal sealed record ScenarioRun(
         {
             var now = game?.World.Events.Elapsed ?? 0f;
             aoeChecks.RemoveAll(check => check.Time < now - AoeCheckWindowSeconds);
-            aoeChecks.Add(new AoeCheck(now, query));
+            var positions = game is null
+                ? []
+                : WorldSnapshot.Members(game.World).Where(m => m.Member.IsAlive()).Select(m => (m.Role, m.Member.Position)).ToList();
+            aoeChecks.Add(new AoeCheck(now, query, positions));
         }
 
         IEnumerable<AoeCheck> RecentAoeChecks()

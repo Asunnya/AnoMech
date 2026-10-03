@@ -9,7 +9,9 @@ using AnoMech.Core.SimObjects;
 
 namespace AnoMech.Tests;
 
-internal sealed record AoeCheck(float Time, AoeQuery Query);
+// Positions are the alive members' at the moment of the check: by the time a report is written,
+// the check's own knockback may have moved the victim.
+internal sealed record AoeCheck(float Time, AoeQuery Query, IReadOnlyList<(PartyRole Role, Vector3 Position)> Positions);
 
 // A plain-text dump of everything on the field, in scenario-local coordinates (+X east, +Z south,
 // rotation 0 = south).
@@ -32,15 +34,15 @@ internal static class WorldSnapshot
     {
         var checks = aoeChecks.ToList();
         text.AppendLine($"AoE checks in the last second ({checks.Count}):");
-        foreach (var (time, query) in checks)
+        foreach (var (time, query, positions) in checks)
         {
             var action = Natives.Data.Action(query.ActionId);
             var shape = action is null ? "unknown action" : $"CastType {action.CastType}, range {action.EffectRange}, width {action.XAxisModifier}";
             var extras = $"{(query.OmenRotate != 0f ? $", omenRotate {F(query.OmenRotate)}" : "")}{(query.Size is { } size ? $", size {F(size)}" : "")}";
             text.AppendLine($"  t={F(time)} {ActionLookup.Name(query.ActionId)} ({query.ActionId}; {shape}) from {P(query.Source.Position)} facing {F(query.Source.Rotation)}{extras}");
-            var targets = focus is null ? Members(world).Where(m => m.Member.IsAlive()) : Members(world).Where(m => m.Member == focus);
-            foreach (var (role, member) in targets)
-                text.AppendLine($"    {role}: {EdgeDistance(query, member.Position)}");
+            var targets = focus is null ? positions : positions.Where(p => world.Party.Get(p.Role) == focus);
+            foreach (var (role, position) in targets)
+                text.AppendLine($"    {role}: {EdgeDistance(query, position)}");
         }
     }
 
@@ -115,7 +117,7 @@ internal static class WorldSnapshot
             ? $"  moving -> {P(destination)} ({F(Distance(character.Position, destination))}y left)"
             : "";
 
-    private static IEnumerable<(PartyRole Role, SimCharacter Member)> Members(SimWorld world)
+    internal static IEnumerable<(PartyRole Role, SimCharacter Member)> Members(SimWorld world)
     {
         for (var i = 0; i < 8; i++)
             if (world.Party.Get(i) is { } member)

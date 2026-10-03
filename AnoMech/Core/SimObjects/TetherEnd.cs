@@ -65,6 +65,8 @@ public abstract class DynamicEnd : ITetherEnd
 //
 // The initial holder is the seed passed to End.Passable(member); with no seed
 // (End.Passable()) a random alive party member is chosen on the first resolve.
+// The seeding resolve (self = null) never migrates: parallel tethers created in
+// the same frame only shield each other's holders once all of them exist.
 public sealed class PassableEnd : DynamicEnd
 {
     // A candidate must be at least this far *ahead* of the holder along the beam
@@ -85,8 +87,9 @@ public sealed class PassableEnd : DynamicEnd
 
     public override SimCharacter? Resolve(SimCharacter? self, SimCharacter? other, TetherContext ctx)
     {
-        var holder = self ?? initial ?? ctx.Party.RandomMember(ctx.Rng);
-        if (holder is null || !holder.IsAlive()) return holder;
+        if (self is null) return initial ?? ctx.Party.RandomMember(ctx.Rng);
+        var holder = self;
+        if (!holder.IsAlive()) return holder;
         if (other is null || !other.IsAlive()) return holder;   // anchor gone → don't migrate
 
         var holderPos = holder.Position;

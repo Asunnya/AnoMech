@@ -19,6 +19,7 @@ internal class Movement(SimCharacter parent)
     private float? finalRotation;
     private bool faceTravel = true;
     private bool avoid = true;
+    private int steerSide;
     private ushort timelineId;
     private bool timelineBaseOverride;
     private bool animActive;
@@ -197,6 +198,7 @@ internal class Movement(SimCharacter parent)
         {
             interceptTether = null;
             followTarget = null;
+            steerSide = 0;
         }
         destination = moveDestination;
         speed = MathF.Max(0f, sp);
@@ -248,11 +250,11 @@ internal class Movement(SimCharacter parent)
 
         var cur = parent.Position;
 
-        // Park-at-edge: if the destination lies inside an obstacle, retarget to the
-        // nearest boundary point so the bot stops at the edge instead of orbiting an
-        // unreachable center. Skipped for forced movement (knockback).
+        // Park-at-edge: if the destination lies inside (or within steering clearance of) an
+        // obstacle, retarget just outside it so the bot stops at the edge instead of orbiting
+        // an unreachable point. Skipped for forced movement (knockback).
         var dest2 = new Vector2(dest.X, dest.Z);
-        if (avoid) dest2 = Obstacles.ClampOutside(dest2);
+        if (avoid) dest2 = Obstacles.ClampForSteering(dest2);
 
         var dx = dest2.X - cur.X;
         var dz = dest2.Y - cur.Z;
@@ -272,7 +274,7 @@ internal class Movement(SimCharacter parent)
             var desired = new Vector2(dx / dist, dz / dist);
             // Steer around obstacles; a no-op (returns `desired`) when the field is
             // empty, nothing blocks, or this is forced movement.
-            var heading = avoid ? Obstacles.Steer(new Vector2(cur.X, cur.Z), desired, dist) : desired;
+            var heading = avoid ? Obstacles.Steer(new Vector2(cur.X, cur.Z), desired, dist, ref steerSide) : desired;
             var next = new Vector3(cur.X + heading.X * step, cur.Y, cur.Z + heading.Y * step);
             parent.SetPosition(new Placement(next, faceTravel ? MathF.Atan2(heading.X, heading.Y) : parent.Rotation));
         }

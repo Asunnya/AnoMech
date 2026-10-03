@@ -105,7 +105,12 @@ public sealed class ObstacleField
     // segment clears every obstacle wins; a bot inside an obstacle biases the search outward
     // first. Gliding around the single nearest obstacle walked straight into the next one in a
     // dense field. Reactive per frame, not path planning.
-    internal Vector2 Steer(Vector2 pos, Vector2 desired, float dist)
+    //
+    // `side` (+1/-1, 0 = uncommitted) is the caller's per-mover memory of which way it turned:
+    // once blocked, a bot keeps turning that way until the straight line clears. Picking the
+    // smallest deviation afresh each frame let a bot tucked behind one arrow of a ring flip
+    // between a left and a right heading forever without getting around it.
+    internal Vector2 Steer(Vector2 pos, Vector2 desired, float dist, ref int side)
     {
         if (obstacles.Count == 0) return desired;
 
@@ -123,19 +128,42 @@ public sealed class ObstacleField
             if (blended.LengthSquared() > 1e-8f) baseDir = Vector2.Normalize(blended);
         }
 
-        if (IsPathClear(pos, baseDir, reach)) return baseDir;
-
-        for (var angleDeg = CandidateAngleStepDeg; angleDeg <= CandidateAngleMaxDeg; angleDeg += CandidateAngleStepDeg)
+        if (IsPathClear(pos, baseDir, reach))
         {
-            var angle = angleDeg * (MathF.PI / 180f);
-            var left = Rotate(baseDir, angle);
-            if (IsPathClear(pos, left, reach)) return left;
-            var right = Rotate(baseDir, -angle);
-            if (IsPathClear(pos, right, reach)) return right;
+            side = 0;
+            return baseDir;
         }
 
-        // Boxed in: best-effort fallback.
-        return baseDir;
+        if (side == 0)
+        {
+            for (var angleDeg = CandidateAngleStepDeg; angleDeg <= CandidateAngleMaxDeg; angleDeg += CandidateAngleStepDeg)
+            {
+                var angle = angleDeg * (MathF.PI / 180f);
+                var left = Rotate(baseDir, angle);
+                if (IsPathClear(pos, left, reach)) { side = 1; return left; }
+                var right = Rotate(baseDir, -angle);
+                if (IsPathClear(pos, right, reach)) { side = -1; return right; }
+            }
+            return baseDir;
+        }
+
+        // Boxed in on the committed side at full look-ahead (wedged between neighbouring
+        // obstacles): keep edging that way on a short look-ahead rather than flipping sides.
+        return FirstClearOnSide(pos, baseDir, side, reach)
+            ?? FirstClearOnSide(pos, baseDir, side, MathF.Min(BoxedInLookAhead, reach))
+            ?? baseDir;
+    }
+
+    private const float BoxedInLookAhead = 1f;
+
+    private Vector2? FirstClearOnSide(Vector2 pos, Vector2 baseDir, int side, float reach)
+    {
+        for (var angleDeg = CandidateAngleStepDeg; angleDeg <= CandidateAngleMaxDeg; angleDeg += CandidateAngleStepDeg)
+        {
+            var heading = Rotate(baseDir, side * angleDeg * (MathF.PI / 180f));
+            if (IsPathClear(pos, heading, reach)) return heading;
+        }
+        return null;
     }
 
     // 5 degrees resolves the ~19-degree gap between two arrows 6y apart at LookAhead range;
@@ -154,6 +182,11 @@ public sealed class ObstacleField
     // doesn't clip after one movement step. Steer only; ClampOutside/NearestClearOnSegment keep
     // exact-boundary behaviour.
     private const float SteerMargin = 0.3f;
+
+    // A Steer destination closer than SteerMargin to an obstacle never tests clear, so a bot
+    // committed to a side would circle the obstacle forever on its final approach. Clamped a
+    // hair past the margin so float error can't put it back inside.
+    internal Vector2 ClampForSteering(Vector2 p) => ClampOutside(p, SteerMargin + 0.05f);
 
     private bool IsClearWithMargin(Vector2 p)
     {
