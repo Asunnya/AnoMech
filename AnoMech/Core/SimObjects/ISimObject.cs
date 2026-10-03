@@ -32,7 +32,8 @@ public static class SimObjectExtensions
 {
     public static void Update<T>(this List<T> children, float tick) where T : ISimObject
     {
-        children.ForEach(child => child.Tick(tick));
+        foreach (var child in children)
+            child.Tick(tick);
         for (int i = children.Count - 1; i >= 0; i--)
         {
             if (children[i].IsActive) continue;

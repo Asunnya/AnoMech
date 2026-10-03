@@ -13,6 +13,7 @@ using AnoMech.Core.Map;
 using AnoMech.Core;
 using AnoMech.Core.Game.Ai;
 using AnoMech.Core.Game.Party;
+using AnoMech.Core.SimObjects;
 using AnoMech.Scenarios;
 using static AnoMech.Core.Game.Game;
 using AnoMech.Core.Native.Implementations;
@@ -547,6 +548,32 @@ public unsafe class MainWindow : Window, IDisposable
         if (ImGui.SmallButton("Copy##last-seed")) ImGui.SetClipboardText(lastText);
         ImGui.Separator();
     }
+
+    // In a session MultiplayerManager owns DebugBotControl.Enabled per run, so route through its
+    // sticky toggle (as the Party panel does); solo nothing else writes the flag.
+    private void DrawBotControlsPlayer(bool inSession)
+    {
+        var mp = plugin.Multiplayer;
+        if (inSession)
+        {
+            var botControlled = mp.DebugBotControlled;
+            ImGui.BeginDisabled(mp.Session.Started);
+            if (ImGui.Checkbox("Bot controls player##bot-controls-player", ref botControlled))
+                mp.SetDebugBotControlled(botControlled);
+            ImGui.EndDisabled();
+        }
+        else
+        {
+            var enabled = DebugBotControl.Enabled;
+            if (ImGui.Checkbox("Bot controls player##bot-controls-player", ref enabled))
+                DebugBotControl.Enabled = enabled;
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(inSession
+                ? "Your seat is driven by the strat's AI. Locked once the fight starts."
+                : "Your character is driven by the strat's AI, like a bot in your role.");
+        ImGui.Separator();
+    }
 #endif
 
     // _selectedStrat stays an absolute index into AiStrats (what RunScenario consumes): for a
@@ -623,6 +650,7 @@ public unsafe class MainWindow : Window, IDisposable
                 ImGuiTreeNodeFlags.FramePadding))
         {
             DrawSeedControl();
+            DrawBotControlsPlayer(inSession);
             ImGui.BeginDisabled(inSession);
             ImGui.BeginGroup();
             debugMenu.DrawSpeedControl();

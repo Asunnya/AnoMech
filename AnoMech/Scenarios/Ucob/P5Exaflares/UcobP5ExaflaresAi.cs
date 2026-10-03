@@ -23,8 +23,11 @@ public sealed class UcobP5ExaflaresAi : IScenarioAi<UcobP5ExaflaresState>
     private const float ImproveMargin = 4f;
     private const float ArrivalEpsilon = 0.4f;
     private const float BerthTravelPenalty = 0.05f;
+    private const float ClearanceTolerance = 0.01f;
+    private const float RequiredClearance = UcobP5ExaflaresState.HitRadius + BlastClearance - ClearanceTolerance;
+    private const float CalmHorizon = 8f;
+    private const float MinimumSafeHorizon = 1.5f;
 
-    private static readonly float[] PlanHorizons = [8f, 5f, 3f, 1.5f];
     private static readonly float[] StandOffAlongLane = [-12f, -6f, 0f, 6f, 12f];
 
     private UcobP5ExaflaresState state = null!;
@@ -64,8 +67,9 @@ public sealed class UcobP5ExaflaresAi : IScenarioAi<UcobP5ExaflaresState>
 
     private void PlaceBotsOnSafeLanes(float now)
     {
-        var live = TelegraphedHitsWithin(now, PlanHorizons[0]);
+        var live = TelegraphedHitsWithin(now, CalmHorizon);
         if (live.Count == 0) return;
+        var telegraphed = TelegraphedHitsWithin(now, float.PositiveInfinity);
 
         var taken = new List<Vector3>(8);
         foreach (var (slot, bot) in SlotsMostAtRiskFirst(now, live))
@@ -78,11 +82,19 @@ public sealed class UcobP5ExaflaresAi : IScenarioAi<UcobP5ExaflaresState>
                 else if (IsRouteSafe(from, destination, now, live)) { taken.Add(destination); continue; }
             }
 
-            var canHold = IsInsideArena(from) && IsRouteSafe(from, from, now, live);
-            var best = BestLaneSpot(from, now, taken, out var bestCost);
-            if (best is null && !canHold) best = WidestBerth(from, now);
+            var holdSafeUntil = IsInsideArena(from)
+                ? MathF.Min(SafeUntil(from, from, now, telegraphed), now + CalmHorizon)
+                : float.MinValue;
+            var best = BestLaneSpot(from, now, taken, telegraphed, out var bestCost, out var bestSafeUntil);
+            if (best is null && holdSafeUntil < now + CalmHorizon)
+            {
+                best = WidestBerth(from, now);
+                bestSafeUntil = now + MinimumSafeHorizon;
+            }
 
-            if (best is not { } target || (canHold && SpotCost(from, from, taken) <= bestCost + ImproveMargin))
+            var holdOutlastsBest = holdSafeUntil > bestSafeUntil
+                || (holdSafeUntil == bestSafeUntil && SpotCost(from, from, taken) <= bestCost + ImproveMargin);
+            if (best is not { } target || holdOutlastsBest)
             {
                 Hold(slot, bot, from, taken);
                 continue;
@@ -104,31 +116,30 @@ public sealed class UcobP5ExaflaresAi : IScenarioAi<UcobP5ExaflaresState>
         holding[slot] = true;
     }
 
-    private Vector3? BestLaneSpot(Vector3 from, float now, List<Vector3> taken, out float bestCost)
+    private Vector3? BestLaneSpot(Vector3 from, float now, List<Vector3> taken, IReadOnlyList<ExaflareHit> threats,
+        out float bestCost, out float bestSafeUntil)
     {
         bestCost = float.MaxValue;
-        foreach (var horizon in PlanHorizons)
+        bestSafeUntil = float.MinValue;
+        var calmUntil = now + CalmHorizon;
+        Vector3? best = null;
+        foreach (var spot in spots)
         {
-            var threats = TelegraphedHitsWithin(now, horizon);
-            if (threats.Count == 0) return null;
-
-            Vector3? best = null;
-            foreach (var spot in spots)
-            {
-                if (!IsRouteSafe(from, spot, now, threats)) continue;
-                var cost = SpotCost(from, spot, taken);
-                if (cost >= bestCost) continue;
-                bestCost = cost;
-                best = spot;
-            }
-            if (best is not null) return best;
+            var safeUntil = SafeUntil(from, spot, now, threats);
+            if (safeUntil <= now + MinimumSafeHorizon) continue;
+            var cappedSafeUntil = MathF.Min(safeUntil, calmUntil);
+            var cost = SpotCost(from, spot, taken);
+            if (cappedSafeUntil < bestSafeUntil || (cappedSafeUntil == bestSafeUntil && cost >= bestCost)) continue;
+            bestSafeUntil = cappedSafeUntil;
+            bestCost = cost;
+            best = spot;
         }
-        return null;
+        return best;
     }
 
     private Vector3? WidestBerth(Vector3 from, float now)
     {
-        var threats = TelegraphedHitsWithin(now, PlanHorizons[^1]);
+        var threats = TelegraphedHitsWithin(now, MinimumSafeHorizon);
         Vector3? best = null;
         var bestScore = float.MinValue;
         foreach (var spot in spots)
@@ -165,7 +176,16 @@ public sealed class UcobP5ExaflaresAi : IScenarioAi<UcobP5ExaflaresState>
     }
 
     private static bool IsRouteSafe(Vector3 from, Vector3 to, float now, IReadOnlyList<ExaflareHit> threats) =>
-        RouteClearance(from, to, now, threats) >= UcobP5ExaflaresState.HitRadius + BlastClearance;
+        RouteClearance(from, to, now, threats) >= RequiredClearance;
+
+    private static float SafeUntil(Vector3 from, Vector3 to, float now, IReadOnlyList<ExaflareHit> threats)
+    {
+        var until = float.PositiveInfinity;
+        foreach (var hit in threats)
+            if (hit.Time < until && FlatDistance(PositionAt(from, to, now, hit.Time), hit.Position) < RequiredClearance)
+                until = hit.Time;
+        return until;
+    }
 
     private static float RouteClearance(Vector3 from, Vector3 to, float now, IReadOnlyList<ExaflareHit> threats)
     {

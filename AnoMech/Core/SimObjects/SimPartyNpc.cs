@@ -41,21 +41,15 @@ public sealed class SimPartyNpc : SimNpc, ISimPartyMember
         return true;
     }
 
-    private static readonly Dictionary<byte, uint> InvulnActionIdByJob = new()
-    {
-        [19] = 30,    // Paladin: Hallowed Ground
-        [21] = 43,    // Warrior: Holmgang
-        [32] = 3638,  // Dark Knight: Living Dead
-        [37] = 16152, // Gunbreaker: Superbolide
-    };
-
     // False for a non-tank job.
     public bool UseInvuln()
     {
-        if (!InvulnActionIdByJob.TryGetValue(ClassJob, out var actionId)) return false;
+        if (Mitigation.InvulnActionId(ClassJob) is not { } actionId) return false;
         UseAction(actionId);
         return true;
     }
+
+    public void UseSprint(float duration) => SprintHandler.Apply(this, duration);
 
     public void Knockback(Vector3 source, float distance, float speed) => Movement.Knockback(source, distance, speed);
 

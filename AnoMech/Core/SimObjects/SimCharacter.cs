@@ -24,7 +24,7 @@ public abstract class SimCharacter(Coordinates coordinates) : ISimObject, IPosit
 
     // Obstacles this character's Movement steers around. Defaults to the shared
     // empty field (no avoidance — straight lines); PartyCreator points party
-    // doppels at world.Obstacles so only bots avoid geometry.
+    // doppels and the player at world.Obstacles so only bots avoid geometry.
     internal ObstacleField Obstacles { get; set; } = ObstacleField.Empty;
 
     public virtual bool IsActive => Proxy is { Exists: true };
@@ -141,6 +141,7 @@ public abstract class SimCharacter(Coordinates coordinates) : ISimObject, IPosit
     public void Intercept(SimTether? tether, float margin = 3f) => Movement.Intercept(tether, margin);
     public bool IsIntercepting => Movement.IsIntercepting;
     public bool IsEasedMoving => Movement.IsEasedMoving;
+    public Vector3? MoveDestination => Movement.Destination;
 
     // forced: the mechanic is taking control, not a strat positioning a bot (see
     // Movement.Follow). Virtual so SimNetworkPuppet can hand a forced follow to its owner.
@@ -251,7 +252,7 @@ public abstract class SimCharacter(Coordinates coordinates) : ISimObject, IPosit
     // the same id twice with separate expiries).
     public SimStatus? AddStatus(ushort statusId, float duration = 0f, int stacks = 1, bool overrideStacks = false, GameObjectId sourceObject = default)
     {
-        Core.DiagnosticLog.Info($"[SimCharacter] AddStatus: {DiagnosticName} gets status {statusId} (duration={duration:F1}, stacks={stacks}, overrideStacks={overrideStacks}, source={sourceObject}).");
+        Core.DiagnosticLog.Info($"[SimCharacter] AddStatus: {DiagnosticName} gets status {statusId} (duration={duration:F1}, stacks={stacks}, overrideStacks={overrideStacks}, source=0x{sourceObject.ObjectId:X}).");
         if (FindStatus(statusId, sourceObject) is {} status)
         {
             // overrideStacks: stacks is the absolute target; otherwise it's a
@@ -298,7 +299,12 @@ public abstract class SimCharacter(Coordinates coordinates) : ISimObject, IPosit
 
     public SimStatus? FindStatus(ushort statusId, GameObjectId sourceObject = default)
     {
-        return statusList.Find(status => status.IsActive && status.StatusId == statusId && status.SourceObject == sourceObject);
+        foreach (var status in statusList)
+        {
+            if (status.IsActive && status.StatusId == statusId && status.SourceObject == sourceObject)
+                return status;
+        }
+        return null;
     }
 
     public bool HasStatus(ushort statusId) => FindStatus(statusId) != null;

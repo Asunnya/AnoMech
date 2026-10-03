@@ -67,11 +67,17 @@ public sealed class SimTether : ISimObject
         this.duration = duration;
 
         // Seed both ends. At least one end is Fixed (enforced by the SimWorld.Tether
-        // overload set), so resolving the partner first hands the dynamic end a
-        // stable reference: anchor → dynamic source → settle the anchor again.
-        currentTarget = to.Resolve(null, null, ctx);
-        currentSource = from.Resolve(null, currentTarget, ctx);
-        currentTarget = to.Resolve(currentTarget, currentSource, ctx);
+        // overload set); seeding it first hands the dynamic end a stable reference.
+        if (from is FixedEnd)
+        {
+            currentSource = from.Resolve(null, null, ctx);
+            currentTarget = to.Resolve(null, currentSource, ctx);
+        }
+        else
+        {
+            currentTarget = to.Resolve(null, null, ctx);
+            currentSource = from.Resolve(null, currentTarget, ctx);
+        }
 
         CreateVfx();
         if (debuffStatusId != 0 && duration > 0f)

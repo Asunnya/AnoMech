@@ -16,7 +16,8 @@ internal sealed class FakeGame
     public static FakeGame Install()
     {
         var game = new FakeGame();
-        Natives.Data = new DataminingGameData();
+        var rsv = new FakeRsvFunctions();
+        Natives.Data = new DataminingGameData(rsv);
         Natives.BattleCharas = game.BattleCharas;
         Natives.EventObjects = game.EventObjects;
         Natives.HiddenObjects = new FakeHiddenObjects();
@@ -29,7 +30,7 @@ internal sealed class FakeGame
         Natives.MapEffects = game.MapEffects;
         Natives.Layout = new FakeLayoutFunctions();
         Natives.Director = new FakeInstanceContentDirector(game.Zone);
-        Natives.Rsv = new FakeRsvFunctions();
+        Natives.Rsv = rsv;
         Natives.Rsf = new FakeRsfFunctions();
         Natives.PartyHud = new FakePartyHud();
         Natives.EnmityHud = new FakeEnmityHud();

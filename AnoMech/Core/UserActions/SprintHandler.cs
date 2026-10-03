@@ -1,3 +1,4 @@
+using AnoMech.Core.SimObjects;
 using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace AnoMech.Core.UserActions;
@@ -16,8 +17,11 @@ internal sealed unsafe class SprintHandler : IUserActionHandler
     {
         // Effect lands on the scenario's SimPlayer (null off-scenario, so this no-ops).
         if (actionType == ActionType.Action && actionId == SprintActionId)
-            Plugin.GameInstance?.Player?.AddStatus(SprintStatusId, SprintDuration, SprintStatusParam);
+            if (Plugin.GameInstance?.Player is { } player) Apply(player, SprintDuration);
     }
+
+    public static void Apply(SimCharacter character, float duration)
+        => character.AddStatus(SprintStatusId, duration, SprintStatusParam);
 
     // Sprint goes on cooldown when the player presses it inside a scenario
     // (LocalPlayerInputHooks lets Original run so the recast starts). Clear it so each

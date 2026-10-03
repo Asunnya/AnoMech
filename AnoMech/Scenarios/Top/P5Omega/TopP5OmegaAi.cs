@@ -31,7 +31,7 @@ public class TopP5OmegaAi : IScenarioAi<TopP5OmegaState>
         // bots and a peer's own replay, and a live status read + shuffle would let the two
         // diverge on who stands where.
         ai.Automarker(47f, () => HelloWorldMarkers(state.HelloWorld2));
-        ai.Move(48f, GatherMiddle);
+        ai.Move(48f, GatherMiddle, jitter: 0f);
         ai.Move(53f, HelloWorld2Pos, arrivalTime: 57f);
         ai.Move(62f, InitialPositions);
     }

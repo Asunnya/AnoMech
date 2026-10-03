@@ -21,15 +21,15 @@ public class UltimateSuppressionAi : IScenarioAi<UltimateSuppressionState>
 
         var ai = new AiManager(world);
 
-        ai.Move(5f, SuppressionStart);
-        ai.Move(15f, Eruptions1, 1);
-        ai.Move(18f, Eruptions2);
-        ai.Move(18.5f, Eruptions3);
+        ai.Move(5f, SuppressionStart, jitter: 0);
+        ai.Move(15f, Eruptions1);
+        ai.Move(18.3f, Eruptions2);
+        ai.Move(18.8f, Eruptions3);
         ai.Move(21f, Eruptions4);
         ai.Move(23.25f, FeatherRain1);
         ai.Move(25.25f, FeatherRain2);
-        ai.Move(26.75f, () => AiMove.Single(((ISimPartyMember)state.PlayerLightPillar!).Role, new(6, -5)));
-        ai.Move(29f, () => AiMove.Single(((ISimPartyMember)state.PlayerLightPillar!).Role, new(6.25f, 0)));
+        ai.Move(27.05f, () => AiMove.Single(((ISimPartyMember)state.PlayerLightPillar!).Role, new(6, -5)));
+        ai.Move(29.3f, () => AiMove.Single(((ISimPartyMember)state.PlayerLightPillar!).Role, new(6.25f, 0)));
         ai.Move(31f, () => AiMove.All(new(6.7f, 0)));
         ai.Move(33f, () => AiMove.Single(PartyRole.MainTank, new(-4, -7)));
         ai.Move(33.25f, Landslide1);
