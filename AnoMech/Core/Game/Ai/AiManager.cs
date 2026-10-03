@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using AnoMech.Core.Game.Party;
 using AnoMech.Core.SimObjects;
 using AnoMech.Core.Native.Interfaces;
@@ -33,7 +34,8 @@ public sealed class AiManager
     /// <summary>Schedule bots movement</summary> 
     /// <param name="arrivalTime">If not empty, this is expected arrival time for bots. They will sprint if there is not enough time to walk, and they will leave as late as possible otherwise</param>
     /// <param name="sprint">Ignored if arrivalTime is set. Sprint towards target instead of walking</param>
-    public void Move(float time, Func<IAiMove> positions, float jitter = DefaultJitter, float? arrivalTime = null, bool sprint = false)
+    public void Move(float time, Func<IAiMove> positions, float jitter = DefaultJitter, float? arrivalTime = null, bool sprint = false,
+        [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
     {
         world.Events.Add(time, () =>
         {
@@ -54,10 +56,10 @@ public sealed class AiManager
 
                 if (sprinting) partyMember?.UseSprint(dist / SprintSpeed + 1f);
                 AnoMech.Core.DiagnosticLog.Info($"[AiManager] Move@{time:F1}: {role} ({member.Position.X:F1},{member.Position.Z:F1}) -> ({target.X:F1},{target.Z:F1}) {dist:F1}y{(sprinting ? " sprinting" : "")}{(delay > 0f ? $", leaving in {delay:F2}s" : "")}.");
-                if (delay > 0f) world.Events.Add(delay, () => member.MoveTo(target, speed: speed));
+                if (delay > 0f) world.Events.Add(delay, () => member.MoveTo(target, speed: speed), file, line);
                 else member.MoveTo(target, speed: speed);
             }
-        });
+        }, file, line);
     }
 
     // Walk, leaving as late as still arrives in time; sprint now if walking can't make it.
@@ -67,10 +69,10 @@ public sealed class AiManager
         return slack >= 0f ? (false, slack) : (true, 0f);
     }
 
-    public void UseInvuln(float time, PartyRole role)
-        => world.Events.Add(time, () => (world.Party.Get(role) as ISimPartyMember)?.UseInvuln());
+    public void UseInvuln(float time, PartyRole role, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+        => world.Events.Add(time, () => (world.Party.Get(role) as ISimPartyMember)?.UseInvuln(), file, line);
 
-    public void Automarker(float time, Func<Dictionary<PartyRole, Sign>> mapping)
+    public void Automarker(float time, Func<Dictionary<PartyRole, Sign>> mapping, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
     {
         world.Events.Add(time, () =>
         {
@@ -80,7 +82,7 @@ public sealed class AiManager
             foreach (var (role, sign) in marks)
                 if (world.Party.Get(role) is { } member && member.IsAlive())
                     Natives.Markings.Set(sign, member.GameObjectId);
-        });
+        }, file, line);
     }
 
     private Vector3 Jitter(Vector3 target, float radius)

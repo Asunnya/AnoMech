@@ -233,6 +233,7 @@ public sealed class CharacterFind<T> where T : IPositioned
             Plugin.Log.Warning($"InsideActionAoe: action {actionId} not found");
             return Array.Empty<T>();
         }
+        AoeQuery.RaiseEvaluated(new AoeQuery(actionId, target, omenRotate, size));
         var range = (float)action.EffectRange;
         var halfWidth = action.XAxisModifier > 0 ? action.XAxisModifier * 0.5f : range;
         var forward = new Placement(target.Position, target.Rotation + omenRotate);
@@ -322,5 +323,50 @@ public readonly struct AoeQuery(uint actionId, Placement source,
 
     public IReadOnlyList<T> Run<T>(CharacterFind<T> find) where T : IPositioned =>
         find.InsideActionAoe(ActionId, Source, OmenRotate, Size);
+
+    // Every InsideActionAoe check, for the headless test harness's death reports.
+    public static event Action<AoeQuery>? Evaluated;
+
+    internal static void RaiseEvaluated(AoeQuery query) => Evaluated?.Invoke(query);
+
+    // Yalms from `point` to the AOE's edge on the XZ plane: negative inside, positive outside.
+    // Mirrors InsideActionAoe's shape dispatch; null when the action or its CastType is unknown.
+    public float? SignedDistance(Vector3 point)
+    {
+        if (Natives.Data.Action(ActionId) is not { } action) return null;
+        var range = (float)action.EffectRange;
+        var halfWidth = action.XAxisModifier > 0 ? action.XAxisModifier * 0.5f : range;
+        var rotation = Source.Rotation + OmenRotate;
+        var dx = point.X - Source.Position.X;
+        var dz = point.Z - Source.Position.Z;
+        var fwd = dx * MathF.Sin(rotation) + dz * MathF.Cos(rotation);
+        var side = dx * MathF.Cos(rotation) - dz * MathF.Sin(rotation);
+        var dist = MathF.Sqrt(dx * dx + dz * dz);
+        return action.CastType switch
+        {
+            2 or 5 or 6 => dist - range,
+            3 or 13 => ConeDistance(fwd, side, dist, Size ?? MathF.PI / 6f, range),
+            8 => BoxDistance(fwd - (Size ?? 100f) / 2f, side, (Size ?? 100f) / 2f, halfWidth),
+            4 or 12 => BoxDistance(fwd - range / 2f, side, range / 2f, halfWidth),
+            10 => MathF.Max(dist - range, (Size ?? 0f) - dist),
+            11 => MathF.Min(BoxDistance(fwd, side, range, halfWidth), BoxDistance(fwd, side, halfWidth, range)),
+            _ => null,
+        };
+    }
+
+    private static float BoxDistance(float alongX, float alongY, float halfX, float halfY)
+    {
+        var qx = MathF.Abs(alongX) - halfX;
+        var qy = MathF.Abs(alongY) - halfY;
+        var outside = MathF.Sqrt(MathF.Max(qx, 0f) * MathF.Max(qx, 0f) + MathF.Max(qy, 0f) * MathF.Max(qy, 0f));
+        return outside + MathF.Min(MathF.Max(qx, qy), 0f);
+    }
+
+    private static float ConeDistance(float fwd, float side, float dist, float halfAngle, float range)
+    {
+        var angle = MathF.Atan2(MathF.Abs(side), fwd);
+        var toEdgeRay = angle - halfAngle >= MathF.PI / 2f ? dist : dist * MathF.Sin(angle - halfAngle);
+        return MathF.Max(dist - range, toEdgeRay);
+    }
 }
 

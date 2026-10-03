@@ -320,7 +320,7 @@ public sealed class SimEnemy : SimNpc
         var targetableBefore = chara.TargetableStatus;
         SetTargetable(SpawnConfig.Targetable);
         if (SpawnConfig.PacketSpawnEnableDraw) RequestDraw();
-        DiagnosticLog.Info($"[SimEnemy.SpawnFromPacket] {DisplayName} (goid {GameObjectId}) created by the engine after {packetSpawnFrames} frames: {DescribeDrawState()} "
+        DiagnosticLog.Info($"[SimEnemy.SpawnFromPacket] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) created by the engine after {packetSpawnFrames} frames: {DescribeDrawState()} "
             + $"Targetable=0x{targetableBefore:X}->0x{chara.TargetableStatus:X} name=\"{chara.Name}\" pos {chara.Position}.");
     }
 
@@ -449,13 +449,13 @@ public sealed class SimEnemy : SimNpc
             {
                 drawn.IsDrawObjectVisible = false;
                 packetModelHidden = true;
-                DiagnosticLog.Info($"[SimEnemy.PacketSpawn] {DisplayName} (goid {GameObjectId}) draw object built at +{packetSpawnFrames} frames -- hidden (IsVisible=false): {DescribeDrawState()}");
+                DiagnosticLog.Info($"[SimEnemy.PacketSpawn] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) draw object built at +{packetSpawnFrames} frames -- hidden (IsVisible=false): {DescribeDrawState()}");
             }
         }
         if (packetSpawnFrames is 5 or 30 or 90 or 210)
         {
             var targetable = Proxy?.TargetableStatus ?? 0;
-            DiagnosticLog.Info($"[SimEnemy.PacketSpawn] {DisplayName} (goid {GameObjectId}) +{packetSpawnFrames} frames: {DescribeDrawState()} Targetable=0x{targetable:X} -- {DescribeActionTimeline()}");
+            DiagnosticLog.Info($"[SimEnemy.PacketSpawn] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) +{packetSpawnFrames} frames: {DescribeDrawState()} Targetable=0x{targetable:X} -- {DescribeActionTimeline()}");
         }
     }
 
@@ -483,12 +483,12 @@ public sealed class SimEnemy : SimNpc
         if (changed || timelineWatchFrames < 15 || timelineWatchFrames % 15 == 0)
         {
             var state = DescribeActionTimeline();
-            DiagnosticLog.Info($"[SimEnemy.TimelineWatch] {DisplayName} (goid {GameObjectId}) +{timelineWatchFrames}f: {state}{(changed ? "" : " (slots unchanged)")}");
+            DiagnosticLog.Info($"[SimEnemy.TimelineWatch] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) +{timelineWatchFrames}f: {state}{(changed ? "" : " (slots unchanged)")}");
         }
         timelineWatchLast = ids;
         timelineWatchFrames++;
         if (timelineWatchRemaining <= 0f)
-            DiagnosticLog.Info($"[SimEnemy.TimelineWatch] {DisplayName} (goid {GameObjectId}) watch ended after {timelineWatchFrames} frames.");
+            DiagnosticLog.Info($"[SimEnemy.TimelineWatch] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) watch ended after {timelineWatchFrames} frames.");
     }
 
     internal string DescribeActionTimeline() => Proxy?.DescribeActionTimeline() ?? "no BattleChara";
@@ -500,7 +500,7 @@ public sealed class SimEnemy : SimNpc
         HasEngineState = true;
         if (Proxy is not { Exists: true } chara) return 0;
         var result = chara.LoadBaseTimelineResources();
-        DiagnosticLog.Info($"[SimEnemy] {DisplayName} (goid {GameObjectId}) LoadTimelineResources on slot 0 -> {result}: {DescribeActionTimeline()}");
+        DiagnosticLog.Info($"[SimEnemy] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) LoadTimelineResources on slot 0 -> {result}: {DescribeActionTimeline()}");
         return result;
     }
 
@@ -542,7 +542,7 @@ public sealed class SimEnemy : SimNpc
         chara.SetBaseOverride(0);
         if (chara.GetSlotTimeline(0) == timelineId)
             chara.SetSlotTimeline(0, 0);
-        DiagnosticLog.Info($"[SimEnemy] {DisplayName} (goid {GameObjectId}) timeline hold released: {DescribeActionTimeline()}");
+        DiagnosticLog.Info($"[SimEnemy] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) timeline hold released: {DescribeActionTimeline()}");
     }
 
     internal string DescribeDrawState() => Proxy?.DescribeDrawState() ?? "no BattleChara";
@@ -572,7 +572,7 @@ public sealed class SimEnemy : SimNpc
             if (!loggedInitialVisibility)
             {
                 loggedInitialVisibility = true;
-                DiagnosticLog.Info($"[SimEnemy.ReconcileVisibility] {DisplayName} (goid {GameObjectId}) is packet-spawned -- visibility left to the engine: {DescribeDrawState()}.");
+                DiagnosticLog.Info($"[SimEnemy.ReconcileVisibility] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) is packet-spawned -- visibility left to the engine: {DescribeDrawState()}.");
             }
             return;
         }
@@ -581,7 +581,7 @@ public sealed class SimEnemy : SimNpc
         {
             loggedInitialVisibility = true;
             var drawObject = Proxy is not { Exists: true } chara ? "no BattleChara" : chara.HasDrawObject ? "present" : "null";
-            DiagnosticLog.Info($"[SimEnemy.ReconcileVisibility] {DisplayName} (BNpcBase {BNpcBaseId}, goid {GameObjectId}) first tick: desiredVisible={desiredVisible} currentVisible={currentVisible} DrawObject={drawObject}.");
+            DiagnosticLog.Info($"[SimEnemy.ReconcileVisibility] {DisplayName} (BNpcBase {BNpcBaseId}, goid 0x{GameObjectId.ObjectId:X}) first tick: desiredVisible={desiredVisible} currentVisible={currentVisible} DrawObject={drawObject}.");
         }
 
         // A model still streaming when it was hidden shows itself again once its load completes,
@@ -606,11 +606,11 @@ public sealed class SimEnemy : SimNpc
         if (reshown)
         {
             if (!loggedReshown)
-                DiagnosticLog.Info($"[SimEnemy.ReconcileVisibility] {DisplayName} (BNpcBase {BNpcBaseId}, goid {GameObjectId}) was shown again by the engine while hidden -- hid it again at pos {Position}.");
+                DiagnosticLog.Info($"[SimEnemy.ReconcileVisibility] {DisplayName} (BNpcBase {BNpcBaseId}, goid 0x{GameObjectId.ObjectId:X}) was shown again by the engine while hidden -- hid it again at pos {Position}.");
             loggedReshown = true;
             return;
         }
-        DiagnosticLog.Info($"[SimEnemy.ReconcileVisibility] {DisplayName} (BNpcBase {BNpcBaseId}, goid {GameObjectId})'s visibility was set to {desiredVisible} at pos {Position}");
+        DiagnosticLog.Info($"[SimEnemy.ReconcileVisibility] {DisplayName} (BNpcBase {BNpcBaseId}, goid 0x{GameObjectId.ObjectId:X})'s visibility was set to {desiredVisible} at pos {Position}");
     }
 
     private bool loggedReshown;
@@ -667,7 +667,7 @@ public sealed class SimEnemy : SimNpc
                 if (anyStuck && !slotReloadAttempted)
                 {
                     slotReloadAttempted = true;
-                    DiagnosticLog.Warn($"[SimEnemy] {DisplayName} (goid {GameObjectId}) has a model slot stuck unloaded after 3.5s -- forcing one ReloadModel retry.");
+                    DiagnosticLog.Warn($"[SimEnemy] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) has a model slot stuck unloaded after 3.5s -- forcing one ReloadModel retry.");
                     ReloadModel();
                     slotCheckFrames = 0;
                 }
@@ -683,7 +683,7 @@ public sealed class SimEnemy : SimNpc
     private bool LogModelSlotState(string label)
     {
         if (Proxy is not { Exists: true } chara) return false;
-        DiagnosticLog.Info($"[SimEnemy.LogModelSlotState] {DisplayName} (goid {GameObjectId}) {label}: {chara.DescribeModelSlots()}");
+        DiagnosticLog.Info($"[SimEnemy.LogModelSlotState] {DisplayName} (goid 0x{GameObjectId.ObjectId:X}) {label}: {chara.DescribeModelSlots()}");
         return chara.HasUnloadedModelSlot ?? false;
     }
 

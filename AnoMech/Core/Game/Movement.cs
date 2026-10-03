@@ -44,6 +44,7 @@ internal class Movement(SimCharacter parent)
     private bool internalReissue;
 
     public bool IsMoving => destination != null;
+    public Vector3? Destination => destination;
     public bool IsIntercepting => interceptTether != null;
     // Narrower than IsMoving: true only while a PushInDirectionEased is mid-flight.
     public bool IsEasedMoving => easeDuration != null;
